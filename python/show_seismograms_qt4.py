@@ -1,0 +1,675 @@
+#
+#     Copyright 2007 Sebastian Heimann
+#  
+#     Licensed under the Apache License, Version 2.0 (the "License");
+#     you may not use this file except in compliance with the License.
+#     You may obtain a copy of the License at
+#  
+#         http://www.apache.org/licenses/LICENSE-2.0
+#  
+#     Unless required by applicable law or agreed to in writing, software
+#     distributed under the License is distributed on an "AS IS" BASIS,
+#     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#     See the License for the specific language governing permissions and
+#     limitations under the License.
+# 
+
+import os
+import sys
+import vtk
+import time
+import signal
+import ugly_minimizer as minimizer
+
+from PyQt4.QtCore import *
+from PyQt4.QtGui import *
+from QVTKRenderWindowInteractor import *
+
+class MyValueEdit(QLineEdit):
+
+    def __init__(self, *args):
+        apply(QLineEdit.__init__, (self,) + args)
+        self.value = 0.
+        self.mi = 0.
+        self.ma = 1.
+        self.connect( self, SIGNAL("editingFinished()"), self.myEditingFinished )
+        self.err_palette = QPalette()
+        self.err_palette.setColor( QPalette.Base, QColor(255,200,200) )
+        self.lock = False
+    def setRange( self, mi, ma ):
+        self.mi = mi
+        self.ma = ma
+        
+    def setValue( self, value ):
+        if not self.lock:
+            self.value = value
+            self.setPalette( QApplication.palette() )
+            self.adjust_text()
+        
+    def myEditingFinished(self):
+        try:
+            value = float(str(self.text()).strip())
+            if not (self.mi <= value <= self.ma):
+                raise Exception("out of range")
+            if value != self.value:
+                self.value = value
+                self.lock = True
+                self.emit(SIGNAL("edited(float)"), value )
+                self.setPalette( QApplication.palette() )
+        except:
+            self.setPalette( self.err_palette )
+        
+        self.lock = False
+        
+    def adjust_text(self):
+        self.setText( ("%8.5g" % self.value).strip() )
+        
+class ValControl(QFrame):
+
+    def __init__(self, *args):
+        apply(QFrame.__init__, (self,) + args)
+        self.layout = QHBoxLayout( self )
+        #self.layout.setSpacing(5)
+        self.lname = QLabel( "name", self )
+        self.lname.setFixedWidth(120)
+        self.lvalue = MyValueEdit( self )
+        self.lvalue.setFixedWidth(100)
+        self.slider = QSlider(Qt.Horizontal, self)
+        self.slider.setMaximum( 10000 )
+        self.slider.setSingleStep( 100 )
+        self.slider.setPageStep( 1000 )
+        self.slider.setTickPosition( QSlider.NoTicks )
+        self.layout.addWidget( self.lname )
+        self.layout.addWidget( self.lvalue )
+        self.layout.addWidget( self.slider )
+        #self.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Fixed)
+        self.connect( self.slider, SIGNAL("valueChanged(int)"),
+                      self.slided )
+        self.connect( self.lvalue, SIGNAL("edited(float)"),
+                      self.edited )
+                          
+    def setup(self, name, mi, ma, cur, ind):
+        self.lname.setText( name )
+        self.mi = mi
+        self.ma = ma
+        self.cur = cur
+        self.cursl = float(cur-mi)/(ma-mi) * 10000.
+        self.ind = ind
+        self.lvalue.setRange( mi, ma )
+        self.lvalue.setValue( self.cur )
+        self.slider.setValue( self.cursl )
+        
+    def slided(self,val):
+        if self.cursl != val:
+            self.cursl = val
+            self.cur = self.mi+(self.ma-self.mi)*self.cursl/10000.
+            self.lvalue.setValue( self.cur )
+            self.emit(SIGNAL("valchange(float,int)"), float(self.cur), int(self.ind) )
+
+    def edited(self,val):
+        if self.cur != val:
+            self.cur = val
+            cursl = (self.cur-self.mi)/(self.ma-self.mi) * 10000.
+            if (cursl != self.cursl):
+                self.slider.setValue( cursl )
+            
+            self.emit(SIGNAL("valchange(float,int)"), float(self.cur), int(self.ind) )
+        
+   
+        
+def printChildren(obj, indent=""):
+    children=obj.children()
+    if children==None:
+        return
+    for child in children:
+        print indent, child.name(), child.__class__
+        printChildren(child, indent + "  ")
+        
+class ValControlPan(QScrollArea):
+    
+    def __init__(self, *args ):
+        apply(QScrollArea.__init__, (self,) + args  )
+        self.frame = False
+   
+    def setup(self, names, mins, maxs, curs):
+        n = len(names)
+        self.setWidgetResizable( True )
+        if (self.frame):
+            self.frame.hide()
+            
+        self.frame = QFrame(self)
+        self.setWidget( self.frame )
+        grid = QGridLayout(self.frame)
+        grid.setMargin(5)
+        grid.setSpacing(5)
+        self.data = curs
+        for i in range(n):
+            valc = ValControl(self.frame)
+            grid.addWidget(valc,i,1)
+            valc.setup( names[i], mins[i], maxs[i], curs[i], i)
+            self.connect( valc, SIGNAL("valchange(float,int)"), self.valchange )
+        self.frame.show()
+            
+    def valchange(self, value, index):
+        self.data[index] = value
+        self.emit( SIGNAL("valchange(PyQt_PyObject)"), self.data )
+
+class MyWindow(QMainWindow):
+
+    def __init__(self, clargs, *args):
+        apply(QMainWindow.__init__, (self,) + args )
+        self.valpan = ValControlPan( self )
+
+        self.setWindowTitle( "Seismosizer" )
+        
+        self.filemenu = self.menuBar().addMenu( "&File" )
+        self.filemenu.addAction( "&Render Sequence", MyApp.app.rendersequence )
+        self.filemenu.addAction( "&Save Image", MyApp.app.rendertofile )
+        self.filemenu.addAction( "&Quit", MyApp.app.myquit )
+        
+        self.sourcemenu = self.menuBar().addMenu( "Source&type" )
+        
+       # if (len(clargs) != 6): 
+       #     sys.exit("usage: show_seismograms.py database effective-dt origin-lat origin-lon receiverfile")
+        
+       # (pn, gfdb, effective_dt, origin_lat, origin_lon, receiverfile) = clargs
+        
+        #(fid,self.receiverfile) = mkstemp()
+        #f = open(self.receiverfile,'w')
+        #f.write("0 10.8\n")
+        #f.close()
+        #self.receiverfile = receiverfile
+        
+#         self.seismosizer = Seismosizer( gfdb, effective_dt, [origin_lat,origin_lon],
+#                                         self.receiverfile)
+                                        
+        self.minimizer = minimizer.Minimizer()
+        
+        print 'minimizer started with tempdir:', self.minimizer.tempdir
+        
+        self.minimizer.do_set_effective_dt( float(sys.argv[1]) )
+        self.minimizer.do_set_source_location( float(sys.argv[2]),float(sys.argv[3]), 0. )
+                                        
+        self.vis = False
+        defaultsource = "bilateral"
+        self.setSourceType( defaultsource )
+        
+        self.setCentralWidget( self.valpan )
+        self.connect( self.valpan, SIGNAL("valchange(PyQt_PyObject)"),
+                      self.calculate )
+        self.vis = Visualization(self.minimizer.tempfilebase)
+                
+        sourcegroup = QActionGroup( self )
+        sourcegroup.setExclusive( True )
+                
+        for name in minimizer.source_types():
+            item = QAction( name, self )
+            item.setCheckable( True )
+            item.setChecked( name == defaultsource )
+            self.sourcemenu.addAction( item )
+            sourcegroup.addAction( item )
+        self.connect( sourcegroup, SIGNAL("triggered(QAction*)"), self.selectedSourceFromMenu )
+        self.sourcegroup = sourcegroup
+   
+    def selectedSourceFromMenu(self, action):
+        name = str(action.text())
+        self.setSourceType( name )
+        
+    def setSourceType(self, name, params=None):
+        self.sourcetype = name
+        para = minimizer.source_infos_flat(self.sourcetype)
+        if params != None:
+            for iparam in range(min(len(params),len(para['default']))):
+                para['default'][iparam] = params[iparam]
+        self.valpan.setup( para['name'], para['soft_min'], para['soft_max'], para['default'] )
+        self.calculate( para['default'] )
+        
+    def calculate(self,data):
+        self.minimizer.do_set_source_params( self.sourcetype, *data )            
+        self.minimizer.do_output_source_model( self.minimizer.tempfilebase )
+        minimizer.table_to_bin( self.minimizer.tempfilebase+'-dsm.table', self.minimizer.tempfilebase+'-dsm.bin' )
+        minimizer.psm_info_to_vtk( self.minimizer.tempfilebase+'-psm.info', self.minimizer.tempfilebase+'-psm' )
+        
+        if self.vis:
+            self.vis.modified()
+
+def get_available_filename( skeleton ):
+    i = 0
+    while True:
+        filename = skeleton % i
+        if not os.path.exists( filename ): return filename
+        i += 1
+            
+class MyApp(QApplication):
+
+    app = 0
+
+    def __init__(self, *args):
+        
+        apply(QApplication.__init__, (self,) + args)
+        self.timer = QTimer( self )
+        self.timer.setSingleShot( False )
+        self.connect( self.timer, SIGNAL("timeout()"), self.periodical ) 
+        self.timer.start( 1000 )
+        self.goaway = False
+        
+    def myquit(self):
+        self.win.minimizer.close()
+        self.quit()
+    
+    def periodical(self):
+        if self.goaway:
+            self.myquit()
+        
+    def timetogo(self,*args):
+        self.goaway = True
+    
+    def setwin( self, win ):
+        self.win = win
+                                
+    def setvis( self, vis ):
+        self.vis = vis
+
+    def rendertofile( self ):
+        if self.vis: 
+            filename_skeleton = 'picasso-%i.png'
+            filename = get_available_filename( filename_skeleton )
+            self.vis.rendertofile(filename)
+            
+    def rendersequence( self ):
+        filename = QFileDialog.getOpenFileName( self.win, "Open Source Sequence" )
+        if os.path.exists(filename):
+            file = open(filename, 'r')
+            for line in file:
+                toks = line.split()
+                sourcetype = toks[0]
+                params = [ float(x) for x in toks[1:] ]
+                self.win.setSourceType( sourcetype, params )
+                self.rendertofile()
+            file.close()
+            
+            
+class SurfaceGrid(vtk.vtkUnstructuredGrid):
+   
+    
+    def setup(self, delta=(5000.,5000.), nrange=((-10,11),(-10,11))):
+        self.delta = delta
+        self.nrange = nrange
+        
+        points = []
+        for ix in xrange(*self.nrange[1]):
+            x = self.delta[1]*ix
+            vline = vtk.vtkLineSource()
+            ymin = self.delta[0]*self.nrange[0][0]
+            ymax = self.delta[0]*(self.nrange[0][1]-1)
+            points.append( (x,ymin,0) )
+            points.append( (x,ymax,0) )
+            
+        for iy in xrange(*self.nrange[0]):
+            y = self.delta[0]*iy
+            vline = vtk.vtkLineSource()
+            xmin = self.delta[1]*self.nrange[1][0]
+            xmax = self.delta[1]*(self.nrange[1][1]-1)
+            points.append( (xmin,y,0) )
+            points.append( (xmax,y,0) )
+        
+        vpoints = vtk.vtkPoints()
+        vpoints.SetNumberOfPoints(len(points))
+        for i, point in enumerate(points):
+            vpoints.InsertPoint(i, point)
+        
+        self.Allocate(len(points)/2, len(points)/2)
+        self.SetPoints( vpoints )
+        for i in xrange(0,len(points),2):
+            iline = i/2
+            vline = vtk.vtkLine()
+            vline.GetPointIds().SetId(0,i)
+            vline.GetPointIds().SetId(1,i+1)
+            self.InsertNextCell( vline.GetCellType(), vline.GetPointIds() )
+        
+        
+class Visualization:
+    def __init__(self,fnbase):
+    
+        color_fg = (0.,0.,0.)
+        color_bg = (1.,1.,1.)
+        color_plane = (0.,1.,.5)
+        
+        fpreader = vtk.vtkPolyDataReader()
+        fpreader.SetFileName( fnbase+"-psm-outline.vtk" )
+        self.fpreader = fpreader
+        
+        fpmapper = vtk.vtkPolyDataMapper()
+        fpmapper.SetInput( fpreader.GetOutput() )
+        
+        fpmapper2 = vtk.vtkPolyDataMapper()
+        fpmapper2.SetInput( fpreader.GetOutput() )
+        
+        fpactor = vtk.vtkActor()
+        fpactor.SetMapper( fpmapper );
+        fpactor.GetProperty().SetColor(color_plane)
+        fpactor.GetProperty().SetDiffuse(0.2 )
+        fpactor.GetProperty().SetAmbient(0.2)
+        fpactor.GetProperty().SetOpacity(0.3)
+        fpactor.GetProperty().EdgeVisibilityOff()
+        #fpactor.GetProperty().SetEdgeColor(color_fg)
+        #fpactor.GetProperty().SetLineWidth(5)
+        
+        
+        fpactor2 = vtk.vtkActor()
+        fpactor2.SetMapper( fpmapper2 );
+        fpactor2.GetProperty().SetColor( *color_fg )
+        fpactor2.GetProperty().SetRepresentationToWireframe()
+        fpactor2.GetProperty().SetLineWidth(1.)
+        fpactor2.GetProperty().SetOpacity(0.6)
+  
+        
+        cereader = vtk.vtkPolyDataReader()
+        cereader.SetFileName( fnbase+"-psm-center.vtk" )
+        self.cereader = cereader
+        
+        cemapper = vtk.vtkPolyDataMapper()
+        cemapper.SetInput( cereader.GetOutput() )
+        
+        ceactor = vtk.vtkActor()
+        ceactor.SetMapper( cemapper );
+        ceactor.GetProperty().SetDiffuseColor( *color_fg )
+        ceactor.GetProperty().SetRepresentationToWireframe()
+        
+        
+        rupreader = vtk.vtkDataSetReader()
+        rupreader.SetFileName( fnbase+"-psm-rupture.vtk" )
+        self.rupreader = rupreader
+        
+        arrow = vtk.vtkArrowSource()
+        arrow.SetShaftRadius(0.03)
+        arrow.SetTipLength(0.16)
+        arrow.SetTipRadius(0.05)
+        
+        arrows = vtk.vtkGlyph3D()
+        arrows.SetInput(rupreader.GetOutput())
+        arrows.SetSource(arrow.GetOutput())
+        arrows.SetVectorModeToUseVector()
+        arrows.SetScaleModeToScaleByVector()
+        arrows.OrientOn()
+        
+        rupmapper = vtk.vtkPolyDataMapper()
+        rupmapper.SetInput( arrows.GetOutput() )
+        
+        rupactor = vtk.vtkActor()
+        rupactor.SetMapper( rupmapper );
+        rupactor.GetProperty().SetDiffuseColor( *color_fg )
+        rupactor.GetProperty().SetOpacity(0.3)
+
+        slreader = vtk.vtkDataSetReader()
+        slreader.SetFileName( fnbase+"-psm-slip.vtk" )
+        self.slreader = slreader
+        
+        arrow2 = vtk.vtkArrowSource()
+        arrow2.SetShaftRadius(0.09)
+        arrow2.SetTipLength(0.48)
+        arrow2.SetTipRadius(0.15)
+        
+        arrows2 = vtk.vtkGlyph3D()
+        arrows2.SetInput(slreader.GetOutput())
+        arrows2.SetSource(arrow2.GetOutput())
+        arrows2.SetVectorModeToUseVector()
+        arrows2.SetScaleModeToScaleByVector()
+        arrows2.OrientOn()
+        
+        slmapper = vtk.vtkPolyDataMapper()
+        slmapper.SetInput( arrows2.GetOutput() )
+        
+        slactor = vtk.vtkActor()
+        slactor.SetMapper( slmapper );
+        slactor.GetProperty().SetDiffuseColor( 1.,1.,0. )
+        
+        
+        reader = vtk.vtkParticleReader()
+        reader.SetFileName( fnbase+"-dsm.bin" )
+        reader.SetDataByteOrderToLittleEndian()
+        self.reader = reader
+        
+#         nxyplots = 3
+#         self.creaders = []
+#         self.ned = ['n','e','d']
+#         for i in range(nxyplots):
+#             newreader = vtk.vtkParticleReader()
+#             newreader.SetFileName( fnbase+"-1-"+self.ned[i]+".bin" )
+#             newreader.SetDataByteOrderToLittleEndian()
+#             self.creaders.append( newreader )
+            
+        mapper = vtk.vtkPolyDataMapper()
+        mapper.SetInput( reader.GetOutput() )
+        self.centroids_mapper = mapper
+
+        actor = vtk.vtkActor()
+        actor.SetMapper( mapper );
+        actor.GetProperty().SetPointSize(5)
+        
+        
+        #plane = vtk.vtkPlaneSource()
+        #plane.SetOrigin(0.,0.,0.)
+        #plane.SetPoint1(10000.,0.,0.)
+        #plane.SetPoint2(0.,10000.,0.)
+        #plane.SetCenter(0.,0.,0.)
+                
+        sgrid = SurfaceGrid()
+        sgrid.setup()
+        
+        sgridMapper = vtk.vtkDataSetMapper()
+        sgridMapper.SetInput(sgrid)
+        
+        sgridActor = vtk.vtkActor()
+        sgridActor.SetMapper( sgridMapper )
+        sgridActor.GetProperty().SetDiffuseColor( *color_fg )
+        sgridActor.GetProperty().SetOpacity( 0.2 )
+        
+        labels = {}
+        for direction in ('North','East','South','West'):
+            atext = vtk.vtkVectorText()
+            atext.SetText(direction)
+            textMapper = vtk.vtkPolyDataMapper()
+            textMapper.SetInputConnection(atext.GetOutputPort())
+            textActor = vtk.vtkFollower()
+            textActor.SetMapper(textMapper)
+            center = textActor.GetCenter()
+            textActor.SetOrigin( center )
+
+            textActor.SetScale(1000.,1000.,1000.)
+            textActor.GetProperty().SetDiffuseColor( *color_fg )
+            labels[direction] = textActor
+            
+        labels['North'].AddPosition( 50000., 0., -1000.)
+        labels['South'].AddPosition(-50000., 0., -1000.)
+        labels['East'].AddPosition(0.,  50000., -1000.)
+        labels['West'].AddPosition(0., -50000., -1000.)
+        
+        
+
+        #planeMapper = vtk.vtkPolyDataMapper()
+        #planeMapper.SetInput(plane.GetOutput())
+        #planeActor = vtk.vtkActor()
+        #planeActor.SetMapper(planeMapper)
+        #planeActor.GetProperty().SetOpacity( 0.2 )
+        #planeActor.GetProperty().SetDiffuseColor( *color_fg )
+        
+        #outlineData = vtk.vtkOutlineFilter()
+        #outlineData.SetInput(fpreader.GetOutput())
+        #mapOutline = vtk.vtkPolyDataMapper()
+        #mapOutline.SetInput(outlineData.GetOutput())
+        #outline = vtk.vtkActor()
+        #outline.SetMapper(mapOutline)
+        #outline.GetProperty().SetColor(1.,1.,1.)
+        #outline.GetProperty().SetLineWidth(2.)
+
+        camera = vtk.vtkCamera()
+        camera.SetClippingRange(10., 500000.)
+        camera.SetFocalPoint(0.,0.,0.)
+        camera.SetPosition(-30000.,0.,-30000.)
+        camera.SetViewUp(0.,0.,-1.)
+        
+#         xyplots = []
+#         rangey = []
+#         rangex = []
+#         for i in range(nxyplots):
+#             xyplot = vtk.vtkXYPlotActor()
+#             xyplot.GetAxisLabelTextProperty().ItalicOff()
+#             xyplot.GetAxisLabelTextProperty().BoldOn()
+#             xyplot.GetAxisLabelTextProperty().SetFontFamilyToArial()
+#             xyplot.GetAxisLabelTextProperty().SetFontSize(5)
+#             xyplot.SetLabelFormat("%g")
+#             xyplot.AddInput( self.creaders[i].GetOutput() )
+#             xyplot.SetXValuesToValue()
+#             xyplot.SetTitle("")
+#             xyplot.SetXTitle("t")
+#             xyplot.SetYTitle("")
+#             xyplot.GetPositionCoordinate().SetValue(0.0, 1.-(i+1)*1./3., 0)
+#             xyplot.GetPosition2Coordinate().SetValue(1.0, 0.33, 0) #relative to Position
+#             xyplots.append( xyplot )
+#             ry = [0,0]
+#             rangey.append( ry )
+#             rx = [1000000,0]
+#             rangex.append( rx )
+#             
+#         self.xyplots = xyplots
+#         self.rangey = rangey
+#         self.rangex = rangex
+        egreader = vtk.vtkStructuredGridReader()
+        egreader.SetFileName(fnbase+"-psm-eikonal-grid.vtk")
+        
+        blankgrid = vtk.vtkBlankStructuredGrid()
+        blankgrid.SetInput( egreader.GetOutput() )
+        blankgrid.SetArrayName("rupturetime")
+        blankgrid.SetMinBlankingValue(-2)
+        blankgrid.SetMaxBlankingValue(-0.1)
+
+        iso = vtk.vtkContourFilter()
+        iso.SetInputConnection(blankgrid.GetOutputPort())
+        iso.GenerateValues(201,-50.,50.)
+        
+        isomapper = vtk.vtkPolyDataMapper()
+        isomapper.SetInputConnection(iso.GetOutputPort())
+        isomapper.ScalarVisibilityOff()
+        
+        egplaneActor = vtk.vtkActor()
+        egplaneActor.SetMapper(isomapper)
+        egplaneActor.GetProperty().SetLineWidth(2.)
+        egplaneActor.GetProperty().SetColor(color_fg)
+        self.egreader = egreader
+        self.isomapper = isomapper
+
+        ren = vtk.vtkRenderer()
+        ren.SetBackground(*color_bg)
+        ren.SetActiveCamera(camera)
+
+        ren.AddActor(ceactor)
+        ren.AddActor(fpactor)
+        ren.AddActor(fpactor2)
+        ren.AddActor(slactor)
+        ren.AddActor(rupactor)
+        ren.AddActor(actor)
+        ren.AddActor(sgridActor)
+        ren.AddActor(egplaneActor)
+        for label in labels.values():
+            ren.AddActor(label)
+            label.SetCamera(ren.GetActiveCamera())
+
+        #ren.AddActor(outline)
+#         ren.SetViewport(0, 0, .5, 1)
+
+#         ren2d = vtk.vtkRenderer()
+#         ren2d.SetViewport(0.5, 0.0, 1.0, 1.0)
+#         for i in range(nxyplots):
+#             ren2d.AddActor(xyplots[i])
+
+#         self.nxyplots = nxyplots
+        
+        vtkview = QVTKRenderWindowInteractor()
+        vtkview.SetInteractorStyle( vtk.vtkInteractorStyleTerrain() )
+        renWin = vtkview.GetRenderWindow()
+        renWin.LineSmoothingOn()
+        renWin.PolygonSmoothingOn()
+        renWin.PointSmoothingOn()
+        renWin.AddRenderer(ren)
+#         renWin.AddRenderer(ren2d)
+        
+        
+        imagefilter = vtk.vtkWindowToImageFilter()
+        imagefilter.SetInput( renWin )
+        
+        imagewriter = vtk.vtkPNGWriter()
+        imagewriter.SetInputConnection( imagefilter.GetOutputPort() )
+        
+        
+        vtkview.show()
+        
+        self.renwin = renWin
+        self.reader = reader
+        self.imagefilter = imagefilter
+        self.imagewriter = imagewriter
+        
+    def modified(self):
+        self.reader.Modified()
+        self.fpreader.Modified()
+        self.cereader.Modified()
+        self.slreader.Modified()
+        self.rupreader.Modified()
+        self.egreader.Modified()
+#         for i in range(self.nxyplots):
+#             self.creaders[i].Modified()
+#             ry = [0,0]
+#             rx = [1000000,0,0,0,0,0]
+#             self.creaders[i].GetOutput().GetScalarRange( ry )
+#             self.creaders[i].GetOutput().GetBounds( rx )
+#             yabsmax = max(max( abs( self.rangey[i][0]), abs(ry[0]) ),
+#                           max( abs( self.rangey[i][1]), abs(ry[1]) ) )
+#             self.rangey[i][0] = -yabsmax
+#             self.rangey[i][1] = yabsmax
+#             self.rangex[i][0] = min( self.rangex[i][0], rx[0] )
+#             self.rangex[i][1] = max( self.rangex[i][1], rx[1] )
+#             self.xyplots[i].SetYRange( self.rangey[i] )
+#             self.xyplots[i].SetXRange( self.rangex[i] )
+        
+
+        
+
+        rs = [0,0]
+        self.egreader.GetOutput().GetScalarRange(rs)
+       
+        self.isomapper.SetScalarRange(rs)
+        
+        self.reader.GetOutput().GetScalarRange( rs )
+        self.centroids_mapper.SetScalarRange( rs )
+        
+        
+        
+        self.renwin.Render()
+
+    def rerender(self):
+        self.renwin.Render()
+    
+    def rendertofile(self, filename):
+        self.modified()
+        self.imagefilter.Modified()
+        self.imagewriter.SetFileName(filename)
+        self.imagewriter.Write()
+    
+ 
+def main(args):
+    MyApp.app=MyApp(args)
+    win=MyWindow(args)
+    win.show()
+    MyApp.app.setwin( win )
+    
+    MyApp.app.setvis( win.vis )
+    
+    MyApp.app.connect(MyApp.app, SIGNAL("lastWindowClosed()"),
+                MyApp.app.myquit)
+    signal.signal(signal.SIGINT, MyApp.app.timetogo)
+    sys.exit(MyApp.app.exec_())
+    
+    
+if __name__=="__main__":
+    main(sys.argv)
+    

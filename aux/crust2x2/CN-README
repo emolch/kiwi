@@ -1,0 +1,148 @@
+CRUST 2.0 a global crustal model at 2 x 2 degrees
+
+updates:
+------- 
+this model is a significantly updated version of CRUST 5.1.
+It takes advantage of our digital sediment map that is 
+defined on a 1x1 degree grid.
+This new model also takes advantage of our still ongoing 
+compilation of new data on crustal structure (a preliminary
+version for Eurasia can be found on the anonymous ftp site
+of CRUST 5.1, pub/gabi/crust).
+The ice thickness in CRUST 5.1 also was adjusted to better
+match the true ice thicknesses. The agreement is now to
+within 250m.
+
+We hope this model is of use in a large community
+and it will grow with every feedback.
+
+
+short description:
+-----------------
+The global crustal model uses a type key to assign crustal
+structure at a 2 x 2 deg scale. Data were gathered from
+seismic experiments and averaged globally for similar 
+geological and tectonic settings (such as Archean,
+early Proterozoic, rifts etc.). 
+These averages were used to
+assigned structure to regions without seismic information
+(e.g. most of Africa, South America).
+Ice and sediment thicknesses where gathered from published
+maps. Bathymetry and topography is that of ETOPO5.
+The global model is composed of 360 key 1d-profiles (the
+crustal types) where one of these profiles is assigned
+to each 2 x 2 degree cell.
+Each individual profile is a 7 layer 1D-model with
+1) ice, 2) water, 3) soft sediments, 4) hard sediments,
+5) upper crust, 6) middle crust and 7) lower crust.
+Parameters VP, VS and rho are given explicitly for
+these 7 layers as well as the mantle below the Moho. 
+
+the files:
+---------
+
+the model consists of three files:
+a) CNevelvatio2.txt:  this is bathymetry and topography
+b) CNtype2.txt:       this is the global model
+c) CNtype2_key.txt: this is the file with the profiles
+
+a) and b) are given tile by tile from -180 to 180 deg longitude
+and 90 - -90 deg latitude. The first number is for the tiles
+with midpoint 89N, -179E, the second one is 
+89N -177E, aso, and the last one is the one with
+89S, 179E.
+
+suggested reading routine:
+-------------------------
+
+readCN2-t7.f and readCN2-7vr.f are FORTRAN code which reads
+the model and give out maps of topography of the boundaries
+(readCN2-t7.f) and the seismic velocities and density (readCN2-7vr.f).
+The output maps are 180x90 numbers now going from 0 to 360 deg E 
+(first number is at 89N, 1E!). The reading routines should
+also give out some other maps such as global topography in km,   
+sediment thickness, ice thickness, total crustal thickness 
+(where bathymetry is included). 
+REMEMBER:
+Water and ice layer are flipped after this routine so that
+water now is layer 1 and ice layer 2.
+
+There will be 8 boundary maps,
+the first (map.t0) is top of water, while all the others define
+the bottom of the layers:
+map.t1: bottom of water
+map.t2: bottom of ice
+map.t3: bottom of soft sediments
+map.t4: bottom of hard sediments
+map.t5: bottom of upper crust
+map.t6: bottom of middle crust
+map.t7: bottom of lower crust=MOHO.
+
+These maps are all real topography, i.e. the depth with respect to
+sea level, not with respect to the actual surface. Therefore,
+map.t7 and map.thick (actual crustal thickness) are not the same!
+
+A routine which returns the model at a given location (interactive
+input) is getCN2point.f.
+
+On a UNIX machine, don't forget to compile the code:
+e.g. for getCNpoint
+
+f77 getCNpoint.f -o getCNpoint
+
+IMPORTANT NOTE ON THICKNESS OF THE WATER LAYER:
+-----------------------------------------------
+
+the water thicknesses given in c) are only crude estimates
+and are not to be used in the model!
+Routine readCN2-t7.f replaces the water thickness with the
+true bathymetry (averaged to 2x2 degrees).  
+Routine getCN2point returns the elevation/bathymetry. It
+replaces the water thickness in the 7-layer column
+by this value automatically.
+The crustal thickness is the thickness of the crust
+without the water layer.
+
+--------------------------------------------------------------------
+references:
+----------
+If you use this model, please refer to the REM web site:
+http://mahi.ucsd.edu/Gabi/rem.html or
+Bassin, C., Laske, G. and Masters, G., The Current Limits of
+Resolution for Surface Wave Tomography in North America,
+EOS Trans AGU, 81, F897, 2000.
+
+A description of CRUST 5.1 can be found in:
+Mooney, Laske and Masters, Crust 5.1: a global
+crustal model at 5x5 degrees, JGR, 103, 727-747, 1998.
+A reprint can be requested:
+mooney@andreas.wr.usgs.gov          
+(glaske@ucsd.edu, gmasters@ucsd.edu)
+
+related web sites:
+------------
+the crustal model is on the web:
+http://mahi.ucsd.edu/Gabi/crust2.html
+the 1x1 degree sediment map is on:
+http://mahi.ucsd.edu/Gabi/sediment.html
+the crustal model CRUST 5.1 is on:
+http://mahi.ucsd.edu/Gabi/crust.html
+
+if you use the anonymous ftp from there, simple save the files
+onto your machine (don't print them into a file!).
+
+new on public demand:
+--------------------
+there is a little fortran routine called map2gmt.
+This routine asks for the name of one of the map. files.
+(e.g. map.t1). The output file is a .gmt file (e.g. map.t1.gmt).
+This file can be used in GMT (xyz2grd) to plot the maps.         
+
+update Sep 7, 07:
+-----------------
+File crust2-maps.tar.gz has all the output maps created by the
+fortran routines. The file needs to be uncompress with gunzip.
+The maps can then be extracted by typing 
+tar -xvf crust2-maps.tar .
+
+                                      Gabi Laske

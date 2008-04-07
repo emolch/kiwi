@@ -1,0 +1,6 @@
+FORTRANC = g95
+CFLAGS += $(CFAST)
+#CFLAGS += $(CDEBUG)
+
+INCHDF = -I/bonus/hdf5-$(FORTRANC)/include
+LIBHDF = -L/bonus/hdf5-$(FORTRANC)/lib -lhdf5_fortran -lhdf5 -lz
