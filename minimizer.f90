@@ -404,6 +404,13 @@ module minimizer_wrappers
         call resize( params, 1, nparams )
     
         buffer = char(paramsstr)
+
+        if (count_words( buffer ) /= nparams) then
+            call error("source of type '" // sourcetypename // "' requires "// nparams // " parameters.")
+            ok = .false.
+            return
+        end if
+        
         read (unit=buffer,fmt=*,iostat=iostat) params
         if (iostat > 0) then
             call error("failed to parse source params" )
@@ -1105,7 +1112,7 @@ program minimizer
     end if
     
     stdinloop: do  ! until end-of-file on stdin
-    
+        
         call get(line,iostat=iostat)
         if (iostat > 0 .or. iostat == -1) exit stdinloop
         
@@ -1145,7 +1152,11 @@ program minimizer
         type(varying_string) :: arguments
         
         call reduce_whitespace(line,arguments)
-                
+        if ( char(arguments) == '' ) then
+            ok = .true.
+            return
+        end if
+        
         call split( arguments, command, " " )
         ok = .false.
         if (command == 'set_database') then
@@ -1217,6 +1228,7 @@ program minimizer
         ws = .true.
         do i=1,len(in)
             if (at(in,i) .ne. ' ') then
+                if (at(in,i) .eq. '#') exit
                 buff(j:j) = at(in,i)
                 j = j+1
                 ws = .false.
@@ -1233,7 +1245,6 @@ program minimizer
         end do
         
         out = trim(buff)
-        
     end subroutine
     
 end program
