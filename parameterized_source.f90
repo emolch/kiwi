@@ -122,7 +122,7 @@ module parameterized_source
         call crust2x2_get_profile(r2d(self%origin), profile)
         call crust2x2_get_profile_averages(profile, vp, vs, vrho, thickness)
 
-        if (thickness > 10000.) thickness = 10000.
+       ! if (thickness > 10000.) thickness = 10000.
 
       ! surface constraint:
         self%constraints(1)%point = (/0.,0.,1500./)
