@@ -1,4 +1,4 @@
-
+#!python
 
 
 # Quick and ugly hack to preprocess iris seed volumes.

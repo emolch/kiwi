@@ -3,5 +3,11 @@ from distutils.core import setup
 
 setup( name    = 'ugly_minimizer',
        version = '0.1',
-       py_modules = ['ugly_minimizer'])
+       description = 'Python interface to the invearthquake codes.',
+       py_modules = ['ugly_minimizer'],
+       scripts = ['kinherd_prepare.py'],
+       author = 'Sebastian Heimann',
+       author_email = 'sebastian.heimann@zmaw.de',
+       url = 'http://www.kinherd.org/',
+       )
 
