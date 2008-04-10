@@ -1,10 +1,6 @@
 #!python
 
-
 # Quick and ugly hack to preprocess iris seed volumes.
-# data is
-
-
 
 import ugly_minimizer as minimizer
 import subprocess
@@ -453,7 +449,7 @@ def read_config(filename):
         
 steps = ('unpack', 'preprocess', 'setup')
 
-usage = 'usage: preprocess.py config-file ( unpack | preprocess | setup )'
+usage = 'usage: kinherd_prepare config-file ( unpack | preprocess | setup )'
 if len(sys.argv) != 3: sys.exit(usage)
 config_file = sys.argv[1]
 step = sys.argv[2]
