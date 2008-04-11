@@ -239,7 +239,7 @@ def rdseed( input_fn, output_dir, output_dir_raw, verbose=True ):
     rdseed_proc = subprocess.Popen([rdseed_prog, '-f', input_fn, '-s', '-q', output_dir], 
                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     (out,err) = rdseed_proc.communicate()
-    fout = open(os.path.join(ouput_dir,'station_header_infos'),'w')
+    fout = open(os.path.join(output_dir,'station_header_infos'),'w')
     fout.write( out )
     fout.close()
     if verbose: sys.stderr.write( 'rdseed: '+err )
