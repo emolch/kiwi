@@ -118,6 +118,20 @@ program test_sparse_trace
     if (any( cont1%data .ne. (/0.25,1.,0.75,0./))) &
         call test_fail("multiply-add 6")
     
+
+    call strip_init( (/-2,5/), (/0.,0.,1.,2.,2.,2.,2.,2./), cont1 )
+    if (any( strip_dataspan(cont1) .ne. (/0,1/))) &
+        call test_fail("strip dataspan 1")
+    
+    call strip_init( (/-2,5/), (/1.,1.,1.,2.,2.,2.,2.,3./), cont1 )
+    if (any( strip_dataspan(cont1) .ne. (/-2,5/))) &
+        call test_fail("strip dataspan 2")
+
+    call strip_init( (/-2,0/), (/0.,0.,0./), cont1 )
+    if (any( strip_dataspan(cont1) .ne. (/0,-2/))) &
+        call test_fail("strip dataspan 3")
+
+
     call test_end()
     call cleanup()
 end program

@@ -53,6 +53,7 @@ module minimizer_wrappers
     public do_set_receivers
     public do_set_ref_seismograms
     public do_set_source_location
+    public do_set_source_crustal_thickness_limit
     public do_set_source_params
     public do_set_source_params_mask
     public do_set_source_subparams
@@ -367,6 +368,40 @@ module minimizer_wrappers
         call set_source_location(d2r(lat), d2r(lon), ref_time)
 
     end subroutine
+
+    subroutine do_set_source_crustal_thickness_limit( line, answer, ok )
+      
+     !! === {{{set_source_crustal_thickness_limit thickness-limit}}} ===
+      !
+      ! Limit crustal thickness at the source.
+      !
+      !  * {{{thickness-limit}}}: Maximal thickness of crust in [m].
+      !
+      ! Default values for the thickness are retrieved from the crust2x2 model.
+          
+        type(varying_string), intent(in)  :: line
+        type(varying_string), intent(out) :: answer
+        logical, intent(out)              :: ok
+        
+        integer :: nerr
+        character(len=len(line)) :: buffer
+        real :: thickness_limit
+        
+        answer = ''
+        ok = .true.
+
+        buffer = char(line)
+        read (unit=buffer,fmt=*, iostat=nerr) thickness_limit
+        if (nerr /= 0) then
+            call error( "usage: set_source_crustal_thickness_limit thickness-limit" )
+            ok = .false.
+            return
+        end if
+        call set_source_crustal_thickness_limit(thickness_limit)
+
+    end subroutine
+
+    
     
     subroutine do_set_source_params( line, answer, ok )
       

@@ -596,7 +596,7 @@ module source_eikonal
         do iy=1,grid%ndims(2)
             do ix=1,grid%ndims(1)
                 if (grid%times(ix,iy) >= 0.) then
-                    nd = nd + int(floor((grid%durations(ix,iy)+risetime)/maxdt))+1
+                    nd = nd + int(floor((grid%durations(ix,iy)+0.0)/maxdt))+1
                     centertime = centertime + grid%times(ix,iy)*grid%weights(ix,iy)
                 end if
             end do
@@ -611,14 +611,19 @@ module source_eikonal
         m_rot = matmul( psm%rotmat_slip, matmul( m_unrot, trotmat ) )
         m_rot(:,:) = m_rot(:,:) * moment
         
+        call discretize_subfault_time &
+                   ( 0., risetime, maxdt, out%const_stf_amplitudes, out%const_stf_shifts, nt )
+
       ! fill output arrays
         id = 1
         do iy=1,grid%ndims(2)
             do ix=1,grid%ndims(1)
                 if (grid%times(ix,iy) < 0.) cycle
                 
+              ! using a zero risetime here, effect of (constant) risetime applied after synthesis of seismogram
                 call discretize_subfault_time &
-                   ( grid%durations(ix,iy), risetime, maxdt, tweights, toffsets, nt )
+                   ( grid%durations(ix,iy), 0., maxdt, tweights, toffsets, nt )
+
                 do it=1,nt
                     out%centroids(id)%north = grid%points(1,ix,iy)
                     out%centroids(id)%east = grid%points(2,ix,iy)
@@ -651,6 +656,23 @@ module source_eikonal
         integer :: it
  
         dursf = duration_subfault
+        
+        
+        durfull = dursf+risetime ! total time a subfault is rupturing
+        
+        nt = int(floor(durfull/maxdt))+1
+
+        if (.not. allocated(tweights)) allocate(tweights(nt))
+        if (.not. allocated(toffsets)) allocate(toffsets(nt))
+        if (nt > size(tweights)) call resize( tweights, 1, nt )
+        if (nt > size(toffsets)) call resize( toffsets, 1, nt )
+        
+        if (nt == 1) then
+            tweights(1) = 1.
+            toffsets(1) = 0.
+            return
+        end if
+
         if (risetime < dursf) then
             call plf_make( stf, (-dursf-risetime)/2., 0., &
                                 (-dursf+risetime)/2., 1./dursf, &
@@ -662,15 +684,6 @@ module source_eikonal
                                 (risetime-dursf)/2.,  1./risetime, &
                                 (risetime+dursf)/2.,  0. )
         end if
-        
-        durfull = dursf+risetime ! total time a subfault is rupturing
-        
-        nt = int(floor(durfull/maxdt))+1
-        if (.not. allocated(tweights)) allocate(tweights(nt))
-        if (.not. allocated(toffsets)) allocate(toffsets(nt))
-        if (nt > size(tweights)) call resize( tweights, 1, nt )
-        if (nt > size(toffsets)) call resize( toffsets, 1, nt )
-        
         tbeg = stf%f(1,1)
         dt = durfull/nt
         

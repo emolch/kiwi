@@ -44,6 +44,9 @@ module discrete_source
       
       ! mean centroid
         type(t_centroid) :: centroid
+
+      ! a constant stf may be used to speedup seismogram calculation
+        real, dimension(:), allocatable :: const_stf_shifts, const_stf_amplitudes
         
     end type
 
@@ -81,7 +84,8 @@ module discrete_source
         type(t_tdsm), intent(inout)  :: dsm
         
         if (allocated(dsm%centroids)) deallocate( dsm%centroids )
-    
+        if (allocated(dsm%const_stf_shifts)) deallocate(dsm%const_stf_shifts)
+        if (allocated(dsm%const_stf_amplitudes)) deallocate(dsm%const_stf_amplitudes)
     end subroutine
     
 end module

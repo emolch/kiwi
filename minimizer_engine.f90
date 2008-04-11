@@ -324,6 +324,15 @@ module minimizer_engine
         call dirtyfy_source_location()
         
     end subroutine
+
+    subroutine set_source_crustal_thickness_limit( thickness_limit )
+
+        real, intent(in)                 :: thickness_limit
+
+        call psm_set_crustal_thickness_limit(psm, thickness_limit)
+        call dirtyfy_source()
+        
+    end subroutine
     
     subroutine set_source_params( sourcetype, sourceparams, ok )
 

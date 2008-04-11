@@ -55,6 +55,7 @@ module seismogram
         real :: depth, time
         real :: cl, sl
         real :: rshift
+        real, dimension(:), allocatable :: rshifts
         type(t_trace), pointer :: tracep
         type(t_strip), dimension(2) :: displacement_temp
         type(t_strip), dimension(2) :: displacement_ar
@@ -145,7 +146,7 @@ module seismogram
           ! horizontal components
             if ( need_horizontal) then
                 lambda = bazi-bazi_orig
-                if (lambda /= 0) then  
+                if (lambda /= 0.) then  
                 
                   ! take into account differing backazimuths for different centroids
                 
@@ -223,7 +224,7 @@ module seismogram
                 call trace_multiply_add( tracep, receiver%displacement(jd), f(3)*sd, rtraceshift_=rshift )
             end if
         end do
-        
+
         if (need_horizontal) then
         
           ! put to final destination
@@ -258,7 +259,20 @@ module seismogram
             call strip_destroy( displacement_ar(1) )
             call strip_destroy( displacement_ar(2) )
         end if
+
         
+      ! fold with stf (if stf is constant on fault plane)
+        if (allocated(source%const_stf_shifts)) then
+            allocate(rshifts(size(source%const_stf_shifts)))
+            rshifts = source%const_stf_shifts/greensf%dt
+            do i=1,receiver%ncomponents
+                if (allocated(receiver%displacement(i)%data)) then
+                    call strip_fold( receiver%displacement(i), rshifts, source%const_stf_amplitudes )
+                end if
+            end do
+            deallocate( rshifts )
+        end if
+
     end subroutine
     
     elemental subroutine rotate( a, b, cos_angle, sin_angle)

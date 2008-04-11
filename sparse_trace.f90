@@ -56,10 +56,11 @@ module sparse_trace
     end interface 
     
     public strip_init, strip_span, strip_copy, strip_extend, strip_destroy
-    public strip_intersection, strip_length
+    public strip_intersection, strip_length, strip_dataspan
     public strip_extend_to_same_span_5
     public strip_extend_to_same_span_4
     public strip_extend_to_same_span_2
+    public strip_fold
     
     public trace_join, trace_pack, trace_unpack, trace_multiply_add, trace_multiply_add_nogrow
     public trace_copy, trace_destroy, trace_is_empty
@@ -335,6 +336,65 @@ module sparse_trace
         
     end subroutine
     
+    function strip_dataspan( s )
+
+        type(t_strip), intent(in) :: s
+        integer, dimension(2) :: strip_dataspan
+
+        integer, dimension(2) :: span
+        real :: firstvalue, lastvalue
+        integer :: i
+
+        if (strip_length(s) == 0) then
+            strip_dataspan = (/0,-1/)
+            return
+        end if
+
+        span = strip_span(s)
+        strip_dataspan = span
+
+        firstvalue = 0.
+        
+        do i=span(1),span(2)
+            strip_dataspan(1) = i
+            if (s%data(i) /= firstvalue) exit 
+        end do
+        
+        lastvalue = s%data(span(2))
+        do i=span(2),span(1),-1
+            if (s%data(i) /= lastvalue) exit 
+            strip_dataspan(2) = i
+        end do
+
+    end function
+
+    subroutine strip_fold( s, shifts, amplitudes )
+
+        type(t_strip), intent(inout) :: s
+        real, dimension(:), intent(in) :: shifts, amplitudes
+
+        integer, dimension(2) :: dataspan
+        type(t_trace) :: t
+        integer :: i
+
+        
+        
+        dataspan = strip_dataspan( s )
+       
+        if (dataspan(2) < dataspan(1)) then
+            return
+        end if
+
+        call trace_create_simple( t, s%data(dataspan(1):dataspan(2)), dataspan )
+        s%data(:) = 0.
+        do i=1,size(shifts)
+            call trace_multiply_add( t, s, factor_=amplitudes(i), rtraceshift_=shifts(i) )
+        end do
+
+        call trace_destroy(t)
+
+    end subroutine
+
     pure subroutine trace_create_simple( trace, data, span )
     
         type(t_trace), intent(inout)     :: trace

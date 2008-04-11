@@ -396,6 +396,8 @@ module source_all
         type(t_tdsm), intent(out)     :: tdsm
         real, intent(in)              :: shortest_doi        
         
+        call tdsm_destroy( tdsm )
+
       ! here we simply hand over to the appropriate implementation
        
         select case(psm%sourcetype)
