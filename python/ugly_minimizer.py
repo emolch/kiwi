@@ -60,6 +60,7 @@ class Minimizer:
                 'set_receivers',
                 'set_ref_seismograms',
                 'set_source_location',
+                'set_source_crustal_thickness_limit',
                 'set_source_params',
                 'set_source_params_mask',
                 'set_source_subparams',
