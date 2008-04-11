@@ -67,6 +67,7 @@ module seismogram
         integer :: ja, jr, jd, jn, je
       ! sign of each component
         real    :: sa, sr, sd, sn, se
+        tracep => null()
         
         interpolate = .false.
         if (present(interpolate_)) interpolate = interpolate_

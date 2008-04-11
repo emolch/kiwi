@@ -34,22 +34,14 @@ LIBSMINPACK = -Lsminpack -lsminpack
 
 # compiler and linker flag defaults
 CFLAGS =  $(INCMSEED) $(INCHDF) $(INCSAC) $(INCFFTW)
-LDFLAGS = -static $(LIBMSEED) $(LIBSAC) $(LIBFFTW) $(LIBHDF) $(LIBSMINPACK)
-
-#CFLAGS += -fno-second-underscore
-
-# on MacOSX these are needed, because HDF5 had to be compiled that way
-ifeq ($(OS),macosx)
-    CFLAGS += -fno-underscoring
-    LDFLAGS += -lSystemStubs
-endif
+LDFLAGS =  $(LIBMSEED) $(LIBSAC) $(LIBFFTW) $(LIBHDF) $(LIBSMINPACK)
 
 # use the Makefile.local if you want to append to FORTRANC, CFLAGS or LDFLAGS
 # some abbreviations that can be used to append to cflags
 # put CFLAGS += $(CDEBUG) or CFLAGS += $(CFAST) to Makefile.local
 CFAST = -O3
 CDEBUG_IFORT = -g -warn all -ftrapuv -debug all
-CDEBUG_G95 = -g -Wall -Wimplicit-none -fbounds-check -ftrace=full
+CDEBUG_G95 = -g -Wall  -fbounds-check 
 CDEBUG = $(if $(filter ifort, $(FORTRANC)), \
     $(CDEBUG_IFORT), \
     $(CDEBUG_G95) )
@@ -88,7 +80,7 @@ OBJECTS = better_varying_string.o varying_string_getarg.o constants.o util.o \
 
 all : check targets 
 
-$(TARGETS) $(TESTS) : .ranlibdone .sminpackdone .mseedsimple
+$(TARGETS) $(TESTS) : .sminpackdone .mseedsimple
 
 .sminpackdone :
 	$(MAKE) -C sminpack/ && touch .sminpackdone
@@ -96,24 +88,16 @@ $(TARGETS) $(TESTS) : .ranlibdone .sminpackdone .mseedsimple
 .mseedsimple :
 	$(MAKE) -C mseed/ && touch .mseedsimple
 
-    
-# needed on MacOSX: 
-ifeq ($(OS),macosx)
-.ranlibdone :
-	cd $(LIBHDF) && ranlib *.a && cd .. && touch .ranlibdone 
-else
-.ranlibdone:
-	touch .ranlibdone 
-endif
-
 targets : $(TARGETS)
 
 install : targets
 	install -d $(bindir)
 	install $(TARGETS) $(bindir)
 	install -d $(datadir)/invearthquake
+	find aux -type d -and -not -path '*/.svn/*' -print0 | \
+	    xargs -I '{}' -0 install -d $(datadir)/invearthquake/'{}'
 	find aux -type f -and -not -path '*/.svn/*' -print0 | \
-	    xargs -I '{}' -0 cp --parents  --update '{}' $(datadir)/invearthquake
+	    xargs -I '{}' -0 install  '{}' $(datadir)/invearthquake/'{}'
 
 	@echo 
 	@echo '-----------------------------------------------------------------------'
@@ -191,7 +175,7 @@ test_% : $(OBJECTS) test_%.o
 -include $(SRCS:.f90=.d)
 
 clean :
-	rm -f *.o *.mod $(TESTS) $(TARGETS) .sminpackdone .ranlibdone .mseedsimple
+	rm -f *.o *.mod $(TESTS) $(TARGETS) .sminpackdone .mseedsimple
 	$(MAKE) -C sminpack/ clean
 	$(MAKE) -C mseed/ clean
     

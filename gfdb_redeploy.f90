@@ -81,7 +81,8 @@ module gfdb_redeploy_
         type(t_strip) :: strip
         type(t_trace) :: short_trace
         integer, dimension(2) :: span
-
+        tracep => null()
+        
         nargs = count_words( buffer )
         if (nargs == 2) then
             read (unit=buffer,fmt=*,iostat=iostat) x, z

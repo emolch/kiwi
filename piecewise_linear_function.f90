@@ -117,7 +117,7 @@ module piecewise_linear_function
    
         call plf_destroy( d )
         allocate( d%f(2,s%n) )
-        d%f(:,:) = s%f(:,:)
+        d%f(:,:s%n) = s%f(:,:s%n)
         d%n = s%n
  
     end subroutine

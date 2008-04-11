@@ -59,6 +59,7 @@ module gfdb_extract_
         integer, dimension(2)        :: span
         type(varying_string)         :: filename
         type(t_strip)                :: continuous
+        tracep => null()
    
         read (unit=buffer,fmt=*,iostat=iostat) x, z, ig, filenamebase
         if (iostat /= 0) return

@@ -10,7 +10,7 @@ import random
 from subprocess import Popen, PIPE
 import numpy as num
 import matplotlib
-matplotlib.use('PDF')
+matplotlib.use('SVG')
 import matplotlib.pylab as lab
 import pickle
 

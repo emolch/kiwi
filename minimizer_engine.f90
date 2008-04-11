@@ -42,6 +42,7 @@ module minimizer_engine
     public set_local_interpolation
     public set_ref_seismograms
     public set_source_location
+    public set_source_crustal_thickness_limit
     public set_source_params
     public set_source_params_mask
     public set_source_subparams

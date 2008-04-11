@@ -49,7 +49,7 @@ module gfdb_specialextract_
         ok = .true.
         z = 0.0
         call gfdb_get_indices( db, x, z, ix, iz )
-      
+        tracep => null()
         do iz=1,db%nz
             do ig=1,db%ng
         

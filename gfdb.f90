@@ -877,7 +877,7 @@ module gfdb
       
         type(t_gfdb), intent(inout)            :: db
         integer, intent(in)                   :: ix, iz, ig
-        type(t_trace), intent(out), pointer   :: tracep
+        type(t_trace), pointer   :: tracep
         
         integer :: ichunk, ixc
         
@@ -902,7 +902,7 @@ module gfdb
         type(t_gfdb), intent(inout)           :: db
         integer, intent(in)                   :: ix, iz, ig
         real, intent(in)                      :: dix, diz
-        type(t_trace), intent(out), pointer   :: tracep
+        type(t_trace), pointer   :: tracep
     
       ! use bilinear interpolation to get a trace between gfdb grid nodes.
       ! ix, iz, dix and diz are indices and offsets as produced by gfdb_get_indices_bilin()
@@ -914,6 +914,11 @@ module gfdb
         integer                 :: ixl, izl
         real                    :: dixl, dizl
         integer, dimension(2)   :: span
+        tracep => null()
+        t00 => null()
+        t01 => null()
+        t10 => null()
+        t11 => null()
         
       ! if we are exactly at a grid node, no interpolation is needed...
         if (dix .eq. 0. .and. diz .eq. 0.) then
@@ -988,7 +993,7 @@ module gfdb
         type(t_gfdb), intent(inout)         :: db
         type(t_chunk), intent(inout)        :: c
         integer, intent(in)                 :: ixc, iz,ig
-        type(t_trace), intent(out), pointer :: tracep
+        type(t_trace), pointer :: tracep
         
         integer(hsize_t),dimension(1) :: adims
         integer(hid_t) :: dataset, attribute, space
@@ -1200,6 +1205,7 @@ module gfdb
         integer, dimension(:,:,:), allocatable :: spans
       
         allocate( spans(2,db%nblockz,db%nblockx) )
+        tracep => null()
         
       ! in which block are we?
         iblockx = (ix_in-1)/db%nblockx_payload + 1
@@ -1587,7 +1593,7 @@ module gfdb
     subroutine chunk_close( c )
         
         type(t_chunk), intent(inout) :: c   
-        integer(hid_t) :: error 
+        integer(hid_t) :: err
         integer(hid_t), dimension(2) :: e
         integer :: ixc,iz,ig
         
@@ -1619,7 +1625,7 @@ module gfdb
             deallocate( c%traces )
         end if
         
-        call h5garbage_collect_f(error)
+        call h5garbage_collect_f(err)
         
     end subroutine
     

@@ -34,7 +34,7 @@ module minimizer_wrappers
   ! 
   ! == Minimizer Commands ==
   ! 
-
+    use minimizer_engine
     use better_varying_string
     use constants
     use util
@@ -43,7 +43,7 @@ module minimizer_wrappers
     use source
     use receiver
     use comparator
-    use minimizer_engine
+   ! use minimizer_engine
     
     implicit none
 
