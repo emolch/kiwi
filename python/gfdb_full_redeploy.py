@@ -10,12 +10,6 @@ def get_arrival(phases, distance):
         if t is not None:
             return t
 
-
-if len(sys.argv) < 5:
-    sys.exit('usage: gfdb_phaser in_db_path out_db_path time_begin time_end phase_names ...')
-    
-    
-
 in_db_path = sys.argv[1]
 out_db_path = sys.argv[2]
 trange = [float(x) for x in sys.argv[3:5]]
