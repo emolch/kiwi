@@ -299,7 +299,7 @@ def get_traces( stations, datadir_raw ):
             
             for sacfile in sacfiles:
                 print 'reading: ', sacfile
-                locid = re.findall( '[A-Z]+\.[A-Z0-9]+\.(\d*)\.[A-Z0-9]+\..\.SAC$', sacfile )[0]
+                locid = re.findall( '[A-Z0-9]+\.[A-Z0-9]+\.(\d*)\.[A-Z0-9]+\..\.SAC$', sacfile )[0]
                 polezerofiles = glob.glob( os.path.join(datadir_raw, 'SAC_PZs_%s_%s_%s_%s_*' % (s.nid,s.sid,component,locid) ) )
                 respfile = os.path.join(datadir_raw, 'RESP.%s.%s.%s.%s' % (s.nid, s.sid, locid, component))
                 if not polezerofiles:

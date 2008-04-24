@@ -33,14 +33,14 @@ def get_arrival(phases, distance):
 
 # argument processing
 
-if len(sys.argv) < 5:
+if len(sys.argv) < 5 and len(sys.argv) != 3:
     sys.exit('usage: gfdb_phaser in_db_path out_db_path [ time_begin time_end phase_names ... ]')
 
 in_db_path = sys.argv[1]
 out_db_path = sys.argv[2]
 
 cut_mode = False
-if len(sys.argv) >= 3:
+if len(sys.argv) > 3:
     cut_mode = True
     trange = [float(x) for x in sys.argv[3:5]]
     phase_names = sys.argv[5:]
