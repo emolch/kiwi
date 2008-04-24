@@ -95,9 +95,9 @@ install : targets
 	install $(TARGETS) $(bindir)
 	install -d $(datadir)/invearthquake
 	find aux -type d -and -not -path '*/.svn/*' -print0 | \
-	    xargs -I '{}' -0 install -d $(datadir)/invearthquake/'{}'
+	    xargs --replace='{}' -0 install -d $(datadir)/invearthquake/'{}'
 	find aux -type f -and -not -path '*/.svn/*' -print0 | \
-	    xargs -I '{}' -0 install  '{}' $(datadir)/invearthquake/'{}'
+	    xargs --replace='{}' -0 install  '{}' $(datadir)/invearthquake/'{}'
 
 	@echo 
 	@echo '-----------------------------------------------------------------------'
@@ -105,10 +105,10 @@ install : targets
 	@echo '  Please adjust your environment variables:'
 	@echo
 	@echo '   * PATH should contain:'
-	@echo '      ' $(abspath $(bindir))
+	@echo '      ' $(bindir)
 	@echo
 	@echo '   * INVEARTHQUAKE_HOME should be set to:'
-	@echo '      ' $(abspath $(datadir))/invearthquake
+	@echo '      ' $(datadir)/invearthquake
 	@echo '-----------------------------------------------------------------------'
 
 uninstall :

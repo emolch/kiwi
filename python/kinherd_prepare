@@ -323,7 +323,8 @@ def sactime( secs ):
     
 def preprocess( datadir_dis, seismograms, ref_time, c_low=0.01, c_high=1., new_delta_t=0.5):
 
-    shutil.rmtree( datadir_dis )
+    if os.path.exists( datadir_dis ):
+        shutil.rmtree( datadir_dis )
     ensure_dir( datadir_dis )
     
     
