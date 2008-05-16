@@ -90,4 +90,9 @@ for ix in xrange(in_db.nx):
             p.stdin.write( '%g %g\n' % ( x, z ) )
         
         p.stdin.flush()
-        
+
+p.stdin.close()
+p.wait()
+if p.returncode != 0:
+    sys.exit('gfdb_phaser: gfdb_redeploy returned an error')
+

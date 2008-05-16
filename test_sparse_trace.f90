@@ -77,9 +77,7 @@ program test_sparse_trace
         call test_fail("pack (span)")
     if (any (sparse2%strips(1)%data .ne. (/3.,1.,1.,99./) ) ) &
         call test_fail("pack (data)")
-    call trace_multiply_add( sparse2, cont1, 2.,(/1,3/) )
-    if (any( cont1%data .ne. (/1.,0.,0.,6.,3.,3./))) &
-        call test_fail("multiply-add 3")
+    
     
     call strip_init( (/1,2/), (/1.,1./), cont1 )
     call strip_init( (/2,3/), (/1.,1./), cont2 )
@@ -103,13 +101,6 @@ program test_sparse_trace
     
     !if (any( strip_span( extender) .ne. (/3,5/) )) &
     !    call test_fail("extend shrink span")
-    
-    call strip_init( (/1,1/), (/0./), cont1 )
-    call strip_init( (/2,3/), (/1.,1./), cont2 )
-    call trace_pack( cont2, sparse2 )
-    call trace_multiply_add( sparse2, cont1, 1., spanlimit_=(/2,2/), itraceshift_=-1 )
-    if (any( cont1%data .ne. (/0.,1./))) &
-        call test_fail("multiply-add 5")
     
     call strip_init( (/1,1/), (/0./), cont1 )
     call strip_init( (/2,4/), (/1.,1.,0./), cont2 )

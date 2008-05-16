@@ -34,6 +34,7 @@ module parameterized_source
     public psm_destroy
     public psm_set_default_constraints
     public psm_set_crustal_thickness_limit
+    public psm_get_crustal_thickness
     public psm_point_in_constraints
     public psm_set_origin_and_time
     public psm_get_params
@@ -116,17 +117,13 @@ module parameterized_source
         type(t_psm), intent(inout)  :: self
         
         type(t_crust2x2_1d_profile) :: profile
-        real :: vp, vs, vrho, thickness
+        real :: thickness
         
         if (allocated(self%constraints)) deallocate(self%constraints)
         allocate( self%constraints(2) )
-        
-        call crust2x2_get_profile(r2d(self%origin), profile)
-        call crust2x2_get_profile_averages(profile, vp, vs, vrho, thickness)
 
-        if (self%crustal_thickness_limit > 0) then
-            thickness = min(self%crustal_thickness_limit, thickness)
-        end if
+        call psm_get_crustal_thickness( self, thickness )        
+
       ! surface constraint:
         self%constraints(1)%point = (/0.,0.,1500./)
         self%constraints(1)%normal = (/0.,0.,-1./)
@@ -169,6 +166,22 @@ module parameterized_source
     	type(t_psm), intent(inout)      :: self
     	real, intent(in) 				:: thickness_limit
     	self%crustal_thickness_limit = thickness_limit
+    end subroutine
+
+    subroutine psm_get_crustal_thickness( self, thickness )
+
+    	type(t_psm), intent(in)      :: self
+    	real, intent(out) 		     :: thickness
+
+        real                         :: vp, vs, vrho
+        type(t_crust2x2_1d_profile)  :: profile
+       
+        call crust2x2_get_profile(r2d(self%origin), profile)
+        call crust2x2_get_profile_averages(profile, vp, vs, vrho, thickness)
+        if (self%crustal_thickness_limit > 0) then
+            thickness = min(self%crustal_thickness_limit, thickness)
+        end if
+    	
     end subroutine
     
     subroutine psm_get_params( psm, params, normalized_  )

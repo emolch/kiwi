@@ -7,7 +7,7 @@ from struct import pack
 import copy
 import math
 import random
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE, call
 import numpy as num
 import matplotlib
 matplotlib.use('PDF')
@@ -15,9 +15,12 @@ import matplotlib.pylab as lab
 import pickle
 
 def invearthquake_aux_dir():
-    d = os.getenv('INVEARTHQUAKE_HOME')+"/aux"
+    ieq_home = os.getenv('INVEARTHQUAKE_HOME')
+    if ieq_home is None:
+         sys.exit('INVEARTHQUAKE_HOME environment variable not set')
+    d = pjoin(ieq_home, 'aux')
     if not os.path.isdir(d):
-        sys.exit('INVEARTHQUAKE_HOME environment variable not set or directory not found.')
+        sys.exit('directory not found: "%s"' % d)
     return d
     
 
@@ -58,9 +61,11 @@ class Minimizer:
     commands = ['set_database',
                 'set_local_interpolation',
                 'set_receivers',
+                'switch_receiver',
                 'set_ref_seismograms',
                 'set_source_location',
                 'set_source_crustal_thickness_limit',
+                'get_source_crustal_thickness',
                 'set_source_params',
                 'set_source_params_mask',
                 'set_source_subparams',
@@ -262,10 +267,13 @@ class Minimizer:
             sm = 0.
             sn = 0.
             for misfit, norm  in zip(misfit_by_c, norms_by_c):
-                sm += misfit**2
-                sn += norm**2
+                if norm > 0.:
+                    sm += misfit**2
+                    sn += norm**2
         
-            smisfit += sm / sn
+            if sn > 0.0:
+                smisfit += sm / sn
+                
         return math.sqrt(smisfit)
     
     def get_grid_minimum( self, sm_grid ):
@@ -584,7 +592,7 @@ class Minimizer:
         
         # layout
         ncomps = len(comp)
-        
+        outfiles = []
         nrows = int(math.ceil(nrecs/float(ncols)))
         frames = []
         for irow in xrange(nrows):
@@ -630,6 +638,7 @@ class Minimizer:
             
         # plot it
         for irec in xrange(nrecs):
+            currentoutfile = outfile % (irec+1)
             for icomp in xrange(ncomps):
                 if comp[icomp] in self.components[irec]:
                     f1 = tempfnbase1 + "-" + str(irec+1) + "-" + comp[icomp] + "." + extension
@@ -637,10 +646,10 @@ class Minimizer:
                 else:
                     f1 = dummyfile
                     f2 = dummyfile
-                    
+                
                 cmd = [ "autoplot", 
                     f1+"["+plotstyle[0]+"]", f2+"["+plotstyle[1]+"]", 
-                    outfile%irec, "--fit",
+                    currentoutfile, "--fit",
                      "--ylabel="+Config.component_names[comp[icomp]], 
                     "--yannotevery=0", "--yfunit=off", "--ylabelofs=0.15" ]
                 cmd.extend( frames[irec*ncomps+icomp] )
@@ -664,7 +673,7 @@ class Minimizer:
                         title += ': ' + self.receiver_names[irec]
                     cmd.append( "--title='%s'" % title )
                     if phases:
-                        anotations = open(outfile+'.anot','w')
+                        anotations = open(currentoutfile+'.anot','w')
                         for phase in phases:
                             arrivaltime = phase(distances_m[irec])
                             if arrivaltime is not None:
@@ -684,9 +693,16 @@ class Minimizer:
                 if not timeranges is None:
                     cmd.append( "--xrange=%f/%f" % timeranges[irec] )
                     
-                os.system( " ".join(cmd) )
-                if (os.path.isfile(outfile+'.anot')):
-                    os.remove(outfile+'.anot')
+                call(cmd)
+                
+                if (os.path.isfile(currentoutfile+'.anot')):
+                    os.remove(currentoutfile+'.anot')
+                
+            outfiles.append(currentoutfile)
+        
+        cmd = ['pdfjoin', '--outfile', outfile % 'all' ]
+        cmd.extend(outfiles)
+        call(cmd)
         
         return outfile
         

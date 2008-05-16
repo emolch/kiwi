@@ -54,6 +54,7 @@ module minimizer_wrappers
     public do_set_ref_seismograms
     public do_set_source_location
     public do_set_source_crustal_thickness_limit
+    public do_get_source_crustal_thickness
     public do_set_source_params
     public do_set_source_params_mask
     public do_set_source_subparams
@@ -219,6 +220,47 @@ module minimizer_wrappers
         
         call set_receivers( receiversfn, answer, ok )
         
+    end subroutine
+
+    subroutine do_switch_receiver( line, answer, ok )
+
+     !! === {{{switch_receiver ireceiver ( on | off ) }}} ===
+      !
+      ! Turn receiver number ireceiver on or off.
+
+        type(varying_string), intent(in)  :: line
+        type(varying_string), intent(out) :: answer
+        logical, intent(out)              :: ok
+        
+        
+        character(len=len(line)) :: buffer, onoff
+        integer :: nerr, ireceiver
+        logical :: state
+
+        answer = ''
+        ok = .true.
+
+        buffer = char(line)
+        read (unit=buffer,fmt=*, iostat=nerr) ireceiver, onoff
+        if (nerr /= 0) then
+            call error( "usage: switch_receiver ireceiver ( on | off )" )
+            ok = .false.
+            return
+        end if
+        
+        state  = .true.
+        if (onoff == 'on') then
+            state = .true.
+        else if (onoff == 'off') then
+            state = .false.
+        else 
+            call error( "usage: switch_receiver ireceiver ( on | off )" )
+            ok = .false.
+            return
+        end if
+    
+        call switch_receiver( ireceiver, state, ok )
+
     end subroutine
     
     subroutine do_set_ref_seismograms( line, answer, ok )
@@ -401,7 +443,26 @@ module minimizer_wrappers
 
     end subroutine
 
-    
+    subroutine do_get_source_crustal_thickness( line, answer, ok )
+
+     !! === {{{get_source_crustal_thickness}}} ===
+      !
+      ! Returns crustal thickness at the source in [m].
+          
+        type(varying_string), intent(in)  :: line
+        type(varying_string), intent(out) :: answer
+        logical, intent(out)              :: ok
+
+        real :: thickness
+
+        answer = ''
+        ok = .false.
+        
+        call get_source_crustal_thickness( thickness, ok )
+        
+        if (ok) answer = thickness
+        
+    end subroutine
     
     subroutine do_set_source_params( line, answer, ok )
       
@@ -1200,6 +1261,8 @@ program minimizer
             call do_set_local_interpolation( arguments, answer, ok )
         else if (command == 'set_receivers') then
             call do_set_receivers( arguments, answer, ok )
+        else if (command == 'switch_receiver') then
+            call do_switch_receiver( arguments, answer, ok )
         else if (command == 'set_ref_seismograms') then
             call do_set_ref_seismograms( arguments, answer, ok )
         else if (command == 'shift_ref_seismogram') then
@@ -1208,6 +1271,10 @@ program minimizer
             call do_autoshift_ref_seismogram( arguments, answer, ok )
         else if (command == 'set_source_location') then
             call do_set_source_location( arguments, answer, ok )
+        else if (command == 'set_source_crustal_thickness_limit') then
+            call do_set_source_crustal_thickness_limit( arguments, answer, ok )
+        else if (command == 'get_source_crustal_thickness') then
+            call do_get_source_crustal_thickness( arguments, answer, ok )
         else if (command == 'set_source_params') then
             call do_set_source_params( arguments, answer, ok )
         else if (command == 'set_source_params_mask') then

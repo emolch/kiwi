@@ -58,6 +58,9 @@ module receiver
     
     type, public :: t_receiver
     
+      ! flag true if this receiver is to be processed
+        logical                                    :: enabled
+
       ! sampling rate
         real                                       :: dt
     
@@ -91,6 +94,7 @@ module receiver
     public receiver_destroy
     public receiver_component_index
     public receiver_component_sign
+    public receiver_set_enabled
     public receiver_set_filter
     public receiver_set_taper
     public receiver_output_seismogram
@@ -120,6 +124,8 @@ module receiver
         
         call receiver_destroy( self )
         ok = .false.
+
+        self%enabled = .true.
         
         self%dt = dt
         
@@ -168,6 +174,7 @@ module receiver
             call probe_init( self%syn_probes(icomponent), dt )
         end do
         
+
     end subroutine
     
     subroutine receiver_destroy( self )
@@ -216,7 +223,30 @@ module receiver
         self%origin%lat = 0.0
         self%origin%lon = 0.0
         self%dt = 0.0
+        self%enabled = .false.
         
+    end subroutine
+
+    pure subroutine receiver_set_enabled( self, newstate )
+
+        type(t_receiver), intent(inout)  :: self
+        logical, intent(in) :: newstate
+
+        integer :: icomponent
+
+        if (.not. newstate) then
+          ! put zeroes into the synthetic data, in case seismogram output is requested, 
+          ! so that no old data is output
+            
+            if (allocated(self%displacement)) then
+                do icomponent=1,self%ncomponents
+                    call strip_nullify( self%displacement(icomponent) )
+                end do
+            end if
+        end if
+
+        self%enabled = newstate
+
     end subroutine
     
     pure function character_to_id( ch )
@@ -324,12 +354,18 @@ module receiver
         do icomponent=1,self%ncomponents
             call probe_set_array( self%syn_probes(icomponent), self%displacement(icomponent) )
         
-            self%misfits(icomponent) = probes_norm( self%ref_probes(icomponent), &
-                                                    self%syn_probes(icomponent), &
-                                                    misfit_method )
-            self%misfits_norm_factors(icomponent) = &
-                                       probe_norm( self%ref_probes(icomponent), &
-                                                    misfit_method )
+            if (self%enabled) then
+                self%misfits(icomponent) = probes_norm( self%ref_probes(icomponent), &
+                                                        self%syn_probes(icomponent), &
+                                                        misfit_method )
+                self%misfits_norm_factors(icomponent) = &
+                                        probe_norm( self%ref_probes(icomponent), &
+                                                        misfit_method )
+            else
+                self%misfits(icomponent) = 0.0
+                self%misfits_norm_factors(icomponent) = 0.0
+            end if
+
         end do
     
     end subroutine
@@ -544,7 +580,6 @@ module receiver
         call receiver_calculate_cross_correlations( self, ishiftrange )
 
         imax = maxloc( sum(max(self%cross_corr/max(1.,maxval(self%cross_corr)),0.)**2,2),1 )
-        !imax = minloc( sum(max(self%cross_corr/max(1.,maxval(self%cross_corr)),0.),2),1 )
         ishift = imax+ishiftrange(1)-1
         call receiver_shift_ref_seismogram( self, ishift )
 

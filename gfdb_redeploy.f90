@@ -34,6 +34,7 @@ module gfdb_redeploy_
     
     type(t_gfdb), save :: in, out
     integer :: traces_added = 0
+    integer, dimension(2) :: last_span = (/1,1/)
     
   contains
   
@@ -102,12 +103,23 @@ module gfdb_redeploy_
                         call gfdb_get_indices( out, x, z, ixo, izo )
                         if (nargs == 2) then
                             call gfdb_save_trace( out, ixo, izo, ig, tracep )
+                            last_span = tracep%span
                         else 
                             span(1) = floor(tbeg/out%dt)
                             span(2) = ceiling(tend/out%dt)
-                            call trace_multiply_add( tracep, strip, spanlimit_= span )
-                            call trace_pack( strip, short_trace )
+                            
+                            call resize( strip%data, span(1), span(2)-span(1)+1 )
+                            strip%data = 0.
+
+                            call trace_multiply_add_nogrow( tracep, strip%data, span )
+
+                            if (traces_added > 1) then
+                                call trace_pack( strip, short_trace, last_span )
+                            else 
+                                call trace_pack( strip, short_trace )
+                            end if
                             call gfdb_save_trace( out, ixo, izo, ig, short_trace )
+                            last_span = short_trace%span
                             call strip_destroy( strip )
                         end if
                         traces_added = traces_added + 1
@@ -117,7 +129,7 @@ module gfdb_redeploy_
                 call gfdb_uncache_trace( in, ix,iz,ig )
             end do
             
-            
+            call trace_destroy( short_trace )
             
           ! periodically close the gfdb, so that hdf is forced to deallocate
           ! all it's memory
@@ -202,6 +214,7 @@ program gfdb_redeploy
         iline = iline+1
     end do line_loop
 
+    call close_databases()
     call cleanup()
     
 end program

@@ -41,7 +41,7 @@ LDFLAGS =  $(LIBMSEED) $(LIBSAC) $(LIBFFTW) $(LIBHDF) $(LIBSMINPACK)
 # put CFLAGS += $(CDEBUG) or CFLAGS += $(CFAST) to Makefile.local
 CFAST = -O3
 CDEBUG_IFORT = -g -warn all -ftrapuv -debug all
-CDEBUG_G95 = -g -Wall  -fbounds-check 
+CDEBUG_G95 = -g -Wall  -fbounds-check -ftrace=full
 CDEBUG = $(if $(filter ifort, $(FORTRANC)), \
     $(CDEBUG_IFORT), \
     $(CDEBUG_G95) )

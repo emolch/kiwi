@@ -33,7 +33,8 @@ module gfdb_build_
     
     type(t_gfdb), save :: db
     integer :: traces_added = 0
-    
+    integer, dimension(2) :: last_span = (/1,1/)
+
   contains
   
     subroutine set_database( basefn, nchunks, nx,nz,ng, dt,dx,dz, firstx, firstz )
@@ -101,10 +102,18 @@ module gfdb_build_
                 
               ! pack strip => sparse trace
                 if (ifile == 1) then
-                    call trace_pack( conti, tr )
+                    if (traces_added > 1) then
+                        call trace_pack( conti, tr, last_span )
+                    else
+                        call trace_pack( conti, tr )
+                    end if
                 else 
-                    call trace_pack( conti, tr2 ) ! horribly inefficient, but who cares...
-                    call trace_copy( tr, trold )
+                    if (traces_added > 1) then
+                        call trace_pack( conti, tr2, last_span )
+                    else 
+                        call trace_pack( conti, tr2 )
+                    end if
+                    call trace_copy( tr, trold )   ! horribly inefficient...
                     call trace_join( trold, tr2, tr )
                 end if
                 
@@ -117,6 +126,8 @@ module gfdb_build_
             call gfdb_save_trace( db, ix, iz, ig, tr )
             traces_added = traces_added + 1
             
+            last_span = tr%span
+
           ! periodically close the gfdb, so that hdf is forced to deallocate
           ! all it's memory
             if (traces_added > 1000) then

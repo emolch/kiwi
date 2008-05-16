@@ -43,11 +43,13 @@ module minimizer_engine
     public set_ref_seismograms
     public set_source_location
     public set_source_crustal_thickness_limit
+    public get_source_crustal_thickness
     public set_source_params
     public set_source_params_mask
     public set_source_subparams
     public set_effective_dt
     public set_receivers
+    public switch_receiver
     public set_misfit_method
     public set_misfit_filter
     public set_misfit_taper
@@ -217,6 +219,30 @@ module minimizer_engine
         
     end subroutine
     
+    subroutine switch_receiver( ireceiver, newstate, ok )
+
+        integer, intent(in) :: ireceiver
+        logical, intent(in) :: newstate
+        logical, intent(out) :: ok
+
+        integer :: nreceivers
+
+        call update_probes( ok )
+        if (.not. ok) return
+        
+        nreceivers = size(receivers)
+
+        if (ireceiver < 1 .or. nreceivers < ireceiver) then
+            ok = .false.
+            call error( 'receiver index out of range' )
+            return
+        end if
+
+        call receiver_set_enabled( receivers(ireceiver), newstate )
+
+        call dirtyfy_probes()
+
+    end subroutine
     
     subroutine set_ref_seismograms( reffnbase, refformat, ok )
     
@@ -332,6 +358,18 @@ module minimizer_engine
 
         call psm_set_crustal_thickness_limit(psm, thickness_limit)
         call dirtyfy_source()
+        
+    end subroutine
+
+    subroutine get_source_crustal_thickness( thickness, ok )
+
+        real, intent(out)                 :: thickness
+        logical, intent(out)              :: ok
+        
+        call update_source_location( ok )
+        if (.not. ok) return
+        
+        call psm_get_crustal_thickness(psm, thickness)
         
     end subroutine
     
@@ -616,7 +654,9 @@ module minimizer_engine
         nreceivers = size(receivers)
         
         do ireceiver=1,nreceivers
-            call make_seismogram( tdsm, receivers(ireceiver), db, interpolate )
+            if (receivers(ireceiver)%enabled) then
+                call make_seismogram( tdsm, receivers(ireceiver), db, interpolate )
+            end if
         end do
         
         seismograms_inited = .true.

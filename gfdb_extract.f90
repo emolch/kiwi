@@ -61,19 +61,19 @@ module gfdb_extract_
         type(t_strip)                :: continuous
         tracep => null()
    
+        ok = .false.
         read (unit=buffer,fmt=*,iostat=iostat) x, z, ig, filenamebase
         if (iostat /= 0) return
-        ok = .true.
         call gfdb_get_indices( db, x, z, ix, iz )
         call gfdb_get_trace( db, ix, iz, ig, tracep )
         if (.not. associated(tracep)) return
         if ( trace_is_empty(tracep)) return
-        
         call trace_unpack( tracep, continuous )
         span = strip_span( continuous )
         filename = trim(filenamebase)
         call writeseismogram( filename, var_str("*"), continuous%data, db%dt*(span(1)-1),db%dt,nerr )
-                    
+        if (nerr == 0) ok = .true.
+
         call gfdb_uncache_trace( db, ix,iz,ig )
         
     end subroutine
@@ -133,9 +133,12 @@ program gfdb_extract
     line_loop : do
         call readline( getentry, iostat, ok )
         if (iostat == IOSTAT_EOF) exit line_loop
-        if (.not. ok) call die( "gfdb_extract: parsing of line "// iline &
-                                 //" from standard input failed."// &
-                                 "expected: x z ig 'filename'" )
+        if (.not. ok) then
+            write (stdout,*) 'nok'
+        else
+            write (stdout,*) 'ok'
+        end if
+        call flush(stdout)
         iline = iline+1
     end do line_loop
 

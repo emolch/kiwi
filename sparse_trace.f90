@@ -61,6 +61,7 @@ module sparse_trace
     public strip_extend_to_same_span_4
     public strip_extend_to_same_span_2
     public strip_fold
+    public strip_nullify
     
     public trace_join, trace_pack, trace_unpack, trace_multiply_add, trace_multiply_add_nogrow
     public trace_copy, trace_destroy, trace_is_empty
@@ -87,7 +88,7 @@ module sparse_trace
         
     end subroutine
     
-    function strip_length( strip ) result(length)
+    pure function strip_length( strip ) result(length)
         type(t_strip), intent(in) :: strip
         integer :: length
         
@@ -101,6 +102,11 @@ module sparse_trace
     subroutine strip_destroy( strip )
         type(t_strip), intent(inout) :: strip
         call resize( strip%data, 1, 0 )
+    end subroutine
+
+    pure subroutine strip_nullify( strip )
+        type(t_strip), intent(inout) :: strip
+        strip%data(:) = 0.0
     end subroutine
     
     pure function strip_span( strip )
@@ -425,18 +431,30 @@ module sparse_trace
         
     end subroutine
     
-    pure subroutine trace_pack( strip, trace )
+    pure function span_contains( span, subspan )
+
+        integer, dimension(2), intent(in) :: span, subspan
+        logical :: span_contains
+
+        span_contains =  (subspan(1) <= subspan(2) .and. span(1) <= subspan(1) .and. subspan(2) <= span(2))
+        
+    end function
+
+    pure subroutine trace_pack( strip, trace, last_span_as_hint )
         
       ! this continuous trace into a sparse one
          
         type(t_strip), intent(in)     :: strip
         type(t_trace), intent(inout)    :: trace
 
+      ! turns on hinting, of positions, where an empty trace is put:
+        integer, dimension(2), intent(in), optional :: last_span_as_hint
+
         integer :: i,istrip,nstrips
         integer :: ibeg,iend
         logical :: interest
         integer :: gap
-        
+        integer, dimension(2) :: span
       
       ! this could be done more elegantly, utilizing
       ! a kind of growable data structure,
@@ -466,10 +484,33 @@ module sparse_trace
             
         end do
         nstrips = istrip
-      
-      ! adjust size of the sparse trace
+        
         call trace_destroy( trace )
-        if ( nstrips == 0 ) return
+
+      ! special treatment of traces without data...
+      ! save a single datapoint at a position which is not likely to
+      ! stretch output seismograms too much.
+        if ( nstrips == 0 ) then
+            allocate( trace%strips(1) )
+            span = strip_span( strip )
+            ibeg = span(1)
+            iend = ibeg
+            if (present(last_span_as_hint)) then
+                if (span_contains( span, last_span_as_hint )) then
+                    ibeg = last_span_as_hint(1)
+                    iend = ibeg
+                end if
+            end if
+            call resize( trace%strips(1)%data, ibeg, iend-ibeg+1 ) ! add one of the zeros
+            trace%strips(1)%data(:) = 0.0
+            trace%nstrips = 1
+            trace%span(1) = ibeg
+            trace%span(2) = iend
+
+            return
+        end if
+
+      ! adjust size of the sparse trace
         allocate( trace%strips(nstrips) )
         trace%nstrips = nstrips
       
@@ -538,15 +579,12 @@ module sparse_trace
         
     end subroutine
                                          
-    pure subroutine trace_multiply_add( trace, strip, factor_, spanlimit_, &
+    pure subroutine trace_multiply_add( trace, strip, factor_, &
                                          itraceshift_, rtraceshift_ )
     
       ! This adds a sparse trace 'trace' multiplied by 'factor' on the continuous 'strip'.
       
       ! The output strip is extended to the appropriate range if neccessary.
-      
-      ! If 'spanlimit' is present, only the part in the bounds 'spanlimit' will 
-      ! be worked on.
       
       ! If 'itraceshift_' is present, the trace is shifted by that number of samples
       ! when it is added to strip.   strip(x) += trace(x-itraceshift_)
@@ -554,7 +592,6 @@ module sparse_trace
       ! If 'rtraceshift_' is present, the trace is shifted by a subsample distance,
       ! and linear interpolation is used to resample the data to the positions of
       ! strip. 
-      ! rtraceshift_ does NOT yet work  correct in conjunction with spanlimit_
       
       ! rtraceshift and itraceshift should not be specified both.
       ! Just in case: rtraceshift takes precedence.
@@ -562,13 +599,12 @@ module sparse_trace
         type(t_trace), intent(in) :: trace
         type(t_strip), intent(inout) :: strip
         real, intent(in), optional :: factor_
-        integer, dimension(:), intent(in), optional :: spanlimit_ ! (2)
         integer, intent(in), optional :: itraceshift_
         real, intent(in), optional :: rtraceshift_
         
         integer :: istrip
         integer, dimension(2) :: stripspan, span, r, contspan, itracespan_shift
-        integer, dimension(2) :: outspan_needed, spanlimit
+        integer, dimension(2) :: outspan_needed
         integer :: itraceshift, outlength_needed
         real :: factor, weight_right, weight_left, lastval
         
@@ -578,9 +614,6 @@ module sparse_trace
             factor = 1.
         end if
         
-        if (present(spanlimit_)) then
-             spanlimit = spanlimit_
-        end if
         
         itraceshift = 0
         
@@ -599,13 +632,8 @@ module sparse_trace
         
         itracespan_shift = trace%span + itraceshift
       
-      ! determine operation span
-        if (present(spanlimit_)) then
-            call intersection( spanlimit, itracespan_shift, span )
-            if (span(2) < span(1)) return
-        else 
-            span = itracespan_shift
-        end if
+      ! this is the operation span
+        span = itracespan_shift
         
         outspan_needed = span
       ! one sample more is needed if interpolation is wanted...
