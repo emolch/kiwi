@@ -659,6 +659,10 @@ class Visualization:
     
  
 def main(args):
+    
+    if len(args) != 4:
+        sys.exit('usage: kinherd_sourceview effective_dt source_latitude source_longitude')
+    
     MyApp.app=MyApp(args)
     win=MyWindow(args)
     win.show()

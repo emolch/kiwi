@@ -1,0 +1,222 @@
+#!/usr/bin/env python
+
+#
+#     Copyright 2008 Sebastian Heimann
+#  
+#     Licensed under the Apache License, Version 2.0 (the "License");
+#     you may not use this file except in compliance with the License.
+#     You may obtain a copy of the License at
+#  
+#         http://www.apache.org/licenses/LICENSE-2.0
+#  
+#     Unless required by applicable law or agreed to in writing, software
+#     distributed under the License is distributed on an "AS IS" BASIS,
+#     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#     See the License for the specific language governing permissions and
+#     limitations under the License.
+# 
+
+import sys
+from PyQt4 import Qt
+import PyQt4.Qwt5 as Qwt
+from tunguska.gfdb import Gfdb
+from tunguska.config import graph_colors, plot_background_color
+import tunguska.config as config
+
+class MyValueEdit(Qt.QLineEdit):
+
+    def __init__(self, *args):
+        apply(Qt.QLineEdit.__init__, (self,) + args)
+        self.value = 0.
+        self.mi = 0.
+        self.ma = 1.
+        self.connect( self, Qt.SIGNAL("editingFinished()"), self.myEditingFinished )
+        self.err_palette = Qt.QPalette()
+        self.err_palette.setColor( Qt.QPalette.Base, Qt.QColor(255,200,200) )
+        self.lock = False
+    def setRange( self, mi, ma ):
+        self.mi = mi
+        self.ma = ma
+        
+    def setValue( self, value ):
+        if not self.lock:
+            self.value = value
+            self.setPalette( Qt.QApplication.palette() )
+            self.adjust_text()
+        
+    def myEditingFinished(self):
+        try:
+            value = float(str(self.text()).strip())
+            if not (self.mi <= value <= self.ma):
+                raise Exception("out of range")
+            if value != self.value:
+                self.value = value
+                self.lock = True
+                self.emit(Qt.SIGNAL("edited(float)"), value )
+                self.setPalette( Qt.QApplication.palette() )
+        except:
+            self.setPalette( self.err_palette )
+        
+        self.lock = False
+        
+    def adjust_text(self):
+        self.setText( ("%8.5g" % self.value).strip() )
+        
+class ValControl(Qt.QFrame):
+
+    def __init__(self, *args):
+        apply(Qt.QFrame.__init__, (self,) + args)
+        self.layout = Qt.QHBoxLayout( self )
+        #self.layout.setSpacing(5)
+        self.lname = Qt.QLabel( "name", self )
+        self.lname.setFixedWidth(120)
+        self.lvalue = MyValueEdit( self )
+        self.lvalue.setFixedWidth(100)
+        self.slider = Qt.QSlider(Qt.Qt.Horizontal, self)
+        self.slider.setMaximum( 10000 )
+        self.slider.setSingleStep( 100 )
+        self.slider.setPageStep( 1000 )
+        self.slider.setTickPosition( Qt.QSlider.NoTicks )
+        self.layout.addWidget( self.lname )
+        self.layout.addWidget( self.lvalue )
+        self.layout.addWidget( self.slider )
+        #self.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Fixed)
+        self.connect( self.slider, Qt.SIGNAL("valueChanged(int)"),
+                      self.slided )
+        self.connect( self.lvalue, Qt.SIGNAL("edited(float)"),
+                      self.edited )
+                          
+    def setup(self, name, mi, ma, cur, ind):
+        self.lname.setText( name )
+        self.mi = mi
+        self.ma = ma
+        self.cur = cur
+        self.cursl = float(cur-mi)/(ma-mi) * 10000.
+        self.ind = ind
+        self.lvalue.setRange( mi, ma )
+        self.lvalue.setValue( self.cur )
+        self.slider.setValue( self.cursl )
+        
+    def slided(self,val):
+        if self.cursl != val:
+            self.cursl = val
+            self.cur = self.mi+(self.ma-self.mi)*self.cursl/10000.
+            self.lvalue.setValue( self.cur )
+            self.emit(Qt.SIGNAL("valchange(float,int)"), float(self.cur), int(self.ind) )
+
+    def edited(self,val):
+        if self.cur != val:
+            self.cur = val
+            cursl = (self.cur-self.mi)/(self.ma-self.mi) * 10000.
+            if (cursl != self.cursl):
+                self.slider.setValue( cursl )
+            
+            self.emit(Qt.SIGNAL("valchange(float,int)"), float(self.cur), int(self.ind) )
+        
+   
+class TracesPlot(Qwt.QwtPlot):
+    
+    def __init__(self, db, *args):
+        Qwt.QwtPlot.__init__(self, *args)
+        self.__db = db
+        self.__curves = []
+        self.__pos = [db.firstx, db.firstz]
+        for i in range(db.ng):
+            curve = Qwt.QwtPlotCurve('%i' % (i+1))
+            curve.attach(self)
+            self.__curves.append( curve )
+            curve.setPen( Qt.QPen( Qt.QColor(*graph_colors[i] )) )
+
+        yscaler = self.axisScaleEngine(Qwt.QwtPlot.yLeft)
+        yscaler.setAttribute(Qwt.QwtScaleEngine.Symmetric, True)
+        yscaler.setAttribute(Qwt.QwtScaleEngine.Floating, True)
+        
+        xscaler = self.axisScaleEngine(Qwt.QwtPlot.xBottom)
+        xscaler.setAttribute(Qwt.QwtScaleEngine.Floating, True)
+
+        self.setCanvasBackground( Qt.QColor(*plot_background_color) )
+        self.data_sync()
+
+        zoomer1 = Qwt.QwtPlotZoomer(
+            Qwt.QwtPlot.xBottom,
+            Qwt.QwtPlot.yLeft,
+            Qwt.QwtPicker.DragSelection,
+            Qwt.QwtPicker.AlwaysOff,
+            self.canvas())
+        zoomer1.setRubberBandPen(Qt.QPen(Qt.QColor(*config.tango_colors['scarletred2'])))
+        zoomer1.setEnabled(True)
+        zoomer1.zoom(0)
+
+        zoomer2 = Qwt.QwtPlotZoomer(
+            Qwt.QwtPlot.xTop,
+            Qwt.QwtPlot.yRight,
+            Qwt.QwtPicker.PointSelection | Qwt.QwtPicker.DragSelection,
+            Qwt.QwtPicker.AlwaysOff,
+            self.canvas())
+        zoomer2.setRubberBand(Qwt.QwtPicker.NoRubberBand)
+        zoomer2.setEnabled(True)
+        zoomer2.zoom(0)
+
+
+    def data_sync(self):
+
+        traces = self.__db.get_traces_slow( *self.__pos )
+        for i,t in enumerate(traces):
+            if t:
+                self.__curves[i].setData(t[0], t[1])
+
+        self.replot()
+
+
+    def set_x(self, x, i):
+        self.__pos[0] = x
+        self.data_sync()
+
+    def set_z(self, z,i):
+        self.__pos[1] = z
+        self.data_sync()
+
+class GFDBPlotWindow( Qt.QMainWindow ):
+    def __init__(self, gfdbpath, *args):
+        Qt.QMainWindow.__init__(self, *args)
+
+        db = Gfdb(gfdbpath)
+        plot = TracesPlot(db)
+    
+        xcontrol = ValControl()
+        xcontrol.setup( 'Distance',     db.firstx, db.firstx+db.dx*(db.nx-1), db.firstx, 0 )
+    
+        zcontrol = ValControl()
+        zcontrol.setup( 'Source Depth', db.firstz, db.firstz+db.dz*(db.nz-1), db.firstz, 0 )
+    
+        layout = Qt.QGridLayout()
+        layout.addWidget( plot, 0, 0, 1, 2 )
+        layout.addWidget( xcontrol, 1, 0, 1, 1 )
+        layout.addWidget( zcontrol, 1, 1, 1, 1 )
+        
+        frame = Qt.QFrame()
+        frame.setLayout( layout)
+        frame.connect( xcontrol, Qt.SIGNAL("valchange(float,int)"), plot.set_x )
+        frame.connect( zcontrol, Qt.SIGNAL("valchange(float,int)"), plot.set_z )
+    
+        self.setCentralWidget( frame )
+
+        
+
+   
+
+def make():
+    win = GFDBPlotWindow( sys.argv[1] )
+    return win
+
+
+def main(args):
+    app = Qt.QApplication(args)
+    win = make()
+    win.show()
+    sys.exit(app.exec_())
+
+if __name__ == '__main__':
+    main(sys.argv)
+
+

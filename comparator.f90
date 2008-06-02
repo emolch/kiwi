@@ -74,6 +74,7 @@ module comparator
         real                                  :: paddingfactor
         type(t_plf)                           :: taper
         type(t_plf)                           :: filter
+        real                                  :: factor = 1.
 
     end type
     
@@ -93,6 +94,7 @@ module comparator
 
     public probe_set_taper
     public probe_set_filter
+    public probe_set_factor
 
   
     public probes_adjust_spans
@@ -186,6 +188,7 @@ module comparator
         call dirtyfy_array( self )
         self%paddingfactor = 2.
         if (present(paddingfactor)) self%paddingfactor = paddingfactor
+        self%factor = 1.
         
     end subroutine
     
@@ -306,6 +309,7 @@ module comparator
         
         call strip_destroy(temp)
         call dirtyfy_array( self )
+        
         
     end subroutine
     
@@ -432,6 +436,15 @@ module comparator
     
     end subroutine
     
+    subroutine probe_set_factor( self, factor )
+
+        type(t_probe), intent(inout) :: self
+        real, intent(in) :: factor
+        
+        self%factor = factor
+
+    end subroutine
+
     subroutine probes_adjust_spans( a, b )
     
         type(t_probe), intent(inout) :: a, b
@@ -456,57 +469,69 @@ module comparator
                 
     end subroutine
 
-    pure function scalar_product( a, b, dt ) result(prod)
+    pure function scalar_product( a, b, dt, fa, fb ) result(prod)
         real, dimension(:), intent(in) :: a,b
-        real, intent(in) :: dt
+        real, intent(in) :: dt, fa, fb
         real :: prod
         prod = dt * 0. ! (get rid of compiler warning)
-        prod = real(sum(real(a*b,8)))
+        if (fa == 1. .and. fb == 1.) then
+            prod = real(sum(real(a*b,8)))
+        else
+            prod = real(sum(real(a*fa*b*fb,8)))
+        end if
     end function
 
-    pure function l1norm_func( a, b, dt ) result(norm)
+    pure function l1norm_func( a, b, dt, fa, fb ) result(norm)
         real, dimension(:), intent(in) :: a,b
-        real, intent(in) :: dt
+        real, intent(in) :: dt, fa, fb
         real :: norm
-        norm = real(dt*sum(real(abs(a-b),8)))
+        if (fa == 1. .and. fb == 1.) then
+            norm = real(dt*sum(real(abs(a-b),8)))
+        else
+            norm = real(dt*sum(real(abs(fa*a-fb*b),8)))
+        end if
     end function
 
-    pure function l2norm_func( a, b, dt ) result(norm)
+    pure function l2norm_func( a, b, dt, fa, fb ) result(norm)
         real, dimension(:), intent(in) :: a,b
-        real, intent(in) :: dt
+        real, intent(in) :: dt, fa, fb
         real :: norm
-        norm = real(sqrt(dt*sum(real(a-b,8)**2)))
+        if (fa == 1. .and. fb == 1.) then
+            norm = real(sqrt(dt*sum(real(a-b,8)**2)))
+        else
+            norm = real(sqrt(dt*sum(real(fa*a-fb*b,8)**2)))
+        end if
     end function
     
-    
-    pure function scalar_product_1( a, dt ) result(prod)
+
+    pure function scalar_product_1( a, dt, fa ) result(prod)
         real, dimension(:), intent(in) :: a
-        real, intent(in) :: dt
+        real, intent(in) :: dt, fa
         real :: prod
         prod = dt * 0. ! (get rid of compiler warning)
-        prod = real(sum(real(a*a,8)))
+        prod = fa**2 * real(sum(real(a*a,8)))
     end function
 
-    pure function l1norm_func_1( a, dt ) result(norm)
+    pure function l1norm_func_1( a, dt, fa ) result(norm)
         real, dimension(:), intent(in) :: a
-        real, intent(in) :: dt
+        real, intent(in) :: dt, fa
         real :: norm
-        norm = real(dt*sum(real(abs(a),8)))
+        norm = fa * real(dt*sum(real(abs(a),8)))
     end function
 
-    pure function l2norm_func_1( a, dt ) result(norm)
+    pure function l2norm_func_1( a, dt, fa ) result(norm)
         real, dimension(:), intent(in) :: a
-        real, intent(in) :: dt
+        real, intent(in) :: dt, fa
         real :: norm
-        norm = real(sqrt(dt*sum(real(a,8)**2)))
+        norm = fa * real(sqrt(dt*sum(real(a,8)**2)))
     end function
     
     function probes_norm_timedomain( a, b, normfunction ) result(norm)
 
         interface
-            pure function normfunction( a, b, dt ) result(norm)
+            pure function normfunction( a, b, dt, fa, fb ) result(norm)
                 real, dimension(:), intent(in) :: a,b
-                real, intent(in) :: dt
+                real, intent(in) :: dt, fa, fb
                 real :: norm
             end function
         end interface
@@ -544,13 +569,13 @@ module comparator
         if (plf_defined( a%filter ) .and. plf_defined( b%filter )) then
             call update_array_filtered( a )
             call update_array_filtered( b )
-            norm = normfunction(a%array_filtered(span(1):span(2)), b%array_filtered(span(1):span(2)), a%dt)
+            norm = normfunction(a%array_filtered(span(1):span(2)), b%array_filtered(span(1):span(2)), a%dt, a%factor, b%factor )
         else if (plf_defined( a%taper ) .and. plf_defined( b%taper )) then
             call update_array_tapered( a )
             call update_array_tapered( b )
-            norm = normfunction(a%array_tapered(span(1):span(2)), b%array_tapered(span(1):span(2)), a%dt)
+            norm = normfunction(a%array_tapered(span(1):span(2)), b%array_tapered(span(1):span(2)), a%dt, a%factor, b%factor)
         else
-            norm = normfunction(a%array(span(1):span(2)), b%array(span(1):span(2)), a%dt)
+            norm = normfunction(a%array(span(1):span(2)), b%array(span(1):span(2)), a%dt, a%factor, b%factor)
         end if
 
     end function
@@ -558,9 +583,9 @@ module comparator
     function probe_norm_timedomain( a, normfunction ) result(norm)
 
         interface
-            pure function normfunction( a, dt ) result(norm)
+            pure function normfunction( a, dt, fa ) result(norm)
                 real, dimension(:), intent(in) :: a
-                real, intent(in) :: dt
+                real, intent(in) :: dt, fa
                 real :: norm
             end function
         end interface
@@ -582,12 +607,12 @@ module comparator
 
         if (plf_defined( a%filter )) then
             call update_array_filtered( a )
-            norm = normfunction(a%array_filtered(span(1):span(2)), a%dt)
+            norm = normfunction(a%array_filtered(span(1):span(2)), a%dt, a%factor)
         else if (plf_defined( a%taper )) then
             call update_array_tapered( a )
-            norm = normfunction(a%array_tapered(span(1):span(2)), a%dt)
+            norm = normfunction(a%array_tapered(span(1):span(2)), a%dt, a%factor)
         else
-            norm = normfunction(a%array(span(1):span(2)), a%dt)
+            norm = normfunction(a%array(span(1):span(2)), a%dt, a%factor)
         end if
 
     end function
@@ -595,9 +620,9 @@ module comparator
     function probes_norm_frequencydomain( a, b, normfunction ) result(norm)
 
         interface
-            pure function normfunction( a, b, dt ) result(norm)
+            pure function normfunction( a, b, dt, fa, fb ) result(norm)
                 real, dimension(:), intent(in) :: a,b
-                real, intent(in) :: dt
+                real, intent(in) :: dt, fa, fb
                 real :: norm
             end function
         end interface
@@ -610,11 +635,11 @@ module comparator
         if (plf_defined( a%filter ) .and. plf_defined( b%filter)) then
             call update_spectrum_filtered( a )
             call update_spectrum_filtered( b )
-            norm = normfunction( a%amp_spectrum_filtered, b%amp_spectrum_filtered, a%df)
+            norm = normfunction( a%amp_spectrum_filtered, b%amp_spectrum_filtered, a%df, a%factor, b%factor)
         else
             call update_spectrum( a )
             call update_spectrum( b )
-            norm = normfunction( a%amp_spectrum, b%amp_spectrum, a%df)
+            norm = normfunction( a%amp_spectrum, b%amp_spectrum, a%df, a%factor, b%factor )
         end if
 
     end function
@@ -622,9 +647,9 @@ module comparator
     function probe_norm_frequencydomain( a, normfunction ) result(norm)
 
         interface
-            pure function normfunction( a, dt ) result(norm)
+            pure function normfunction( a, dt, fa ) result(norm)
                 real, dimension(:), intent(in) :: a
-                real, intent(in) :: dt
+                real, intent(in) :: dt, fa
                 real :: norm
             end function
         end interface
@@ -634,10 +659,10 @@ module comparator
 
         if (plf_defined( a%filter )) then
             call update_spectrum_filtered( a )
-            norm = normfunction( a%amp_spectrum_filtered, a%df)
+            norm = normfunction( a%amp_spectrum_filtered, a%df, a%factor)
         else
             call update_spectrum( a )
-            norm = normfunction( a%amp_spectrum, a%df)
+            norm = normfunction( a%amp_spectrum, a%df, a%factor)
         end if
 
     end function

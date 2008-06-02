@@ -26,6 +26,7 @@ module seismogram
     use orthodrome
     use receiver
     use util
+    use comparator
     
     implicit none
     
@@ -34,12 +35,13 @@ module seismogram
     
   contains
   
-    subroutine make_seismogram( source, receiver, greensf, interpolate_ )
+    subroutine make_seismogram( source, receiver, greensf, interpolate_, xundersample_, zundersample_ )
     
         type(t_tdsm),intent(in)                  :: source
         type(t_receiver),intent(inout)           :: receiver
         type(t_gfdb),intent(inout)               :: greensf
         logical, intent(in), optional            :: interpolate_
+        integer, intent(in), optional            :: xundersample_, zundersample_
         
       ! Calculate seismogram 'displacement' at 'receiver' by superposing
       ! greens funtions 'greensf' for 'source'.
@@ -51,7 +53,8 @@ module seismogram
         real :: dnorth, deast
         real, dimension(6) :: m
         real, dimension(5) :: f
-        integer :: icentroid, i, ix,iz
+        integer :: icentroid, i
+        integer, dimension(2) :: ix,iz
         real :: depth, time
         real :: cl, sl
         real :: rshift
@@ -61,6 +64,7 @@ module seismogram
         type(t_strip), dimension(2) :: displacement_ar
         logical :: need_horizontal
         logical :: interpolate
+        integer :: xundersample, zundersample
         real :: dix, diz
         
       ! index of away, right, down, north, east component
@@ -72,6 +76,12 @@ module seismogram
         interpolate = .false.
         if (present(interpolate_)) interpolate = interpolate_
         
+        xundersample = 1
+        if (present(xundersample_)) xundersample = xundersample_
+
+        zundersample = 1
+        if (present(zundersample_)) zundersample = zundersample_
+
       ! get indices of components or zero, if they are not set...
         ja = receiver_component_index( receiver, C_AWAY )
         jr = receiver_component_index( receiver, C_RIGHT )
@@ -137,9 +147,11 @@ module seismogram
             
             
             if (interpolate) then
-                call gfdb_get_indices_bilin( greensf, real(dist), depth, ix,iz, dix, diz )
+                call gfdb_get_indices_bilin( greensf, real(dist), depth, xundersample, zundersample, ix,iz, dix, diz )
             else
-                call gfdb_get_indices( greensf, real(dist), depth, ix,iz )
+                call gfdb_get_indices( greensf, real(dist), depth, ix(1),iz(1) )
+                ix(2) = ix(1)+1
+                iz(2) = iz(1)+1
                 dix = 0.
                 diz = 0.
             end if
@@ -273,6 +285,10 @@ module seismogram
             end do
             deallocate( rshifts )
         end if
+
+        do i=1,receiver%ncomponents
+            call probe_set_array(  receiver%syn_probes(i), receiver%displacement(i) )
+        end do
 
     end subroutine
     

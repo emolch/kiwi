@@ -13,6 +13,9 @@ import matplotlib
 matplotlib.use('PDF')
 import matplotlib.pylab as lab
 import pickle
+import scipy.optimize
+
+pjoin = os.path.join
 
 def invearthquake_aux_dir():
     ieq_home = os.getenv('INVEARTHQUAKE_HOME')
@@ -60,6 +63,7 @@ class Minimizer:
     
     commands = ['set_database',
                 'set_local_interpolation',
+                'set_spacial_undersampling',
                 'set_receivers',
                 'switch_receiver',
                 'set_ref_seismograms',
@@ -73,6 +77,7 @@ class Minimizer:
                 'set_misfit_method',
                 'set_misfit_filter',
                 'set_misfit_taper',
+                'set_synthetics_factor',
                 'minimize_lm',
                 'output_seismograms',
                 'output_seismogram_spectra',
@@ -236,9 +241,11 @@ class Minimizer:
         self.do("output_seismograms", tempfnbase, "mseed", "synthetics", "plain")
         self.do("set_ref_seismograms", tempfnbase, "mseed")
     
-    def get_misfits_for_source( self, source ):
+    def get_misfits_for_source( self, source, source_has_been_set=False ):
         """Calculate misfit for given source"""
-        self.set_source( source )
+        
+        if not source_has_been_set:
+            self.set_source( source )
         values = [ float(x) for x in self.do_get_misfits().split() ]
         misfits_by_r = []
         norms_by_r = []
@@ -253,10 +260,12 @@ class Minimizer:
             norms_by_r.append(norms_by_c)
             
         return source, misfits_by_r, norms_by_r
-    
-    def get_misfits_for_sources( self, sources ):
+        
+    def get_misfits_for_sources( self, sources,  prefunc=None ):
         results = []
         for source in sources:
+            if prefunc is not None: 
+                source = prefunc(self,source)
             results.append( self.get_misfits_for_source( source ) )
             
         return results
@@ -275,7 +284,23 @@ class Minimizer:
                 smisfit += sm / sn
                 
         return math.sqrt(smisfit)
+        
     
+        
+    def get_best_factor_for_source( self, source ):
+        
+        def func(factor):
+            self.do_set_synthetics_factor( factor )
+            misfits_by_r, norms_by_r = self.get_misfits_for_source(source, source_has_been_set=True )[1:]
+            return self.global_misfit(misfits_by_r, norms_by_r)
+        
+        self.set_source(source)
+        result = scipy.optimize.brent(func, brack=(0.,1.), tol=1.0e-4)
+        
+        self.do_set_synthetics_factor(1.)
+        return result
+        
+         
     def get_grid_minimum( self, sm_grid ):
         smg_grid = []
         for (source, misfits, norms) in sm_grid:
@@ -371,6 +396,7 @@ class Minimizer:
                     base_source,
                     param_ranges,
                     source_constraints=None, 
+                    prefunc=None,
                     misfit_method='l2norm', 
                     bootstrap_iterations=1000,
                     histogram_filename='histogram-%s.pdf', 
@@ -391,17 +417,17 @@ class Minimizer:
             plen[param] = int(round((vmax-vmin)/vinc))+1
         
         self.do_set_misfit_method( misfit_method )
-            
+        
+        if prefunc is not None: base_source=prefunc(self,base_source)
         base_misfit = self.global_misfit(
                           *self.get_misfits_for_source(base_source)[1:] )
         
         sources = base_source.make_source_grid( 
             param_ranges,
             source_constraints=source_constraints)
-        results = self.get_misfits_for_sources( sources )
-        
-        
-        
+            
+        results = self.get_misfits_for_sources( sources, prefunc=prefunc )
+       
         opt_source, misfit = self.get_grid_minimum( results )
         worst_source, worst_misfit = self.get_grid_maximum( results )
         
@@ -879,6 +905,16 @@ class Source:
             values.append( self.params[sparam] )
             
         return self.sourcetype + ' ' + ' '.join( [ str(f) for f in values ] )
+
+    def get_params_as_list(self):
+        values = []
+        for sparam in param_names(self.sourcetype):
+            values.append( self.params[sparam] )
+        return values
+        
+    def set_params_from_list(self, values):
+        for sparam, value in zip( param_names(self.sourcetype), values):
+            self.params[sparam] = value
 
     def make_source_grid( self, sourceparams, irecurs=0, paramlist=None, sourceslist=None, source_constraints=None ):
         """create a grid of sources by """

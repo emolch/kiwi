@@ -767,6 +767,10 @@ module source_eikonal
         end do
         write (unit,*) 
         
+        write (unit,"(a)") "area"
+        write (unit,*) polygon_area(rupture_poly)
+        write (unit,*) 
+
         close( unit )
         call release_unit( unit )
     

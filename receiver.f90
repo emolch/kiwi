@@ -78,7 +78,6 @@ module receiver
       
       ! misfit between synthetic and reference for every component
         real, dimension(:), allocatable            :: misfits
-
         real, dimension(:), allocatable            :: misfits_norm_factors
         
       ! cross-correlation between synthetics and reference for every component
@@ -97,6 +96,7 @@ module receiver
     public receiver_set_enabled
     public receiver_set_filter
     public receiver_set_taper
+    public receiver_set_synthetics_factor
     public receiver_output_seismogram
     public receiver_output_seismogram_spectra
     public receiver_set_ref_seismogram
@@ -341,7 +341,23 @@ module receiver
         end do
         
     end subroutine
+
+    subroutine receiver_set_synthetics_factor( self, factor )
     
+        type(t_receiver), intent(inout) :: self
+        real, intent(in) :: factor
+      
+      ! the synthetic seismogram is multiplied by this factor during misfit calculation
+      ! this can be used to quickly check for scalar moment
+       
+        integer :: icomponent
+        
+        do icomponent=1,self%ncomponents
+            call probe_set_factor( self%syn_probes(icomponent), factor )
+        end do
+        
+    end subroutine
+
     subroutine receiver_calculate_misfits( self, misfit_method )
     
         type(t_receiver), intent(inout) :: self
@@ -352,7 +368,6 @@ module receiver
         integer :: icomponent
         
         do icomponent=1,self%ncomponents
-            call probe_set_array( self%syn_probes(icomponent), self%displacement(icomponent) )
         
             if (self%enabled) then
                 self%misfits(icomponent) = probes_norm( self%ref_probes(icomponent), &
@@ -385,7 +400,7 @@ module receiver
         allocate( self%cross_corr(shiftrange(1):shiftrange(2),self%ncomponents) )
 
         do icomponent=1,self%ncomponents
-            call probe_set_array( self%syn_probes(icomponent), self%displacement(icomponent) )
+         !   call probe_set_array( self%syn_probes(icomponent), self%displacement(icomponent) )
             call probes_windowed_cross_corr( self%syn_probes(icomponent), self%ref_probes(icomponent), &
                                              shiftrange, self%cross_corr(:,icomponent) )
         end do
@@ -420,7 +435,7 @@ module receiver
                                       (span(1)-1)*dt, dt, nerr )
             else 
                 if (which_probe == SYNTHETICS) then
-                    call probe_set_array( self%syn_probes(icomponent), self%displacement(icomponent) )
+                !    call probe_set_array( self%syn_probes(icomponent), self%displacement(icomponent) )
                     call probe_get( self%syn_probes(icomponent), strip, which_processing )
                 else 
                     call probe_get( self%ref_probes(icomponent), strip, which_processing )
@@ -462,7 +477,7 @@ module receiver
             outfn = filenamebase // "-" // component_names(self%components(icomponent)) // ".table"
             
             if (which_probe == SYNTHETICS) then
-                call probe_set_array( self%syn_probes(icomponent), self%displacement(icomponent) )
+              !  call probe_set_array( self%syn_probes(icomponent), self%displacement(icomponent) )
                 call probe_get_amp_spectrum( self%syn_probes(icomponent), strip, df, which_processing )
             else
                 call probe_get_amp_spectrum( self%ref_probes(icomponent), strip, df, which_processing )

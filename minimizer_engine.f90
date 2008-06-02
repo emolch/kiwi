@@ -40,6 +40,7 @@ module minimizer_engine
     private
     public set_database
     public set_local_interpolation
+    public set_spacial_undersampling
     public set_ref_seismograms
     public set_source_location
     public set_source_crustal_thickness_limit
@@ -53,6 +54,7 @@ module minimizer_engine
     public set_misfit_method
     public set_misfit_filter
     public set_misfit_taper
+    public set_synthetics_factor
     public minimize_lm
     public output_seismograms
     public output_seismogram_spectra
@@ -76,6 +78,8 @@ module minimizer_engine
     real                                            :: misfit
     type(t_plf),save                                :: filter
     logical                                         :: interpolate = .false.
+    integer                                         :: xundersample = 1
+    integer                                         :: zundersample = 1
     
     logical :: database_inited = .false.
     logical :: probes_inited = .false.
@@ -118,7 +122,22 @@ module minimizer_engine
         interpolate = state
         call dirtyfy_seismograms()
     end subroutine
-    
+
+    subroutine set_spacial_undersampling( xunder, zunder, ok )
+
+        integer, intent(in)  :: xunder, zunder
+        logical, intent(out) :: ok
+
+        ok = .true.
+        if (xunder < 1 .or. zunder < 1) then
+            call error( 'invalid undersampling value' )
+            ok = .false.
+        end if
+
+        xundersample = xunder
+        zundersample = zunder
+
+    end subroutine
     
     subroutine set_receivers( receiversfn, answer, ok )
     
@@ -501,6 +520,19 @@ module minimizer_engine
         call dirtyfy_misfits()
         
     end subroutine
+
+    subroutine set_synthetics_factor( factor )
+
+        real, intent(in) :: factor
+        integer :: i
+
+        do i=1,size(receivers)
+            call receiver_set_synthetics_factor( receivers(i), factor )
+        end do
+
+        call dirtyfy_misfits()
+    
+    end subroutine
     
     pure function get_nmisfits(receivers)
     
@@ -655,7 +687,7 @@ module minimizer_engine
         
         do ireceiver=1,nreceivers
             if (receivers(ireceiver)%enabled) then
-                call make_seismogram( tdsm, receivers(ireceiver), db, interpolate )
+                call make_seismogram( tdsm, receivers(ireceiver), db, interpolate, xundersample, zundersample )
             end if
         end do
         

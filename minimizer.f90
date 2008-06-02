@@ -50,6 +50,7 @@ module minimizer_wrappers
   ! wrappers doing command line processing
     public do_set_database
     public do_set_local_interpolation
+    public do_set_spacial_undersampling
     public do_set_receivers
     public do_set_ref_seismograms
     public do_set_source_location
@@ -62,6 +63,7 @@ module minimizer_wrappers
     public do_set_misfit_method
     public do_set_misfit_filter
     public do_set_misfit_taper
+    public do_set_synthetics_factor
     public do_minimize_lm
     public do_output_seismograms
     public do_output_seismogram_spectra
@@ -169,6 +171,34 @@ module minimizer_wrappers
         end if
         ok = .true.
             
+    end subroutine
+
+    subroutine do_set_spacial_undersampling( line, answer, ok )
+
+      !! === {{{set_spacial_undersampling nxunder nzunder }}} ===
+       ! 
+       ! Tell minimizer to use only a subset of the databases Green's functions.
+       !
+       !   nxunder: use every nxunder'th horizontal Green's function distance.
+       !   nzunder: use every nzunder'th vertical Green's function depth. 
+
+        type(varying_string), intent(in)  :: line
+        type(varying_string), intent(out) :: answer
+        logical, intent(out)              :: ok
+
+        character(len=len(line)) :: buffer
+        integer :: iostat, xunder, zunder
+        
+        answer = ''
+        ok = .false.
+        buffer = char(line)
+        read (unit=buffer,fmt=*,iostat=iostat) xunder, zunder
+        if (iostat /= 0) then
+            call error( "set_spacial_undersampling: failed to parse arguments" )
+            return
+        end if
+        call set_spacial_undersampling( xunder, zunder, ok )
+
     end subroutine
         
     subroutine do_set_receivers( receiversfn, answer, ok )
@@ -748,7 +778,37 @@ module minimizer_wrappers
         deallocate(x,y)
                 
     end subroutine
-    
+
+    subroutine do_set_synthetics_factor( line, answer, ok )
+      
+     !! === {{{set_synthecics_factor factor}}} ===
+      !
+      ! Scale amplitude of synthecic seismograms by this factor during 
+      ! misfit calculation.       
+          
+        type(varying_string), intent(in)  :: line
+        type(varying_string), intent(out) :: answer
+        logical, intent(out)              :: ok
+        
+        real :: factor
+        integer :: iostat
+        character(len=len(line)) :: buffer
+        
+        answer = ''
+        ok = .true.
+       
+        buffer = char(line)
+        read (unit=buffer,fmt=*,iostat=iostat) factor
+        if (iostat > 0) then
+            ok = .false.
+            call error( "failed to parse synthetics factor" )
+            return
+        end if
+        
+        call set_synthetics_factor( factor )
+  
+    end subroutine
+
     subroutine do_minimize_lm( line, answer, ok )
       
      !! === {{{minimize_lm}}} ===
@@ -1259,6 +1319,8 @@ program minimizer
             call do_set_database( arguments, answer, ok )
         else if (command == 'set_local_interpolation') then
             call do_set_local_interpolation( arguments, answer, ok )
+        else if (command == 'set_spacial_undersampling') then
+            call do_set_spacial_undersampling( arguments, answer, ok )
         else if (command == 'set_receivers') then
             call do_set_receivers( arguments, answer, ok )
         else if (command == 'switch_receiver') then
@@ -1305,6 +1367,8 @@ program minimizer
             call do_set_misfit_filter( arguments, answer, ok )
         else if (command == 'set_misfit_taper') then
             call do_set_misfit_taper( arguments, answer, ok )
+        else if (command == 'set_synthetics_factor') then
+            call do_set_synthetics_factor( arguments, answer, ok )
         else if (command == 'set_misfit_method') then
             call do_set_misfit_method( arguments, answer, ok )
         else if (command == 'output_cross_correlations') then

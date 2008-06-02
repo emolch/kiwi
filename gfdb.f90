@@ -833,22 +833,26 @@ module gfdb
         
     end subroutine
     
-    subroutine gfdb_get_indices_bilin( c, x, z, ix, iz, dix, diz )
+    subroutine gfdb_get_indices_bilin( c, x, z, nxundersample, nzundersample, ix, iz, dix, diz )
     
-      ! make indices suitable for get_trace, based on spacing of gf's
-      ! additionally return fractional indices for use with bilinear interpolation
-      ! these are in the range of [-0.5,0.5]
+      ! make upper and lower indices suitable for get_trace, based on spacing of gf's
+      ! additionally return fractional fading factor.
+      ! if nxundersample or nzundersample are not 1, get indices into downsampled grid.
       
         type(t_gfdb), intent(in) :: c
         real, intent(in) :: x, z
-        integer, intent(out) :: ix, iz
+        integer, intent(in) :: nxundersample, nzundersample
+        integer, dimension(2), intent(out) :: ix, iz
         real, intent(out) :: dix, diz
         
-        ix = nint((x-c%firstx)/c%dx)+1
-        iz = nint((z-c%firstz)/c%dz)+1
+        
+        ix(1) = int(floor((x-c%firstx)/(c%dx*nxundersample)))*nxundersample+1
+        iz(1) = int(floor((z-c%firstz)/(c%dz*nzundersample)))*nzundersample+1
+        ix(2) = ix(1)+nxundersample
+        iz(2) = iz(1)+nzundersample
     
-        dix = (x-c%firstx)/c%dx - (ix-1)
-        diz = (z-c%firstz)/c%dz - (iz-1)
+        dix = (x-c%firstx-(ix(1)-1)*c%dx)/(c%dx*nxundersample)
+        diz = (z-c%firstz-(iz(1)-1)*c%dz)/(c%dz*nzundersample)
         
     end subroutine
     
@@ -900,9 +904,10 @@ module gfdb
     subroutine gfdb_get_trace_bilin( db, ix, iz, ig, dix, diz, tracep )
     
         type(t_gfdb), intent(inout)           :: db
-        integer, intent(in)                   :: ix, iz, ig
+        integer, dimension(2), intent(in)     :: ix, iz
+        integer, intent(in)                   :: ig
         real, intent(in)                      :: dix, diz
-        type(t_trace), pointer   :: tracep
+        type(t_trace), pointer                :: tracep
     
       ! use bilinear interpolation to get a trace between gfdb grid nodes.
       ! ix, iz, dix and diz are indices and offsets as produced by gfdb_get_indices_bilin()
@@ -911,40 +916,25 @@ module gfdb
       
         
         type(t_trace), pointer  :: t00, t01, t10, t11
-        integer                 :: ixl, izl
-        real                    :: dixl, dizl
         integer, dimension(2)   :: span
+
         tracep => null()
         t00 => null()
         t01 => null()
         t10 => null()
         t11 => null()
-        
+
       ! if we are exactly at a grid node, no interpolation is needed...
         if (dix .eq. 0. .and. diz .eq. 0.) then
-            call gfdb_get_trace( db, ix, iz, ig, tracep )
-        end if
-        
-      ! select appropriate grid square
-        ixl = ix
-        dixl = dix
-        if (dixl < 0) then
-            ixl = ixl - 1
-            dixl = 1 + dixl
-        end if
-        
-        izl = iz
-        dizl = diz
-        if (dizl < 0) then
-            izl = izl - 1
-            dizl = 1 + dizl
+            call gfdb_get_trace( db, ix(1), iz(1), ig, tracep )
+            return
         end if
         
       ! get the traces
-        call gfdb_get_trace( db, ixl,   izl,   ig, t00 )
-        call gfdb_get_trace( db, ixl,   izl+1, ig, t01 )
-        call gfdb_get_trace( db, ixl+1, izl,   ig, t10 )
-        call gfdb_get_trace( db, ixl+1, izl+1, ig, t11 )
+        call gfdb_get_trace( db, ix(1), iz(1), ig, t00 )
+        call gfdb_get_trace( db, ix(1), iz(2), ig, t01 )
+        call gfdb_get_trace( db, ix(2), iz(1), ig, t10 )
+        call gfdb_get_trace( db, ix(2), iz(2), ig, t11 )
         
         if (.not. (associated(t00) .and. associated(t01) .and. &
                    associated(t10) .and. associated(t11))) then
@@ -971,12 +961,12 @@ module gfdb
         end if
         
       ! summation
-        db%interpolated_trace%strips(1)%data(:) = 0
+        db%interpolated_trace%strips(1)%data(:) = 0.
         
-        call trace_multiply_add_nogrow( t00, db%interpolated_trace%strips(1)%data, span, (1-dixl)*(1-dizl) )
-        call trace_multiply_add_nogrow( t01, db%interpolated_trace%strips(1)%data, span, (1-dixl)*dizl )
-        call trace_multiply_add_nogrow( t10, db%interpolated_trace%strips(1)%data, span, dixl*(1-dizl) )
-        call trace_multiply_add_nogrow( t11, db%interpolated_trace%strips(1)%data, span, dixl*dizl )
+        call trace_multiply_add_nogrow( t00, db%interpolated_trace%strips(1)%data, span, (1.-dix)*(1.-diz) )
+        call trace_multiply_add_nogrow( t01, db%interpolated_trace%strips(1)%data, span, (1.-dix)*diz )
+        call trace_multiply_add_nogrow( t10, db%interpolated_trace%strips(1)%data, span, dix*(1.-diz) )
+        call trace_multiply_add_nogrow( t11, db%interpolated_trace%strips(1)%data, span, dix*diz )
         
         tracep => db%interpolated_trace
         
