@@ -1,8 +1,9 @@
 
-
+verbose = 3
 source_info_prog = 'source_info'
 gfdb_info_prog = 'gfdb_info'
 gfdb_extract_prog = 'gfdb_extract'
+seismosizer_prog = 'minimizer'
 
 tango_colors = {
 'butter1': (252, 233,  79),

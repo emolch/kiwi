@@ -9,9 +9,9 @@ import math
 import random
 from subprocess import Popen, PIPE, call
 import numpy as num
-import matplotlib
-matplotlib.use('PDF')
-import matplotlib.pylab as lab
+#import matplotlib
+#matplotlib.use('PDF')
+#import matplotlib.pylab as lab
 import pickle
 import scipy.optimize
 
@@ -1033,8 +1033,9 @@ def get_source_infos():
         cmd = [ Config.source_info_prog ]
         
         source_info = os.popen( ' '.join(cmd), 'r' )
-           
+        
         for line in source_info:
+            print line
             if re.match(r'\s*source types: ', line):
                 sourcetypes = re.sub(r'\s*source types: ','',line).split()
         
@@ -1053,28 +1054,35 @@ def get_source_infos():
                               'parameter soft max: ': 'soft_max',
                               'parameter defaults: ': 'default' }
                               
-            params_flat = {} 
-            for line in source_info:
-                # string fields
-                for key in ['parameter names: ',
-                            'parameter units: ']:
-                            
-                    if re.match(r'\s*'+key, line):
-                        pars = re.sub(r'\s*'+key, '', line).split()
-                        pkey = key_translate[key]
-                        params_flat[pkey] = pars
-                        
-                for key in ['parameter hard min: ',
-                            'parameter hard max: ',
-                            'parameter soft min: ',
-                            'parameter soft max: ',
-                            'parameter defaults: ' ]:
-                            
-                    if re.match(r'\s*'+key, line):
-                        pars = [ float(s) for s in re.sub(r'\s*'+key, '', line).split() ]
-                        pkey = key_translate[key]
-                        params_flat[pkey] = pars
-                        
+            params_flat = {}
+            print cmd 
+            try:
+              for line in source_info:
+                  print line
+                  # string fields
+                  for key in ['parameter names: ',
+                              'parameter units: ']:
+                              
+                      if re.match(r'\s*'+key, line):
+                          pars = re.sub(r'\s*'+key, '', line).split()
+                          pkey = key_translate[key]
+                          params_flat[pkey] = pars
+                          
+                  for key in ['parameter hard min: ',
+                              'parameter hard max: ',
+                              'parameter soft min: ',
+                              'parameter soft max: ',
+                              'parameter defaults: ' ]:
+                              
+                      if re.match(r'\s*'+key, line):
+                          pars = [ float(s) for s in re.sub(r'\s*'+key, '', line).split() ]
+                          pkey = key_translate[key]
+                          params_flat[pkey] = pars
+                  print 'xxx'
+            except:
+                print 'uuuups'
+            
+            source_info.close()
             info_flat[sourcetype] = params_flat
             
             params = {}

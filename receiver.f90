@@ -400,7 +400,6 @@ module receiver
         allocate( self%cross_corr(shiftrange(1):shiftrange(2),self%ncomponents) )
 
         do icomponent=1,self%ncomponents
-         !   call probe_set_array( self%syn_probes(icomponent), self%displacement(icomponent) )
             call probes_windowed_cross_corr( self%syn_probes(icomponent), self%ref_probes(icomponent), &
                                              shiftrange, self%cross_corr(:,icomponent) )
         end do
@@ -425,6 +424,7 @@ module receiver
         dt = self%dt
         
         ok = .true.
+        if (.not. self%enabled) return
         do icomponent=1, self%ncomponents
             outfn = filenamebase // "-" // component_names(self%components(icomponent)) // "." // fileformat
             
@@ -472,6 +472,7 @@ module receiver
         real :: df
         
         ok = .true.
+        if (.not. self%enabled) return
         
         do icomponent=1, self%ncomponents
             outfn = filenamebase // "-" // component_names(self%components(icomponent)) // ".table"
@@ -509,7 +510,7 @@ module receiver
         integer                     :: nerr
 
         ok = .true.
-
+        if (.not. self%enabled) return
         if (.not. allocated(self%cross_corr)) then
             ok = .false.
             call error( "no cross-correlations have been calculated yet" )
@@ -591,13 +592,15 @@ module receiver
         integer, intent(out) :: ishift
 
         integer :: imax
+        ishift = 0
+        if (self%enabled) then
+            call receiver_calculate_cross_correlations( self, ishiftrange )
+
+            imax = maxloc( sum(max(self%cross_corr/max(1.,maxval(self%cross_corr)),0.)**2,2),1 )
+            ishift = imax+ishiftrange(1)-1
+            call receiver_shift_ref_seismogram( self, ishift )
+        end if
         
-        call receiver_calculate_cross_correlations( self, ishiftrange )
-
-        imax = maxloc( sum(max(self%cross_corr/max(1.,maxval(self%cross_corr)),0.)**2,2),1 )
-        ishift = imax+ishiftrange(1)-1
-        call receiver_shift_ref_seismogram( self, ishift )
-
     end subroutine
 
     subroutine seismogram_to_strip( seismogram, tbegin, deltat, strip )
