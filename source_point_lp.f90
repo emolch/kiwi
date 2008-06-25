@@ -229,7 +229,7 @@ module source_point_lp
     !---------------------------------------
     
       
-    subroutine psm_to_tdsm_point_lp( psm, tdsm, shortest_doi )
+    subroutine psm_to_tdsm_point_lp( psm, tdsm, shortest_doi, ok )
   
   
       ! translate a specific psm to tdsm
@@ -239,11 +239,13 @@ module source_point_lp
       type(t_psm), intent(inout) :: psm
       type(t_tdsm), intent(out) :: tdsm
       real, intent(in) :: shortest_doi
+      logical, intent(out) :: ok
       
       real :: maxdt
       integer :: nx, ny, nt
       real :: dur_exc
       
+      ok = .true.
       maxdt = shortest_doi
 
       dur_exc = psm%params(12)

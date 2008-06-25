@@ -1,5 +1,12 @@
 
 import os
+import subprocess
+import numpy as num
+import tempfile
+import scipy
+import scipy.io
+import pickle
+
 pjoin = os.path.join
 
 def invearthquake_aux_dir():
@@ -38,6 +45,101 @@ Align floating point numbers at the decimal dot.
         s = '%.*E' % (significant_digits-1, number)
     s = (' '*(-s.find('.')+(significant_digits+1))+s).ljust(width)
     return s
+    
+    
+def gmt_color( rgb ):
+    return '%i/%i/%i' % rgb
+
+def autoplot( *args, **kwargs ):
+    
+    outfile = args[-1]
+    things = args[:-1]
+    infiles = []
+    
+    if 'O' in kwargs:
+        mode = 'a'
+    else:
+        mode = 'w'
+        
+    f = open('%s.autoplot' % outfile, mode)
+    pickle.dump((args,kwargs), f)
+    f.close()
+    
+    argopts = None
+    if 'argopts' in kwargs:
+        argopts = kwargs.pop('argopts')
+        assert(len(argopts) == len(things)) 
+    
+    tempdir = tempfile.mkdtemp("","autplot-")
+    
+    for ithing, thing in enumerate(things):
+                
+        if type(thing) is str:
+            infiles.append(str)
+            
+        elif isinstance(thing, num.ndarray):
+            tfn = pjoin(tempdir, 'plotdata-%i.table' % ithing)
+            f = open(tfn, 'w')
+            scipy.io.write_array(f,thing)
+            f.close()
+            infiles.append(tfn)
+        
+        elif type(thing) is tuple or type(thing) is list:
+            
+            tfn = pjoin(tempdir, 'plotdata-%i.table' % ithing)
+            f = open(tfn, 'w')
+            
+            if thing[-1].ndim == 2 and len(thing) == 3:     # (x[:],y[:],z[:,:])
+                x,y,z = thing
+                nx = x.size
+                ny = y.size
+                assert( ny == z.shape[0] and nx == z.shape[1] )
+                nz = nx*ny
+                tab = num.zeros((nx*ny,3),dtype=num.float)
+                tab[:,2] = z.reshape((nz,))
+                tab[:,1] = y.repeat(nx)
+                for i in range(ny): tab[i*nx:i*nx+nx,0] = x
+                scipy.io.write_array(f,tab)
+            else:
+                nrows = thing[0].size
+                ncols = len(thing)
+                tab = num.zeros((nrows,ncols), dtype=num.float)
+                for icol,col in enumerate(thing):
+                    assert(col.size == nrows)
+                    tab[:,icol] = col
+                scipy.io.write_array(f,tab)
+            
+            f.close()
+            infiles.append(tfn)
+            
+        
+
+    options = []
+    for k,v in kwargs.items():
+        if type(v) is bool:
+            if v:
+                options.append( '--%s' % k )
+        elif type(v) is tuple or type(v) is list:
+            options.append( '--%s=' % k + '/'.join([ str(x) for x in v]) )
+        else:
+            options.append( '--%s=%s' % (k,str(v)) )
+    
+    args = [ 'autoplot' ]
+    
+    infiles_with_argopts = []
+    if argopts:
+        for infile, argopt in zip(infiles, argopts):
+            if argopt:
+                infiles_with_argopts.append( infile+'['+argopt+']' )
+            else:
+                infiles_with_argopts.append( infile )
+    else:
+        infiles_with_argopts.extend(infiles)
+    
+    args.extend( infiles_with_argopts )
+    args.append( outfile )
+    args.extend( options )
+    subprocess.call( args )
     
 if __name__ == '__main__':
     import random

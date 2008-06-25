@@ -247,7 +247,7 @@ module source_eikonal
 
     end subroutine
     
-    subroutine psm_to_tdsm_eikonal( psm, tdsm, shortest_doi )
+    subroutine psm_to_tdsm_eikonal( psm, tdsm, shortest_doi, ok )
     
       ! translate a specific psm to tdsm
       ! shortest_duration is the shortest duration of interest
@@ -256,6 +256,7 @@ module source_eikonal
         type(t_psm), intent(inout) :: psm
         type(t_tdsm), intent(out) :: tdsm
         real, intent(in) :: shortest_doi
+        logical, intent(out) :: ok
         
         real :: maxdx, maxdy, maxdt, bord_shift_x, bord_shift_y, bord_radius
         integer :: nx, ny
@@ -266,12 +267,21 @@ module source_eikonal
         bord_shift_y = psm%params(10)
         bord_radius = psm%params(11)
       
+        ok = .true.
       ! determine region of interest
         call psm_borderline_eikonal( psm, bord_shift_x, bord_shift_y, bord_radius, rupture_poly, rupture_poly_rc )
-        call polygon_box( rupture_poly_rc, min_rc, max_rc )
+        
+      ! fail if rupture area is completely eaten up by constraints
+        if (size(rupture_poly%points,2) == 0) then
+            call error("Empty rupture area")
+            ok = .false.
+            return
+        end if
 
-      ! solve eikonal equation on a fine grid
-        call psm_make_eikonal_grid( psm, min_rc, max_rc, 100., rupture_poly, psm%egrid )
+      ! solve eikonal equation on a fine and rectangular grid
+        call polygon_box( rupture_poly_rc, min_rc, max_rc )  
+        call psm_make_eikonal_grid( psm, min_rc, max_rc, 100., rupture_poly, psm%egrid, ok )
+        if (.not. ok) return
         
       ! determine optimal grid size  
         maxdt = shortest_doi
@@ -297,6 +307,8 @@ module source_eikonal
     subroutine psm_borderline_eikonal( psm, bord_shift_x, bord_shift_y, bord_radius, &
                                        rupture_poly, rupture_poly_rc )
     
+      ! determine polygon which borders the source area
+
         type(t_psm), intent(in) :: psm
         real, intent(in) :: bord_radius, bord_shift_x, bord_shift_y
         
@@ -326,6 +338,8 @@ module source_eikonal
     
     function psm_circle_center( psm, bord_shift_x, bord_shift_y )
     
+      ! get center of bounding circle in ned coordinates
+
         type(t_psm), intent(in) :: psm
         real, intent(in) :: bord_shift_x, bord_shift_y
         real, dimension(3) :: psm_circle_center
@@ -335,6 +349,13 @@ module source_eikonal
     end function
     
     function psm_initial_point_rc( psm, borderline )
+
+      ! Get a possible nucleation point which lies inside ruputure area.
+      ! Coordinates returned are in rupture coordinates.
+
+      ! The nucleation point which is set via psm%params is first projected
+      ! to the surrounding circle, and then from there to the closest point on
+      ! the polygon.
     
         type(t_psm), intent(in)     :: psm
         type(t_polygon), intent(in) :: borderline
@@ -366,15 +387,47 @@ module source_eikonal
         end if
         
     end function
+
+    function psm_initial_point_intolerant_rc( psm, borderline, ok )
+
+      ! Get nucleation point.
+      ! Indicates point outside of rupture area with ok=false.
+      ! Coordinates returned are in rupture coordinates.
+    
+        type(t_psm), intent(in)     :: psm
+        type(t_polygon), intent(in) :: borderline
+        logical, intent(out)        :: ok
+        real, dimension(3)          :: psm_initial_point_intolerant_rc
+        
+        real, dimension(3)          :: initial_point_ned
+        real                        :: bord_radius
+        real                        :: nukl_shift_x, nukl_shift_y
+        real                        :: nukl_shift
+        
+      
+        bord_radius = psm%params(11)
+        nukl_shift_x = psm%params(12)
+        nukl_shift_y = psm%params(13)
+              
+        ok = .true.
+        psm_initial_point_intolerant_rc = (/nukl_shift_x, nukl_shift_y, 0./)
+        initial_point_ned = psm_rc_to_ned( psm, psm_initial_point_intolerant_rc )
+        if (.not. psm_point_in_constraints(psm, initial_point_ned)) then
+            call error("position of nucleation point is outside of rupture region")
+            ok = .false.
+        end if
+
+    end function
     
     
-    subroutine psm_make_eikonal_grid( psm, min_rc, max_rc, approx_delta, borderline, grid )
+    subroutine psm_make_eikonal_grid( psm, min_rc, max_rc, approx_delta, borderline, grid, ok )
     
         type(t_psm), intent(in) :: psm
         real, dimension(3), intent(in) :: min_rc, max_rc
         real, intent(in) :: approx_delta
         type(t_polygon), intent(in) :: borderline
         type(t_eikonal_grid), intent(inout) :: grid
+        logical, intent(out) :: ok
 
         integer :: iy,ix
         real :: rel_rupture_velocity, bord_radius, vp, vs, rho, minspeed, invalid_speed
@@ -382,6 +435,8 @@ module source_eikonal
         real, dimension(2) ::  dims
         type(t_crust2x2_1d_profile) :: profile
         real :: bord_shift_x, bord_shift_y
+
+        ok = .true.
         
         call eikonal_grid_destroy( grid )
         
@@ -407,6 +462,11 @@ module source_eikonal
         circle_center = psm_circle_center( psm, bord_shift_x, bord_shift_y )
         
         initial_point_rc = psm_initial_point_rc( psm, borderline )
+        ! XXX
+        !initial_point_rc = psm_initial_point_intolerant_rc( psm, borderline, ok )
+        !if (.not. ok) return
+        ! XXX
+
         grid%initialpoint = initial_point_rc(1:2)
       
       ! setup speeds
@@ -706,6 +766,8 @@ module source_eikonal
         integer :: unit, i, ix, iy
         real    :: north, east, depth, bord_shift_x, bord_shift_y, bord_radius
         type(t_polygon) :: rupture_poly, rupture_poly_rc
+        type(t_crust2x2_1d_profile) :: profile
+        real    :: vp, vs, rho
         
         north = psm%params(2)
         east = psm%params(3)
@@ -757,12 +819,15 @@ module source_eikonal
         write (unit,"(a)") "t-axis"
         write (unit,*) psm%tax(:)
         write (unit,*)
-        
+
+        call crust2x2_get_profile(psm%origin, profile)
+
         write (unit,"(a)") "eikonal-grid"
         write (unit,*) psm%cgrid%ndims(:)
         do iy=1,size(psm%cgrid%times,2)
             do ix=1,size(psm%cgrid%times,1)
-                write (unit,*) psm%cgrid%points(:,ix,iy), psm%cgrid%times(ix,iy)
+                call crust2x2_get_at_depth( profile, psm%cgrid%points(3,ix,iy), vp, vs, rho )
+                write (unit,*) psm%cgrid%points(:,ix,iy), psm%cgrid%times(ix,iy), vp, vs, rho
             end do
         end do
         write (unit,*) 

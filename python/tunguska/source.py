@@ -33,7 +33,16 @@ class Source:
             self._params[sparam] = source_infos(self._sourcetype)[sparam].default
         
         self.update( sourceparams )
-        
+    
+    def sourcetype(self):
+        return self._sourcetype
+    
+    def sourceinfo(self,param=None):
+        if param is None:
+            return source_infos(self._sourcetype)
+        else:
+            return source_infos(self._sourcetype)[param]
+    
     def __getitem__(self, param):
         return self._params[param]
     

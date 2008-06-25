@@ -5,6 +5,7 @@ from util import gform
 import os
 import shutil
 import numpy as num
+import scipy
 from scipy.io import read_array
 import tempfile
 
@@ -14,6 +15,10 @@ class Gfdb:
     def __init__(self, gfdbpath):
    
         self.path = gfdbpath
+        self.extractor = None
+        self.tempdir = None
+        self.tempfilebase = None
+        
         gfdb_infos_str = {}
         cmd = [ config.gfdb_info_prog, gfdbpath ]
         
@@ -29,9 +34,7 @@ class Gfdb:
         for k in [ 'nchunks', 'nx', 'nz', 'ng' ]:
             setattr(self, k, int( gfdb_infos_str[k] ))
             
-        self.extractor = None
-        self.tempdir = None
-        self.tempfilebase = None
+        
     
     
     def get_traces_slow( self, x, z ):

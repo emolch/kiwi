@@ -386,7 +386,7 @@ module source_all
         
     end subroutine
     
-    subroutine psm_to_tdsm( psm, tdsm, shortest_doi )
+    subroutine psm_to_tdsm( psm, tdsm, shortest_doi, ok )
     
       ! translate a specific psm to tdsm
       ! shortest_duration is the shortest duration of interest
@@ -394,7 +394,8 @@ module source_all
       
         type(t_psm), intent(inout)    :: psm
         type(t_tdsm), intent(out)     :: tdsm
-        real, intent(in)              :: shortest_doi        
+        real, intent(in)              :: shortest_doi
+        logical, intent(out)          :: ok  
         
         call tdsm_destroy( tdsm )
 
@@ -403,15 +404,15 @@ module source_all
         select case(psm%sourcetype)
             
             case (psm_bilat)
-                call psm_to_tdsm_bilat( psm, tdsm, shortest_doi )
+                call psm_to_tdsm_bilat( psm, tdsm, shortest_doi, ok )
             case (psm_circular)
-                call psm_to_tdsm_circular( psm, tdsm, shortest_doi )
+                call psm_to_tdsm_circular( psm, tdsm, shortest_doi, ok )
             case (psm_point_lp)
-                call psm_to_tdsm_point_lp( psm, tdsm, shortest_doi )
+                call psm_to_tdsm_point_lp( psm, tdsm, shortest_doi, ok )
             case (psm_eikonal)
-                call psm_to_tdsm_eikonal( psm, tdsm, shortest_doi )
+                call psm_to_tdsm_eikonal( psm, tdsm, shortest_doi, ok )
             case (psm_moment_tensor)
-                call psm_to_tdsm_moment_tensor( psm, tdsm, shortest_doi )
+                call psm_to_tdsm_moment_tensor( psm, tdsm, shortest_doi, ok )
                 
         end select
         

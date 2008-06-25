@@ -246,7 +246,7 @@ module minimizer_engine
 
         integer :: nreceivers
 
-        call update_probes( ok )
+        call update_receivers( ok )
         if (.not. ok) return
         
         nreceivers = size(receivers)
@@ -401,6 +401,9 @@ module minimizer_engine
         call update_source_location( ok )
         if (.not. ok) return
         
+        if (source_inited .and. sourcetype == psm%sourcetype) then
+            if (all(psm%params == sourceparams)) return ! this source has already been set
+        end if
         call psm_set(psm, sourcetype, sourceparams )
         
         source_inited = .true.
@@ -454,9 +457,7 @@ module minimizer_engine
         real, intent(in) :: effective_dt_
         
         effective_dt = effective_dt_
-        
-        if (source_inited) call discretize_source()
-    
+            
         call dirtyfy_source()
         
     end subroutine
@@ -668,11 +669,12 @@ module minimizer_engine
         
     end subroutine
     
-    subroutine discretize_source()
+    subroutine discretize_source( ok )
+        logical, intent(out) :: ok
         
         call inform("discretizing source")
       ! convert to discrete source
-        call psm_to_tdsm( psm, tdsm, effective_dt )
+        call psm_to_tdsm( psm, tdsm, effective_dt, ok )
     
     end subroutine
     
@@ -1023,7 +1025,8 @@ module minimizer_engine
         end if
         
         if (source_dirty) then
-            call discretize_source()
+            call discretize_source( ok )
+            if (.not. ok) return
         end if
         source_dirty = .false.
         

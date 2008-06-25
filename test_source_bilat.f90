@@ -37,7 +37,7 @@ program test_source_bilat
     type(t_psm)        :: psm
     type(t_tdsm)       :: tdsm
     real :: mxx,myy,mzz,mxy,mxz,myz, epsm, msum
-    logical :: thrusttestfail
+    logical :: thrusttestfail, ok
     double precision :: ref_time
     
     
@@ -63,7 +63,7 @@ program test_source_bilat
                                     2000., & ! rupvel
                                     1. /) )   ! risetime
     
-    call psm_to_tdsm( psm, tdsm, 0.5 )
+    call psm_to_tdsm( psm, tdsm, 0.5, ok )
     
     epsm = 1./ size(tdsm%centroids) / 100
     msum = 0.
@@ -113,7 +113,7 @@ program test_source_bilat
                                     2000., & ! rupvel
                                     1. /) )   ! risetime
     
-    call psm_to_tdsm( psm, tdsm, 0.5 )
+    call psm_to_tdsm( psm, tdsm, 0.5, ok )
     
     
     

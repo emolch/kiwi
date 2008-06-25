@@ -17,13 +17,68 @@ class Phase:
         f.close()
         
     def __call__(self, distance):
+        distance = float(distance)
         for (low,high) in zip( self.ref_points[0:-1],self.ref_points[1:len(self.ref_points)]):
             if low[0] <= distance <= high[0]:
                 return low[1] + (distance-low[0])/(high[0]-low[0])*(high[1]-low[1])
         return None
+
+class Timing:
+    '''"Intelligent" Phase, e.g. "S or Sn, whatever is available minus 10 s".'''
+    
+    def __init__(self, phases, offset=0.):
+        '''usage:
+           Timing('S')
+           Timing(('S','Sn'),+5)
+           Timing(Phase('R'),-10)'''
+        
+        if isinstance(phases, str):
+            phases = [ phases ]
+        self.phases = []
+        for p in phases:
+            if isinstance(p, str):
+                self.phases.append( Phase(p) )
+            else:
+                self.phases.append( p )
+                
+        self.offset = float(offset)
+        
+    def __call__(self, distance):
+        '''Returns timing at given distance.'''
+        for phase in self.phases:
+            t = phase(distance)
+            if not t is None:
+                return t+self.offset
+
+class Taper:
+    def __init__(self, timings=None,
+                       phases=None, offsets=None):
+        '''usage:
+           t = Taper( timings=(Timing('P',-10),Timing('P', 0), ...)
+           t = Taper( phases=('S','Sn'), offsets=(-10,0,40,50) )'''
+        
+        if phases and offsets:
+            timings = [ Timing(phases,offset) for offset in offsets ]
+            
+        assert(len(timings) == 4)
+        self.timings = timings
+        
+    def __call__(self, distance):
+        '''Returns representation which can be used for Seismosizer.do_set_misfit_taper().'''
+        return ( self.timings[0](distance), 0.,
+                 self.timings[1](distance), 1.,
+                 self.timings[2](distance), 1.,
+                 self.timings[3](distance), 0. )
 
 if __name__ == '__main__':
     p = Phase('P')
     pn = Phase('Pn')
     for i in range(15):
         print p(i*1000000.), pn(i*1000000.)
+
+    sany = ('S','Sn')
+    timings = [ Timing(sany,offset) for offset in [-10., 0., 40., 50. ] ] 
+    print Taper(timings)(1000000.)
+    print Taper(phases='Sn', offsets=(-10,0, 40,50))(1000000.)
+    
+    

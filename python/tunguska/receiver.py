@@ -2,15 +2,16 @@
 
 class Receiver:
     
-    def __init__( lat=0.0, lon=0.0, components='ned', name=None, from_string=None ):
+    def __init__(self, lat=0.0, lon=0.0, components='ned', name=None, from_string=None ):
         
+        # treat as immutable, although it would be possible to change the attributes
         
         if not from_string:
             self.lat = lat
             self.lon = lon
             self.components = components
             self.name = name
-        else
+        else:
             toks = from_string.split()
             if len(toks) >= 3:
                 self.lat = float(toks[0])
@@ -19,14 +20,21 @@ class Receiver:
             if len(toks) == 4:
                 self.name = toks[3]
         
-        # optional attributes
+        # used and set by Seismosizer, when attached to it
+        # treat as read-only
         self.distance_m = None
         self.distance_deg = None
         self.azimuth = None
-        
-        # used by Seismosizer, when attached to any
         self.proc_id = None
-        
+        self.misfits = [0.]*len(self.components)
+        self.misfit_norm_factors = [0.]*len(self.components)
+       
+    def set_distazi(self, distance_deg, distance_m, azimuth):
+        # should only be called by Seismosizer
+        self.distance_deg = distance_deg
+        self.distance_m   = distance_m
+        self.azimuth      = azimuth
+    
     def __str__(self):
         return ' '.join( (str(self.lat), str(self.lon), self.components) )
     

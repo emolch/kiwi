@@ -200,7 +200,7 @@ module source_moment_tensor
         
     end subroutine
 
-    subroutine psm_to_tdsm_moment_tensor( psm, tdsm, shortest_doi )
+    subroutine psm_to_tdsm_moment_tensor( psm, tdsm, shortest_doi, ok )
     
       ! translate a specific psm to tdsm
       ! shortest_duration is the shortest duration of interest
@@ -209,6 +209,7 @@ module source_moment_tensor
         type(t_psm), intent(inout) :: psm
         type(t_tdsm), intent(inout) :: tdsm
         real, intent(in) :: shortest_doi
+        logical, intent(out) :: ok
         
         real :: maxdt, risetime, tbeg, dt, ta, tb
         integer :: it, nt
@@ -217,6 +218,7 @@ module source_moment_tensor
         type(t_plf) :: stf
         real, dimension(:), allocatable  :: wt, toff
 
+        ok = .true.
         point(:) = psm%params(2:4)
         m(:) = psm%params(5:10)
         risetime = psm%params(11)

@@ -503,6 +503,10 @@ module minimizer_wrappers
       ! The available source types and a complete description of their parameters 
       ! are given in the [wiki:SourceTypes source type documentation].
       ! Short descriptions can be queried using the [wiki:SourceInfoTool source_info] tool.
+      ! 
+      ! This function detects if the same source parameters have already been 
+      ! set, so that seismograms are not recalculated when the same source 
+      ! is set several times.
       
         type(varying_string), intent(in)  :: line
         type(varying_string), intent(out) :: answer

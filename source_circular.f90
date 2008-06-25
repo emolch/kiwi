@@ -231,7 +231,7 @@ module source_circular
     end subroutine
 
     
-    subroutine psm_to_tdsm_circular( psm, tdsm, shortest_doi )
+    subroutine psm_to_tdsm_circular( psm, tdsm, shortest_doi, ok )
     
       ! translate a specific psm to tdsm
       ! shortest_duration is the shortest duration of interest
@@ -240,11 +240,13 @@ module source_circular
         type(t_psm), intent(inout) :: psm
         type(t_tdsm), intent(out) :: tdsm
         real, intent(in) :: shortest_doi
+        logical, intent(out) :: ok
         
         real :: rupvel
         real :: maxdx, maxdt
         integer :: nx, ny, nt
         
+        ok = .true.
         rupvel = psm%params(10)
                 
         maxdt = shortest_doi

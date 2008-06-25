@@ -106,7 +106,9 @@ module sparse_trace
 
     pure subroutine strip_nullify( strip )
         type(t_strip), intent(inout) :: strip
-        strip%data(:) = 0.0
+        if (allocated(strip%data)) then
+            strip%data(:) = 0.0
+        end if
     end subroutine
     
     pure function strip_span( strip )
