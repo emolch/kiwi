@@ -141,7 +141,11 @@ class MomentTensor:
     def __init__(self, m=None, strike=0., dip=0., rake=0., scalar_moment=1. ):
         '''Create moment tensor object based on 3x3 moment tensor matrix or orientation of 
            fault plane and scalar moment.''' 
-           
+        
+        strike = d2r*strike
+        dip = d2r*dip
+        rake = d2r*rake
+        
         if m is not None:
             m_evals, m_evecs = eigh_check(m)
             rotmat1 = (m_evecs * MomentTensor._u_evecs.T).T
@@ -168,7 +172,7 @@ class MomentTensor:
         '''Get both possible (strike,dip,rake) triplets.'''
         results = []
         for rotmat in self._rotmats:
-            alpha, beta, gamma = matrix_to_euler( rotmat )
+            alpha, beta, gamma = [ r2d*x for x in matrix_to_euler( rotmat ) ]
             results.append( (beta, alpha, -gamma) )
         
         return results
@@ -212,9 +216,8 @@ class MomentTensor:
         s = s % (self.scalar_moment(), self.moment_magnitude(), m[0,0],m[1,1],m[2,2],m[0,1],m[0,2],m[1,2], mexp)
         
         for i,sdr in enumerate(self.both_strike_dip_rake()):
-            sdr_deg = [ r2d*x for x in sdr ]
             s += 'Fault plane %i: strike = %3.0f, dip = %3.0f, slip-rake = %4.0f\n' % \
-                 (i+1, sdr[0]*r2d, sdr[1]*r2d, sdr[2]*r2d)
+                 (i+1, sdr[0], sdr[1], sdr[2])
         return s
 
 import unittest
@@ -223,7 +226,7 @@ class MomentTensorTestCase( unittest.TestCase ):
     def testAnyAngles(self):
         '''Check some arbitrary angles.'''
         for i in range(100):
-            (s1,d1,r1) = [ random.random()*10.-5. for j in range(3) ]
+            (s1,d1,r1) = [ r2d*random.random()*10.-5. for j in range(3) ]
             m0 = 1.+random.random()*1.0e20
             self.forwardBackward( s1, d1, r1, m0 )
 
@@ -231,7 +234,7 @@ class MomentTensorTestCase( unittest.TestCase ):
         '''Checks angles close to fractions of pi, which are especially problematic.'''
         for i in range(100):
             # angles close to fractions of pi are especially problematic
-            (s1,d1,r1) = [ random.randint(-16,16)*math.pi/8.+1e-8*random.random()-0.5e-8 for j in range(3) ]
+            (s1,d1,r1) = [ r2d*random.randint(-16,16)*math.pi/8.+1e-8*random.random()-0.5e-8 for j in range(3) ]
             m0 = 1.+random.random()*1.0e20
             self.forwardBackward( s1, d1, r1, m0 )
                 
@@ -254,7 +257,7 @@ class MomentTensorTestCase( unittest.TestCase ):
         
     def assertAnglesSame(self, m1, m2):
         assert num.all( num.abs(num.array(m1.both_strike_dip_rake()) - 
-                                num.array(m2.both_strike_dip_rake())) < 1e-7 ), \
+                                num.array(m2.both_strike_dip_rake())) < 1e-7*100 ), \
             "angles don't match after forward-backward calculation:\nfirst:\n"+str(m1)+ "\nsecond:\n"+str(m2)
 
 if __name__ == "__main__":

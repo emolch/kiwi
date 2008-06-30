@@ -3,13 +3,14 @@ import sys
 import logging
 from util import gmt_color
 
-#logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO,
+                    format='%(relativeCreated)s: %(message)s' )
 show_progress = True
-    
+
 source_info_prog = 'source_info'
 gfdb_info_prog = 'gfdb_info'
 gfdb_extract_prog = 'gfdb_extract'
-seismosizer_prog = 'minimizer'
+seismosizer_prog = '/bonus/src/invearthquake/minimizer'
 
 tango_colors = {
 'butter1': (252, 233,  79),
@@ -107,7 +108,7 @@ class Config:
     def update(self, config):
         self.configs.append( config )
     
-    def get_config(self):
+    def get_config(self, keys=None):
         
         configdict = {}
         for config in self.configs:
@@ -130,8 +131,15 @@ class Config:
         for k in self.__dict__:
             if k not in 'configs':
                 configdict[k] = self.__dict__[k]
-        
-        return configdict
+        if keys == None:
+            return configdict
+        else:
+            sub_configdict = {}
+            for k in keys:
+                if k in configdict:
+                    sub_configdict[k] = configdict[k]
+                
+            return sub_configdict
     
     def dump(self, filename):
         f = open(filename, 'w')

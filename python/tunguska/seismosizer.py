@@ -108,7 +108,7 @@ class SeismosizerBase:
         # gather answers
         seismosizer_went_mad = False
         answers = {}
-        errors = []
+        errors = {}
         while runners:
             p = runners.pop(0)
             try:
@@ -121,7 +121,7 @@ class SeismosizerBase:
                 runners.append(p)
             
             except SeismosizerReturnedError, error:
-                errors.append(error)
+                errors[p.tid] = error.args[1]
             
             except ThreadIsDead:
                 sys.exit('shit happens!')
@@ -129,8 +129,10 @@ class SeismosizerBase:
             time.sleep(pollers_sleep)
             
         if errors:
-            self.close()
-            sys.exit('\n'.join([ error.args[0] for error in errors]) + '\n')
+            raise SeismosizersReturnedErrors(errors);
+            #self.close()
+            #sys.exit('\n'.join([ error.args[0] for error in errors]) + '\n')
+            
             
         return [ answers[i] for i in sorted(answers.keys()) ]
 
@@ -146,6 +148,8 @@ for command in SeismosizerBase.commands:
     method = gen_do_method(command)
     setattr( SeismosizerBase, 'do_'+command, method )
 
+class SeismosizersReturnedErrors(Exception):
+    pass
 
 class SeismosizerReturnedError(Exception):
     pass
@@ -235,7 +239,12 @@ class SeismosizerProcess(threading.Thread):
         
         if retval.endswith('nok'):
             raise SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
-                        (config.seismosizer_prog, self.host, self.tid, command) )
+                        (config.seismosizer_prog, self.host, self.tid, command), '' )
+                        
+        if retval.endswith('nok >'):
+            error_str = self.from_p.readline().rstrip()
+            raise SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
+                        (config.seismosizer_prog, self.host, self.tid, command), error_str )
             
         if retval.endswith('ok >'):
             answer = self.from_p.readline().rstrip()
@@ -360,6 +369,12 @@ class Seismosizer(SeismosizerBase):
             
             
         return shifts
+        
+    def set_synthetic_reference(self):
+        """Calculate seismograms and use these as reference"""
+        tempfnbase = self.tempdir + "/syntref"
+        self.do_output_seismograms(tempfnbase, "mseed", "synthetics", "plain")
+        self.do_set_ref_seismograms(tempfnbase, "mseed")
         
     def shift_ref_seismograms( self, shifts, irec_range=None, **kwargs):
         if 'where' in kwargs: raise Exception("Can't use kwarg 'where' in shift_ref_seismogram")

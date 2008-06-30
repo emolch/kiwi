@@ -1,0 +1,89 @@
+#!/usr/bin/env python
+
+from tunguska import *
+
+wd = 'kinherd_work'
+
+basic = Config()
+basic.hosts         = ['localhost']
+basic.datadir       = '/media/private-property/sebastian/quakes/charlotte_island1/ieq_data'
+basic.gfdb_path     = '/media/private-property/sebastian/gfdb/gemini-10000km-swin/db'
+basic.effective_dt  = 2.0
+basic.crustal_thickness_limit = 10000.
+
+initial = Config()
+initial.depth        = 3000.
+initial.moment       =    6.6e18
+initial.strike       =  328.
+initial.dip          =   83.
+initial.slip_rake    = -170.
+initial.duration     =   1.
+
+#  misfit methods
+mm = Config()
+mm.outer_norm           = 'l1norm'
+mm.bootstrap_iterations = 1000
+mm.taper                = Taper( phases=('S','Sn'), offsets=(-10,0, 40,50) )
+mm.filter               = Filter( frequencies=(0., 0.01, 0.05, 0.1) )
+mm.anarchy              = False 
+
+mm_timedomain = Config(mm)
+mm_timedomain.inner_norm ='l1norm'
+
+mm_frequencydomain = Config(mm)
+mm_frequencydomain.inner_norm = 'ampspec_l1norm'
+
+mm_extended = Config(mm_frequencydomain)
+mm_extended.filter = Filter( frequencies=(0., 0.01, 0.25, 0.3) )
+
+weighter_conf = Config(mm_frequencydomain)
+
+timetuner_conf = Config(mm_timedomain)
+timetuner_conf.time_range            = -30., 30., 1.
+
+planetuner_conf = Config(mm_frequencydomain)
+
+locationtuner_conf = Config(mm_timedomain)
+
+extended = Config(mm_extended)
+extended.rise_time            =     2.
+extended.maxradius            = 40000.
+extended.delta                =  2000.
+extended.rel_rupture_velocity =     0.9
+extended.spacial_undersampling = [4, 4]
+
+
+extended1 = Config(extended)
+extended1.plane = 1
+
+extended2 = Config(extended)
+extended2.plane = 2
+
+weighter            = WeightMaker(wd, name='weightmaker')
+timetuner           = TimeTuner(wd, name='timetuner')
+planetuner          = PlaneTuner(wd, name='planetuner')
+locationtuner       = LocationTuner(wd, name='locationtuner')
+extensionfinder1    = ExtensionFinder(wd, name='extension/plane1')
+extensionfinder2    = ExtensionFinder(wd, name='extension/plane2')
+
+confstack = [basic, initial]
+weighter.in_config          = Config( *(confstack+[weighter_conf]) )
+confstack.append(weighter)
+timetuner.in_config         = Config( *(confstack+[timetuner_conf]) )
+confstack.append(timetuner)
+planetuner.in_config        = Config( *(confstack+[planetuner_conf]) )
+confstack.append(planetuner)
+locationtuner.in_config     = Config( *(confstack+[locationtuner_conf]) )
+confstack.append(locationtuner)
+extensionfinder1.in_config  = Config( *(confstack+[extended1]) )
+extensionfinder2.in_config  = Config( *(confstack+[extended2]) )
+
+#steps_to_do = [ timetuner, planetuner, locationtuner, extensionfinder1, extensionfinder2 ]
+
+steps_to_do = [ timetuner ]
+#steps_to_do = [extensionfinder1] # extensionfinder1, extensionfinder2 ]
+
+for step in steps_to_do:
+    step.work(reprocess='current')
+    step.plot()
+
