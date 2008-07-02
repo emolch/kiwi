@@ -12,6 +12,17 @@ gfdb_info_prog = 'gfdb_info'
 gfdb_extract_prog = 'gfdb_extract'
 seismosizer_prog = '/bonus/src/invearthquake/minimizer'
 
+component_names = {     'a':'R@-+@-',
+                        'c':'R@--@-',
+                        'r':'T@-+@-',
+                        'l':'T@--@-',
+                        'd':'Z@-+@-',
+                        'u':'Z@--@-',
+                        'n':'N',
+                        'e':'E',
+                        's':'S',
+                        'w':'W' }
+                        
 tango_colors = {
 'butter1': (252, 233,  79),
 'butter2': (237, 212,   0),
@@ -96,6 +107,21 @@ misfogram_plot_2d_config = dict(
     zapproxticks = 7,
     autoscale = 'min-max',
     symbols_SGW = [ symbol_best_result, '-Sc -W1p/black', ],
+)
+
+
+zebra = [ b or c for c in graph_colors for b in None, (0,0,0) ]
+seismogram_plot_config = dict(
+    fit = True,
+    width    = 4,
+    yspacing = 0.1,
+    symbols_SGW = ['-W1.5p/%s' % gmt_color(c) for c in zebra ],
+    yannotevery = 0,
+    yfunit = 'off',
+    ylabelofs = 0.15,
+    xlabel = 'Time',
+    xunit = 's',
+    xautoscale = 'min-max',
 )
 
 class Config:

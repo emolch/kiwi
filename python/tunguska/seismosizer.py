@@ -9,13 +9,24 @@ import signal
 from os.path import join as pjoin
 import shutil
 import logging
+import numpy as num
+import copy
 
 import config
 
 runners_sleep = 0.001
 pollers_sleep = 0.001
 
-        
+
+def load_table(fn):
+    f = open(fn, 'r')
+    values = [ float(x) for x in f.read().split() ]
+    f.close()
+    v = num.array(values, dtype=num.float)
+    x = v[::2].copy()
+    y = v[1::2].copy()
+    return (x,y)
+    
 class SeismosizerBase:
     '''Controls a group of seismosizer processes'''
     
@@ -384,10 +395,62 @@ class Seismosizer(SeismosizerBase):
         if irec_range is None:
             irec_range = range(1,len(self.receivers)+1)
         
-        for irec in zip(irec_range, shifts):
+        for irec, shift in zip(irec_range, shifts):
             self.do_shift_ref_seismogram(irec, shift, **kwargs)
             self.receivers[irec-1].cumulative_shift += shift
         
+    def get_receivers_snapshot( self,
+                                which_seismograms = ('syn','ref'), 
+                                which_spectra     = ('syn','ref'),
+                                which_processing  = 'filtered' ):
+        
+        tdir = pjoin(self.tempdir, 'get_receivers_copy')
+        if os.path.isdir(tdir):
+            logging.warn('found stale traces output dir')
+            shutil.rmtree(tdir)
+        os.mkdir(tdir)
+        
+        tempfnbase1 = pjoin(tdir, "ref_seismogram")
+        tempfnbase2 = pjoin(tdir, "syn_seismogram")
+        tempfnbase3 = pjoin(tdir, "ref_spectrum")
+        tempfnbase4 = pjoin(tdir, "syn_spectrum")
+        extension = 'table'
+        if 'ref' in which_seismograms: self.do_output_seismograms(tempfnbase1, extension, "references", which_processing)
+        if 'syn' in which_seismograms: self.do_output_seismograms(tempfnbase2, extension, "synthetics", which_processing)
+        if 'ref' in which_spectra: self.do_output_seismogram_spectra(tempfnbase3, "references", which_processing)
+        if 'syn' in which_spectra: self.do_output_seismogram_spectra(tempfnbase4, "synthetics", which_processing)
+        
+        receivers = copy.deepcopy(self.receivers)
+        for irec, rec in enumerate(receivers):
+            irec_fortran = irec+1
+            for icomp, comp in enumerate(rec.components):
+                fn1 = '%s-%i-%s.%s' % (tempfnbase1, irec_fortran, comp, extension)
+                fn2 = '%s-%i-%s.%s' % (tempfnbase2, irec_fortran, comp, extension)
+                fn3 = '%s-%i-%s.%s' % (tempfnbase3, irec_fortran, comp, extension)
+                fn4 = '%s-%i-%s.%s' % (tempfnbase4, irec_fortran, comp, extension)
+                
+                if os.path.isfile(fn1):
+                    rec.ref_seismograms[icomp] = load_table( fn1 )
+                else:
+                    rec.ref_seismograms[icomp] = None
+                
+                if os.path.isfile(fn2):
+                    rec.syn_seismograms[icomp] = load_table( fn2 )
+                else:
+                    rec.syn_seismograms[icomp] = None
+                
+                if os.path.isfile(fn3):
+                    rec.ref_spectra[icomp] = load_table( fn3 )
+                else:
+                    rec.ref_spectra[icomp] = None
+                    
+                if os.path.isfile(fn4):
+                    rec.syn_spectra[icomp] = load_table( fn4 )
+                else:
+                    rec.syn_spectra[icomp] = None
+                        
+        shutil.rmtree(tdir)
+        return receivers
             
     def make_misfits_for_source( self, source ):
         """Calculate misfits for given source and fill these into the receivers datastructure."""

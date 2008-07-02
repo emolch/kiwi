@@ -435,7 +435,6 @@ module receiver
                                       (span(1)-1)*dt, dt, nerr )
             else 
                 if (which_probe == SYNTHETICS) then
-                !    call probe_set_array( self%syn_probes(icomponent), self%displacement(icomponent) )
                     call probe_get( self%syn_probes(icomponent), strip, which_processing )
                 else 
                     call probe_get( self%ref_probes(icomponent), strip, which_processing )
@@ -478,7 +477,6 @@ module receiver
             outfn = filenamebase // "-" // component_names(self%components(icomponent)) // ".table"
             
             if (which_probe == SYNTHETICS) then
-              !  call probe_set_array( self%syn_probes(icomponent), self%displacement(icomponent) )
                 call probe_get_amp_spectrum( self%syn_probes(icomponent), strip, df, which_processing )
             else
                 call probe_get_amp_spectrum( self%ref_probes(icomponent), strip, df, which_processing )

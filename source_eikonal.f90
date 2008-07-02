@@ -408,11 +408,13 @@ module source_eikonal
         bord_radius = psm%params(11)
         nukl_shift_x = psm%params(12)
         nukl_shift_y = psm%params(13)
-              
+        
+        nukl_shift = sqrt(nukl_shift_x**2+nukl_shift_y**2)
+        
         ok = .true.
         psm_initial_point_intolerant_rc = (/nukl_shift_x, nukl_shift_y, 0./)
         initial_point_ned = psm_rc_to_ned( psm, psm_initial_point_intolerant_rc )
-        if (.not. psm_point_in_constraints(psm, initial_point_ned)) then
+        if (.not. psm_point_in_constraints(psm, initial_point_ned) .or. nukl_shift > bord_radius) then
             call error("position of nucleation point is outside of rupture region")
             ok = .false.
         end if
@@ -461,10 +463,10 @@ module source_eikonal
         call crust2x2_get_profile(psm%origin, profile)
         circle_center = psm_circle_center( psm, bord_shift_x, bord_shift_y )
         
-        initial_point_rc = psm_initial_point_rc( psm, borderline )
+        !initial_point_rc = psm_initial_point_rc( psm, borderline )
         ! XXX
-        !initial_point_rc = psm_initial_point_intolerant_rc( psm, borderline, ok )
-        !if (.not. ok) return
+        initial_point_rc = psm_initial_point_intolerant_rc( psm, borderline, ok )
+        if (.not. ok) return
         ! XXX
 
         grid%initialpoint = initial_point_rc(1:2)

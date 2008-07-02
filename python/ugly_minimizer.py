@@ -47,8 +47,8 @@ class Config:
                         'u':'Z@--@-',
                         'n':'N',
                         'e':'E',
-                        's':'N',
-                        'w':'E' }
+                        's':'S',
+                        'w':'W' }
     earthradius = 6371.*1000.
     
 class Minimizer:

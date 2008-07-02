@@ -1277,10 +1277,6 @@ program minimizer
         if (iostat > 0 .or. iostat == -1) exit stdinloop
         
         call do_command( line, answer, command, ok )
-        if (.not. ok .and. g_errstr .ne. '') then
-            call warn(g_errstr)
-            call error("")
-        end if
         if (ok) then
             if (answer == '') then
                 call put_line(command // ": ok")
@@ -1289,7 +1285,13 @@ program minimizer
                 call put_line(answer)
             end if
         else
-            call put_line(command // ": nok")
+            if (g_errstr == '') then
+                call put_line(command // ": nok")
+            else
+                call put_line(command // ": nok >")
+                call put_line(g_errstr)
+                call error("")
+            end if
         end if
 
         call flush( stdout )

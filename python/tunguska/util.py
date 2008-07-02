@@ -6,6 +6,7 @@ import tempfile
 import scipy
 import scipy.io
 import pickle
+import shutil
 
 pjoin = os.path.join
 
@@ -140,6 +141,8 @@ def autoplot( *args, **kwargs ):
     args.append( outfile )
     args.extend( options )
     subprocess.call( args )
+    
+    shutil.rmtree(tempdir)
     
 if __name__ == '__main__':
     import random

@@ -28,6 +28,11 @@ class Receiver:
         self.proc_id = None
         self.misfits = [0.]*len(self.components)
         self.misfit_norm_factors = [0.]*len(self.components)
+        # filled by seismosizer.get_receivers_copy()
+        self.ref_seismograms        = [None]*len(self.components)
+        self.syn_seismograms        = [None]*len(self.components)
+        self.ref_spectra            = [None]*len(self.components)
+        self.syn_spectra            = [None]*len(self.components)
        
     def set_distazi(self, distance_deg, distance_m, azimuth):
         # should only be called by Seismosizer
