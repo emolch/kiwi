@@ -2,11 +2,12 @@
 
 class Receiver:
     
-    def __init__(self, lat=0.0, lon=0.0, components='ned', name=None, from_string=None ):
+    def __init__(self, lat=0.0, lon=0.0, components=None, name=None, from_string=None ):
         
         # treat as immutable, although it would be possible to change the attributes
         
         if not from_string:
+            if components is None: components = 'ned'
             self.lat = lat
             self.lon = lon
             self.components = components
@@ -16,12 +17,23 @@ class Receiver:
             if len(toks) >= 3:
                 self.lat = float(toks[0])
                 self.lon = float(toks[1])
-                self.components = toks[2]
+                if components is None:
+                    self.components = toks[2]
+                else:
+                    comps = ''
+                    for c in components:
+                        if c in toks[2]:
+                            comps += c
+                    self.components = comps
+                    
             if len(toks) == 4:
                 self.name = toks[3]
         
+        self.cumulative_shift = 0.
+        
         # used and set by Seismosizer, when attached to it
         # treat as read-only
+        self.enabled = True
         self.distance_m = None
         self.distance_deg = None
         self.azimuth = None
@@ -41,19 +53,21 @@ class Receiver:
         self.azimuth      = azimuth
     
     def __str__(self):
-        return ' '.join( (str(self.lat), str(self.lon), self.components) )
+        s = ' '.join( (str(self.lat), str(self.lon), self.components) )
+        return s
     
     
 
-def load_table( filename ):
+def load_table( filename, components ):
     receivers = []
     
     file = open(filename, "r")
-    
+    irec = 0
     for line in file:        
         if line.lstrip().startswith('#') or line.strip() == '': continue
-        r = Receiver( from_string=line )
+        r = Receiver( from_string=line, components=components[irec%len(components)] )
         receivers.append(r)
+        irec += 1
     
     file.close()
     

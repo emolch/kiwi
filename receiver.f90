@@ -132,8 +132,10 @@ module receiver
       ! parse and check components string
       
         ncomponents = len_trim( components_str )
-        if (ncomponents .eq. 0) return
         allocate( self%components(ncomponents) )
+        if (ncomponents .eq. 0) then
+            self%enabled = .false.            
+        end if
         do i=1,ncomponents
             id = character_to_id( components_str(i:i) )
             

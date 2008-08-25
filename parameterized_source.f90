@@ -166,6 +166,9 @@ module parameterized_source
     	type(t_psm), intent(inout)      :: self
     	real, intent(in) 				:: thickness_limit
     	self%crustal_thickness_limit = thickness_limit
+        if ( crust2x2_loaded ) then
+            call psm_set_default_constraints( self )
+        end if
     end subroutine
 
     subroutine psm_get_crustal_thickness( self, thickness )

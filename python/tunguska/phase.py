@@ -6,6 +6,7 @@ class Phase:
     def __init__(self,name,filename=None):
     
         self.name = name
+        self.filename = filename
         if filename is None:
             filename = os.path.join(util.invearthquake_aux_dir(), 'phases', name)
         
@@ -22,7 +23,15 @@ class Phase:
             if low[0] <= distance <= high[0]:
                 return low[1] + (distance-low[0])/(high[0]-low[0])*(high[1]-low[1])
         return None
-
+    
+    def __repr__(self):
+        s = "Phase(name='%s'" % self.name
+        if self.filename is not None:
+            s += ", filename='%s'" % self.filename
+        s += ')'
+        return s
+        
+            
 class Timing:
     '''"Intelligent" Phase, e.g. "S or Sn, whatever is available minus 10 s".'''
     
@@ -50,6 +59,12 @@ class Timing:
             if not t is None:
                 return t+self.offset
 
+    def __repr__(self):
+        s = 'Timing(phases=['
+        s += ', '.join([repr(p) for p in self.phases])
+        s += '], offset='+str(self.offset)+')'
+        return s
+        
 class Taper:
     def __init__(self, timings=None,
                        phases=None, offsets=None):
@@ -70,6 +85,12 @@ class Taper:
                  self.timings[2](distance), 1.,
                  self.timings[3](distance), 0. )
 
+    def __repr__(self):
+        s = 'Taper(timings=[\n    '
+        s += ',\n    '.join([repr(t) for t in self.timings])
+        s += '\n])'
+        return s
+        
 if __name__ == '__main__':
     p = Phase('P')
     pn = Phase('Pn')
@@ -79,6 +100,7 @@ if __name__ == '__main__':
     sany = ('S','Sn')
     timings = [ Timing(sany,offset) for offset in [-10., 0., 40., 50. ] ] 
     print Taper(timings)(1000000.)
-    print Taper(phases='Sn', offsets=(-10,0, 40,50))(1000000.)
-    
+    t = Taper(phases=('S','Sn'), offsets=(-10,0, 40,50))
+    print t(1000000.)
+    print repr( t )
     

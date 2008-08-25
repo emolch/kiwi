@@ -319,7 +319,33 @@ def sactime( secs ):
     t = time.gmtime(secs)
     ms = secs % 1
     return ( t[0], t[7], t[3], t[4], t[5], ms )
+
+
+def set_ref_time( filenames, reftime ):
+    '''Set common reference time'''
     
+    joined_filenames = ' '.join(filenames)
+    
+    sac_command = '''read %s
+chnhdr O gmt %i %i %i %i %i %i
+listhdr O
+''' % ((joined_filenames,)+sactime( reftime ))
+    (out,err) = sac_exec(sac_command)
+    
+    for line in out.splitlines():
+        toks = line.strip().split(' = ',1)
+        if len(toks) == 2:
+            k,v = toks
+            if k == 'O':
+                offset = float(v)
+                
+    sac_command = '''read %s
+chnhdr ALLT %g IZTYPE IO
+write %s
+''' % (joined_filenames, -offset, joined_filenames)
+    (out,err) = sac_exec(sac_command)
+                
+                
     
 def preprocess( datadir_dis, seismograms, ref_time, c_low=0.01, c_high=1., new_delta_t=0.5):
 
@@ -331,9 +357,11 @@ def preprocess( datadir_dis, seismograms, ref_time, c_low=0.01, c_high=1., new_d
     commands = '''read %s
 rmean
 rtrend
+taper type hanning width %g
 transfer from evalresp fname %s to none freqlimits %g %g %g %g
-%s
 cutim %g %g
+%s
+chnhdr DELTA %g 
 write %s
 '''
 
@@ -347,9 +375,18 @@ write %s
             displ_filename = pjoin( datadir_dis, os.path.basename(s.filename.replace( '.SAC', '.DIS.SAC' )) )
             
             
-            beg = s.begin-s.sac_reftime+1./c_low*2.
-            end = s.end-s.sac_reftime
-            try:
+            beg = s.begin-s.sac_reftime + 2./c_low
+            end = s.end-s.sac_reftime   - 2./c_low
+            
+            # cut near to multiples of the sampling interval
+            beg = round((beg+s.sac_reftime)/new_delta_t)*new_delta_t-s.sac_reftime
+            end = round((end+s.sac_reftime)/new_delta_t)*new_delta_t-s.sac_reftime
+            length = end - beg
+            cutbeg = 2./c_low
+            cutend = length-2./c_low
+            
+      #      try:
+            if True:
                 if abs(new_delta_t/s.delta - 10.) < 10./10000.:
                     d = (2, 5)
                 elif abs(new_delta_t/s.delta - 20.) < 20./10000.:
@@ -360,44 +397,88 @@ write %s
                     raise Exception('unexpected sampling interval: %g' % s.delta)
                 decimations = ''.join(['decimate %i\n' % dd for dd in d])
                     
-            
+                taper_width = 2./c_low / (s.end-s.begin)
+                
                 # correct for instrument response
-                sac_command = commands % (s.filename, s.resp_filename, c_low/2., c_low, c_high, c_high*2., decimations, beg, end, displ_filename)
+                sac_command = commands % (s.filename, taper_width, s.resp_filename, 
+                                          c_low/2., c_low, c_high, c_high*2.,  
+                                          cutbeg, cutend, decimations, new_delta_t, displ_filename)
                 (out,err) = sac_exec(sac_command)
                 
                 # set common reference time
-                sac_command = '''read %s
-chnhdr O gmt %i %i %i %i %i %i
-listhdr O
-''' % ((displ_filename,)+sactime( ref_time ))
-                (out,err) = sac_exec(sac_command)
-                
-                for line in out.splitlines():
-                    toks = line.strip().split(' = ',1)
-                    if len(toks) == 2:
-                        k,v = toks
-                        if k == 'O':
-                            offset = float(v)
-                
-                sac_command = '''read %s
-chnhdr ALLT %g IZTYPE IO
-chnhdr DELTA %g
-write %s
-''' % (displ_filename, -offset, new_delta_t, displ_filename)
-                (out,err) = sac_exec(sac_command)
-                
+                set_ref_time( (displ_filename,), ref_time )
                 
                 s_pro = Trace(displ_filename, '', '', s.sid, s.nid, s.component, s.locid)
                 
                 processed.append( s_pro )
                 
-            except:
-                print 'ignoring:', s.sid, s.nid, s.component, s.locid
+          #  except:
+          #      print 'ignoring:', s.sid, s.nid, s.component, s.locid
                 
     return processed
-            
 
-def select_traces( traces, event, stations, blacklist, wanted_components ):
+def select( traces, sid, nid, component ):
+    for t in traces:
+        if t.sid == sid and t.nid == nid and t.component == component:
+            return t
+        
+    return None
+
+
+def make_rotated_horizontals( traces ):
+    
+    rotated_traces = []
+    stations = set([ (t.sid, t.nid) for t in traces ])
+    for sid, nid in stations:
+        tnorth = select( traces, sid, nid, 'BHN' )
+        teast = select( traces, sid, nid, 'BHE' )
+        
+        if not tnorth or not teast: continue
+        
+        if tnorth.locid != teast.locid: continue
+        locid = tnorth.locid
+        
+        print 'rotating:', tnorth.sid, tnorth.nid, locid
+        
+        assert( tnorth.delta == teast.delta )
+        delta = tnorth.delta
+        
+        assert( abs(tnorth.sac_reftime - teast.sac_reftime) < delta/10.  )
+        reftime = tnorth.sac_reftime
+        
+        beg = max(tnorth.begin, teast.begin) - reftime
+        end = min(tnorth.end, teast.end) - reftime
+        length = end-beg
+        
+        radial_filename = re.sub(r'BHN', 'BHR', tnorth.filename)
+        transversal_filename = re.sub(r'BHE', 'BHT', teast.filename)
+        
+        com  = 'read %s %s\n' % (tnorth.filename, teast.filename)
+        com += 'synchronize round on\n'
+        com += 'cutim %g %g\n' % (delta/2., length-delta/2.)
+        com += 'chnhdr file 1 cmpaz 0\n'     # in case components are not exactly north / east
+        com += 'chnhdr file 2 cmpaz 90\n'
+        com += 'rotate to gcp\n' 
+        com += 'chnhdr file 1 kcmpnm BHR\n'
+        com += 'chnhdr file 2 kcmpnm BHT\n'
+        com += 'write %s %s\n' % (radial_filename, transversal_filename)
+        
+        sac_exec(com)
+        
+        set_ref_time( (radial_filename, transversal_filename), reftime )
+        
+        
+        
+        tradial      = Trace( radial_filename,      '', '', sid, nid, 'BHR', locid)
+        ttransversal = Trace( transversal_filename, '', '', sid, nid, 'BHT', locid)
+                
+        rotated_traces.append( tradial )
+        rotated_traces.append( ttransversal )
+    
+    return rotated_traces
+        
+
+def select_traces( traces, event, stations, blacklist, wanted_components, gfdb, low_freq, margin_gfdb ):
     selected = {}
     for trace in sorted(traces.values()):
     
@@ -417,17 +498,27 @@ def select_traces( traces, event, stations, blacklist, wanted_components ):
             continue
        
         # check if time span is in needed time span
-        needed_trange = stations[(trace.sid,trace.nid)].timerange
+        needed_trange = (stations[(trace.sid,trace.nid)].timerange[0]-2./low_freq,
+                         stations[(trace.sid,trace.nid)].timerange[1]+2./low_freq)
+        
         trace_trange = (trace.begin - event.time, trace.end - event.time)
         if (trace_trange[0] > needed_trange[0] or 
             trace_trange[1] < needed_trange[1]):
             print 'dropping (timespan incomplete):', trace.filename
             continue
         
+        s = stations[(trace.sid,trace.nid)]
+        
+        if s.dist_m < gfdb.firstx+margin_gfdb or gfdb.firstx + gfdb.nx*gfdb.dx - margin_gfdb < s.dist_m:
+            print 'dropping (out of gfdb range):', trace.filename
+            continue
+        
+        
+        
         # get rid of duplicates
         selected[(trace.nid, trace.sid, trace.component)] = trace
     
-    
+        
             
     return selected.values()
     
@@ -445,9 +536,11 @@ def read_config(filename):
                 'gfdb_path', 
                 'frequency_range', 
                 'blacklist_station_file', 
-                'wanted_components',  
+                'wanted_components',
                 'data_dir', 
-                'ieq_data_dir')
+                'ieq_data_dir',
+                'nsets',
+                'margin_gfdb')
                 
         file = open(filename,'r')
         for line in file:
@@ -464,9 +557,9 @@ def read_config(filename):
     #except:
     #    sys.exit("cannot read config file: %s" % filename)
         
-steps = ('unpack', 'preprocess', 'setup')
+steps = ('unpack', 'preprocess', 'setup', 'all')
 
-usage = 'usage: kinherd_prepare config-file ( unpack | preprocess | setup )'
+usage = 'usage: kinherd_prepare config-file ( unpack | preprocess | setup | all )'
 if len(sys.argv) != 3: sys.exit(usage)
 config_file = sys.argv[1]
 step = sys.argv[2]
@@ -479,21 +572,21 @@ datadir = c['data_dir']
 datadir_raw = pjoin(datadir,'raw')
 datadir_dis = pjoin(datadir,'displacement')
 
-ieq_datadir = c['ieq_data_dir']
 
 gfdb_path = c['gfdb_path']
 frequency_range = [float(x) for x in c['frequency_range'].split()]
 blacklist_station_file = c['blacklist_station_file']
-wanted_components = c['wanted_components'].split()
+
 
 component_translate = {'BHN': 'n',
                        'BHE': 'e',
-                       'BHZ': 'u'}
+                       'BHZ': 'u',
+                       'BHR': 'a',
+                       'BHT': 'r'}
 
 
 ensure_dir( datadir )
 ensure_dir( datadir_raw )
-ensure_dir( ieq_datadir )
 
 gfdb = minimizer.get_gfdb_infos(gfdb_path)
     
@@ -501,19 +594,30 @@ rdseed_prog = 'rdseed'
 sac_prog = 'sac'
 
 
-if step == 'unpack':
+if step == 'unpack' or step == 'all':
     rdseed( seedfile, datadir, datadir_raw  )
 
-if step == 'preprocess':
+if step == 'preprocess' or step == 'all':
+    
+    margin_gfdb = 200000.
+    if 'margin_gfdb' in c:
+        margin_gfdb = float(c['margin_gfdb'])
+    
     event = get_events_from_file( os.path.join(datadir,'rdseed.events') )[0]
     stations = get_stations_from_file( os.path.join(datadir,'rdseed.stations') )
 
     set_time_ranges( event, stations.values() )
     traces = get_traces( stations.values(), datadir_raw )
     blacklist = get_stations_blacklist( blacklist_station_file )
-    selected_traces = select_traces( traces, event, stations, blacklist, set(wanted_components) )
+    selected_traces = select_traces( traces, event, stations, blacklist, set(('BHN', 'BHE', 'BHZ')), gfdb, low_freq=frequency_range[0], margin_gfdb=margin_gfdb )
     
-    processed_traces = preprocess( datadir_dis, selected_traces, event.time, c_low=frequency_range[0], c_high=frequency_range[1], new_delta_t=gfdb.dt )
+    processed_traces = preprocess( datadir_dis, selected_traces, 
+        round(event.time/gfdb.dt)*gfdb.dt, c_low=frequency_range[0], 
+        c_high=frequency_range[1], new_delta_t=gfdb.dt )
+    
+    rotated = make_rotated_horizontals( processed_traces )
+    processed_traces.extend(rotated)
+    
     
     summaryfile = os.path.join(datadir, 'preprocess.status')
     f = open(summaryfile,'w')
@@ -534,16 +638,30 @@ if step == 'preprocess':
     pickle.dump( (event, stations, processed_traces), f )
     f.close()
     
-if step == 'setup':
+if step == 'setup' or step == 'all':
+    
+    nsets = 1
+    if 'nsets' in c:
+        nsets = int(c['nsets'])
+    
+    wanted_components = c['wanted_components'].split()
+
+    ieq_datadir = c['ieq_data_dir']
+    if os.path.exists( ieq_datadir ):
+        shutil.rmtree( ieq_datadir )
+    ensure_dir( ieq_datadir )
+    
     cachefile = os.path.join(datadir, 'preprocess.cache')
     f = open(cachefile, 'r')
     (event, stations, traces) = pickle.load( f )
     f.close()
     
-    compo_order = dict([(comp,i) for (i,comp) in enumerate(wanted_components)])
+    # gather components by station
     
+    compo_order = dict([(comp,i) for (i,comp) in enumerate(wanted_components)])
     station_components = {}
     for t in traces:
+        if not t.component in wanted_components: continue
         if (t.sid,t.nid) in station_components:
             station_components[(t.sid,t.nid)].append(t.component)
         else:
@@ -555,26 +673,37 @@ if step == 'setup':
     for compolist in station_components.values():
         compolist.sort( cmp=compare_component )
     
+    
+    # sort traces by distance
+    
     def compare_distance(a,b):
         return cmp(stations[(a.sid,a.nid)].dist_m, stations[(b.sid,b.nid)].dist_m)
-
     
     traces.sort(cmp=compare_distance)
-    stations_seen = set()
-    istation = 0
+    
+    # make master receivers table
+    
     f = open(os.path.join(ieq_datadir, 'receivers.table'), 'w')
+    istation = 0
+    stations_seen = set()
     for t in traces:
+        if not t.component in wanted_components: continue
         if not (t.sid,t.nid) in stations_seen:
             s = stations[(t.sid,t.nid)]
             compos = ''.join([component_translate[x] for x in  station_components[(t.sid,t.nid)]])
-            line = "%15.9g %15.9g %3s %s.%s\n" % ( s.lat, s.lon, compos, s.sid, s.nid )
-            f.write(line)
+            line = "%15.9g %15.9g %5s %s.%s\n" % ( s.lat, s.lon, compos, s.sid, s.nid )
+            for iset in range(nsets):
+                f.write(line)
             stations_seen.add((t.sid,t.nid))
-            istation += 1
+            istation += nsets
         
-        dstfn = os.path.join(ieq_datadir, 'reference-%i-%c.sac' % (istation, component_translate[t.component]))
-        shutil.copy(t.filename, dstfn )
+        for iset in range(nsets):
+            dstfn = os.path.join(ieq_datadir, 'reference-%i-%c.sac' % (istation-nsets+iset+1, component_translate[t.component]))
+            shutil.copy(t.filename, dstfn )
+        
     f.close()
+    
+    
     
     f = open(os.path.join(ieq_datadir, 'source-origin.table'), 'w')
     f.write( "%g %g %g\n" % (event.lat, event.lon, 0.0) )

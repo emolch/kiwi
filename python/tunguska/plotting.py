@@ -2,7 +2,8 @@ import util
 import config
 import copy
 import subprocess
-
+import gmt
+import numpy as num
 
 def km_hack(conf):
     
@@ -87,9 +88,13 @@ def misfogram_plot_2d( data, filename, conf_overrides ):
     args = tuple(data) + (filename,)
     util.autoplot( *args, **conf )
     
-def seismogram_plot( data_by_component, filename, conf_overrides ):
+def seismogram_plot( data_by_component, filename, conf_overrides, are_spectra=False ):
     
-    conf = dict(**config.seismogram_plot_config)
+    if are_spectra:
+        conf = dict(**config.seismogram_plot_config)
+    else:
+        conf = dict(**config.spectrum_plot_config)
+        
     conf.update( conf_overrides )
     
     conf_master = conf
@@ -125,4 +130,39 @@ def seismogram_plot( data_by_component, filename, conf_overrides ):
         args = tuple(data) + (filename,)
         util.autoplot( *args, **conf )
         
-        
+def station_plot( slat, slon, lat, lon, rnames, station_color, station_size, source, maxdist, filename, conf_overrides ):
+    conf = dict(**config.station_plot_config)
+    conf.update( conf_overrides )
+    
+    width = conf.pop('width')
+    height = conf.pop('height')
+    margins = conf.pop('margins')
+    
+    plot = gmt.GMT(width, width, margins)
+    plot.pscoast( R='g', J='E%g/%g/%g/%gi' % (slon, slat, maxdist, plot.width), B='', 
+                  D='c', A=10000, S=(114,159,207), G=(233,185,110), W='thinnest')
+    
+    # shift source location slightly, so that projection does not crash...
+    plot.psmeca( rows=[[float(slon+0.01), float(slat+0.01), 1., source['strike'], source['dip'], source['slip-rake'], 6., 0.,0., '' ]],
+                 S='a0.3' )
+    
+    mi = num.amin(station_color)
+    ma = num.amax(station_color)
+    ma = max(abs(mi),abs(ma))
+    mi = -ma
+    inc = (ma-mi)/128.
+    
+    f_cpt, fn_cpt = plot.tempfile()
+    plot.makecpt( C='polar', T=(mi,ma,inc), Z=True, output=f_cpt )
+    plot.psxy( columns=(lon,lat, station_color, num.sqrt(station_size)/5. ), C=fn_cpt, S='t', W='1p/black', G='white' )
+    nr = len(lat)
+    size = [9]*nr
+    angle = [0]*nr
+    fontno = [1]*nr
+    justify = ['MC']*nr
+    plot.pstext( columns=(lon,lat,size,angle,fontno,justify,rnames), D=(0.,-0.2) )
+    
+    
+    plot.save( filename )
+    
+    

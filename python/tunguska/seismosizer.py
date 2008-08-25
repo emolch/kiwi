@@ -13,6 +13,7 @@ import numpy as num
 import copy
 
 import config
+import phase
 
 runners_sleep = 0.001
 pollers_sleep = 0.001
@@ -303,7 +304,6 @@ class Seismosizer(SeismosizerBase):
         self.receivers = None
         self.source = None
         self.source_location = None
-        self.taper = None
         self.shifts = None
         self.local_interpolation = None
         
@@ -322,16 +322,26 @@ class Seismosizer(SeismosizerBase):
         receiverfn = pjoin(self.tempdir, "receivers")
         file = open(receiverfn, "w")
         for r in receivers:
-            file.write( ' '.join( (str(r.lat), str(r.lon), r.components) ) + "\n" )
+            file.write( "%s\n" % str(r) )
         file.close()
         self.do_set_receivers(receiverfn)
         os.remove(receiverfn)
         self._locations_changed()
     
-    def switch_receiver(self, irec, *args, **kwargs):
+    def blacklist_receivers(self, blacklist):
+        for irec, r in enumerate(self.receivers):
+            sid, nid = r.name.split('.')
+            if sid in blacklist:
+                self.switch_receiver(irec+1, 'off')
+    
+    def switch_receiver(self, irec, onoff, **kwargs):
+        # irec counted from 1 !!!
+        assert( onoff in ('on', 'off'))
+        assert( 1 <= irec <= len(self.receivers) )
         if 'where' in kwargs: raise Exception("Can't use kwarg 'where' in switch_receiver")
-        kwargs['where'] = self.receivers[irec].proc_id
+        kwargs['where'] = self.receivers[irec-1].proc_id
         self.do_switch_receiver( irec, *args, **kwargs)
+        self.receivers[irec-1].enabled = onoff == 'on'
         
     def set_source( self, source, **kwargs ):
         self.source = source
@@ -341,9 +351,12 @@ class Seismosizer(SeismosizerBase):
         '''Set a general taper.
            If the taper is built on phases, which are not available at 
            a receivers distance, this will switch off the receiver in question.'''
-        self.taper = taper
+           
+        if isinstance(taper, phase.Taper):
+            taper = [ taper ] * len(self.receivers)
+            
         for irec, rec in enumerate(self.receivers):
-            values = self.taper(rec.distance_m)
+            values = taper[irec](rec.distance_m)
             if None in values:
                 # Phase(s) not existant at this distance
                 self.switch_receiver(irec+1, 'off')
@@ -358,17 +371,17 @@ class Seismosizer(SeismosizerBase):
         self.inner_misfit_method = method
         self.do_set_misfit_method( method )
     
-    def autoshift_ref_seismograms(self, irec_range=None, **kwargs):
+    def autoshift_ref_seismograms(self, shift_range, irec_range=None, **kwargs):
         if 'where' in kwargs: raise Exception("Can't use kwarg 'where' in autoshift_ref_seismogram")
         
         # irecs are counted here from 1
         
         if irec_range is None:
             irec_range = range(1,len(self.receivers)+1)
-        
+        shifts = []
         for irec in irec_range:
             iproc = self.receivers[irec-1].proc_id
-            shift = float(self.do_autoshift_ref_seismogram(irec, where=ipro, **kwargsc))[0]
+            shift = float(self.do_autoshift_ref_seismogram(irec, shift_range[0], shift_range[1], where=iproc, **kwargs)[0])
             shifts.append(shift)
             if len(self)>1:
                 # shift reference seismograms in other seismosizer processes

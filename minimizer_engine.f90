@@ -147,9 +147,10 @@ module minimizer_engine
         type(varying_string), intent(out) :: answer
         logical, intent(out)              :: ok
         
-        character(len=1024)                 :: components
+        character(len=1024)                 :: components, str
         integer                             :: ireceiver, nreceivers
         integer                             :: iostat, nskip, iunit
+        integer                             :: nwords
         type(t_geo_coords)                  :: origin
      
       ! this subroutine will be a pain in fortran   
@@ -195,7 +196,8 @@ module minimizer_engine
                 exit line_loop
             end if
         
-            read (iunit,*,iostat=iostat) origin%lat, origin%lon, components
+            read (iunit,"(a)",iostat=iostat) str
+
             if (iostat == IOSTAT_EOF) exit line_loop
             if (iostat /= 0) then
                 ok = .false.
@@ -203,6 +205,26 @@ module minimizer_engine
                 exit line_loop
             end if
             
+            nwords = count_words(str)
+            if (nwords == 3) then
+                read (str,*,iostat=iostat) origin%lat, origin%lon, components
+            else if (nwords == 2) then
+                read (str,*,iostat=iostat) origin%lat, origin%lon
+                components = ''
+            else
+                ok = .false.
+                call error("expected two or three words at receiver no " // (ireceiver+1) // &
+                           " while reading " // receiversfn)
+                exit line_loop
+            end if
+
+            if (iostat /= 0) then
+                ok = .false.
+                call error("io error occured while reading " // receiversfn // " at receiver no " // (ireceiver+1)  )
+                exit line_loop
+            end if
+            
+
             ireceiver = ireceiver + 1
             if (ireceiver > nreceivers) exit line_loop
             

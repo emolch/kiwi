@@ -6,6 +6,7 @@ import source
 import util
 import plotting
 import moment_tensor
+from util import gform
 
 import shutil
 import os
@@ -66,10 +67,13 @@ def grid_defi( param, oldval, descr ):
 
 def standard_setup( datadir,
                     gfdb_path,
+                    components,
                     effective_dt=1,
                     spacial_undersampling = [ 1, 1 ],
                     hosts = ['localhost'],
                     crustal_thickness_limit = None,
+                    shifts = None,
+                    blacklist = None,
                     
                     local_interpolation = 'bilinear',
                     source_origin_file = 'source-origin.table',
@@ -101,14 +105,21 @@ def standard_setup( datadir,
         seis.set_source_crustal_thickness_limit( crustal_thickness_limit )
     
     # setup receivers
-    receivers = receiver.load_table(receivers_file)
+    receivers = receiver.load_table(receivers_file, components=components)
     seis.set_receivers(receivers)
     seis.set_ref_seismograms( ref_seismogram_stem, ref_seismogram_format )
+    if blacklist:
+        seis.blacklist_receivers( blacklist )
+    
+    # apply reference seismograms shifts
+    if shifts is not None:
+        seis.shift_ref_seismograms( shifts )
+    
     return seis
     
-standard_setup.required = set(('datadir', 'gfdb_path')) 
+standard_setup.required = set(('datadir', 'gfdb_path', 'components')) 
 standard_setup.optional = set(('effective_dt', 'spacial_undersampling', 'hosts', 
-                               'crustal_thickness_limit', 'local_interpolation', 
+                               'crustal_thickness_limit', 'shifts', 'local_interpolation', 
                                'source_origin_file', 'receivers_file',
                                'ref_seismogram_stem', 'ref_seismogram_format'))
 
@@ -134,9 +145,7 @@ def gen_dweights( seis, base_source, datadir,
     
     means = sdr_grid.get_mean_misfits_by_r()
     means /= num.mean(means)
-    
-    dweights = 1./means
-    
+    dweights = num.where(means>0., 1./means, 0.)
     # reset reference seismograms
     ref_seismogram_stem     = pjoin(datadir, ref_seismogram_stem)
     seis.set_ref_seismograms( ref_seismogram_stem, ref_seismogram_format )
@@ -145,6 +154,15 @@ def gen_dweights( seis, base_source, datadir,
     
 gen_dweights.required = set(('datadir',))
 gen_dweights.optional = set(('ref_seismogram_stem', 'ref_seismogram_format'))
+
+def other_plane( strike, dip, rake ):
+    mt = moment_tensor.MomentTensor( strike=strike, dip=dip, rake=rake )
+    both_sdr = mt.both_strike_dip_rake()
+    w = [ sum( [ abs(x-y) for x,y in zip(both_sdr[i], (strike, dip, rake)) ] ) for i in (0,1) ]
+    if w[0]<w[1]:
+        return both_sdr[1]
+    else:
+        return both_sdr[0]
 
 class Step:
     
@@ -211,7 +229,10 @@ class Step:
     def setup_inner_misfit_method(self):
         conf = self.in_config.get_config(keys=Step.inner_misfit_method_params)
         seis = self.seismosizer
-        seis.set_taper(conf['taper'])
+        
+        tapers_by_set = conf['taper']
+        tapers = [ tapers_by_set[i%len(tapers_by_set)] for i in range(len(seis.receivers)) ] 
+        seis.set_taper(tapers)
         seis.set_filter(conf['filter'])
         seis.set_misfit_method(conf['inner_norm'])
         
@@ -235,6 +256,7 @@ class Step:
         self.seismosizer.set_source( source )
         snapshot = self.seismosizer.get_receivers_snapshot()
         self.dump( snapshot, 'snapshot_%s' % ident )
+        self.seismosizer.do_output_seismograms('test', 'sac', "synthetics", 'plain')
         
     def get_snapshot(self, ident, run_id='current'):
         return self.load( ident='snapshot_%s' % ident, run_id=run_id )
@@ -250,7 +272,7 @@ class Step:
         rundir = self.make_rundir_path(run_id)
         filename = pjoin(rundir, '%s.result' % ident)
         f = open(filename, 'w')
-        f.write( string )
+        f.write( '%s\n' % string )
         f.close()
 
     def load(self, ident, run_id='current'):
@@ -272,6 +294,46 @@ class Step:
     
     def plot(self, *args, **kwargs):
         pass
+    
+    def show_in_config(self, run_id='current'):
+        c = self.load('config-in', run_id=run_id)
+        for k in sorted(c.keys()):
+            print k, '=', repr(c[k])
+            
+    def show_out_config(self, run_id='current'):
+        c = self.load('config-out', run_id=run_id)
+        for k in sorted(c.keys()):
+            print k, '=', repr(c[k])
+            
+    def show_active_config(self, run_id='current'):
+        c = self.in_config.get_config()
+        for k in sorted(c.keys()):
+            print k, '=', repr(c[k])
+
+
+class Informer(Step):
+    
+    def __init__(self, workdir, name='weightmaker'):
+        Step.__init__(self, workdir, name)
+        
+    
+    def work(self, **kwargs):
+        self.pre_work(True)        
+        seis = self.seismosizer
+        conf = self.in_config.get_config()
+        
+        distances_m = num.array([ r.distance_m for r in seis.receivers ], dtype=num.float)
+        imin = num.argmin(distances_m)
+        imax = num.argmax(distances_m)
+        
+        def sx(r):
+            return '%10s  %s km   %s deg' % (r.name, gform(r.distance_m/1000.,4), gform(r.distance_deg,3))
+        
+        print 'closest station: %s' % sx(seis.receivers[imin])
+        print 'farest station:  %s' % sx(seis.receivers[imax])
+        
+        self.post_work(True)
+
 
 class WeightMaker(Step):
     
@@ -279,7 +341,7 @@ class WeightMaker(Step):
         Step.__init__(self, workdir, name)
         
         self.required |= Step.inner_misfit_method_params | gen_dweights.required \
-                        | set(('depth', 'moment', 'duration')) 
+                        | set(('depth', 'moment', 'rise_time')) 
         
         self.optional |=  gen_dweights.optional
     
@@ -295,10 +357,94 @@ class WeightMaker(Step):
                                {"depth": float(conf['depth']),
                                 "bord-radius": 0.,
                                 "moment": float(conf['moment']),
-                                "rise-time": float(conf['duration']) } )
+                                "rise-time": float(conf['rise_time']) } )
         
         self.out_config.receiver_weights = gen_dweights(seis, base_source, **conf )
         self.post_work(True)
+
+class Shifter(Step):
+    def __init__(self, workdir, name='weightmaker'):
+        Step.__init__(self, workdir, name)
+        
+        self.required |= set(('taper', 'filter', 'autoshift_range', 'autoshift_limit'))
+                        
+        self.optional |=  set([d2u(p) for p in source.param_names('eikonal')])
+        
+    def work(self, **kwargs):
+        self.pre_work(True)
+        seis = self.seismosizer
+        conf = self.in_config.get_config()
+        
+        sourcetype = 'eikonal'
+        base_source = source.Source( sourcetype )
+        
+        for p in source.param_names(sourcetype):
+            if d2u(p) in conf:
+                base_source[p] = float(conf[d2u(p)])
+        
+        seis.set_source(base_source)
+        
+        tapers_by_set = conf['taper']
+        tapers = [ tapers_by_set[i%len(tapers_by_set)] for i in range(len(seis.receivers)) ]
+        seis.set_taper(tapers)
+        seis.set_filter(conf['filter'])
+        
+        shifts = seis.autoshift_ref_seismograms( conf['autoshift_range'] )
+        fails = []
+        limit = conf['autoshift_limit']
+        for i,s in enumerate(shifts):
+            if s < limit[0] or limit[1] < s:
+                seis.shift_ref_seismograms( [-s], [i+1] )
+                shifts[i] = 0.
+                fails.append(True)
+            else:
+                fails.append(False)
+           
+        save = {}
+        save['receivers'] = seis.receivers
+        save['source_location'] = seis.source_location
+        save['source'] = base_source
+        save['shifts'] = shifts
+        save['fails'] = fails
+        self.dump(save, 'source_receivers')
+        
+        
+        self.out_config.shifts = shifts
+        self.post_work(True)
+        
+    def plot( self, run_id='current' ):
+        self.pre_plot()
+        rundir = self.make_rundir_path(run_id)
+        
+        dirname = pjoin(rundir, 'plots')
+        if os.path.exists( dirname ): 
+            shutil.rmtree( dirname )
+        os.makedirs( dirname )
+        saved = self.load('source_receivers', run_id=run_id)
+        #
+        # Station plot
+        #
+        receivers = saved['receivers']
+        source_location = saved['source_location']
+        source = saved['source']
+        shifts = saved['shifts']
+        fails = saved['fails']
+        
+        lats = num.array( [ r.lat for r in receivers ], dtype='float' )
+        lons = num.array( [ r.lon for r in receivers ], dtype='float' )
+        dists = num.array( [ r.distance_deg for r in receivers ], dtype='float' )
+        rnames = [ re.sub(r'\..*$', '', r.name) for r in receivers ]
+        slat, slon = source_location[:2]
+        station_color = []
+        for s,f in zip(shifts,fails):
+            if f:
+                station_color.append(num.NaN)
+            else:
+                station_color.append(s)
+        
+        station_size = [ 1. ] * len(receivers)
+        plotting.station_plot( slat, slon, lats, lons, rnames, station_color, station_size, 
+                               source, num.amax(dists)*1.05, pjoin(dirname, 'stations.pdf'), {})
 
 class ParamTuner(Step):
      
@@ -308,11 +454,10 @@ class ParamTuner(Step):
         self.params = params
         
         self.required |= Step.outer_misfit_method_params | Step.inner_misfit_method_params \
-                        | set(('duration',)) \
-                        | set(('depth', 'moment', 'strike', 'dip', 'slip_rake')) \
-                        | set([param+'_range' for param in self.params])
+                        | set([param+'_range' for param in self.params]) \
+                        | set(self.params)
                         
-        self.optional |= set(('north_shift', 'east_shift', 'time', 'bord_radius'))
+        self.optional |= set([d2u(p) for p in source.param_names('eikonal')])
         
     def work(self, search=True, forward=True, run_id='current'):
         self.pre_work(search or forward)
@@ -321,14 +466,20 @@ class ParamTuner(Step):
         mm_conf = self.in_config.get_config(keys=Step.outer_misfit_method_params)
         
         sourcetype = 'eikonal'
-        base_source = source.Source( sourcetype, { 'bord-radius': 0.,
-                                                   'rise-time': float(conf['duration']),
-                                                   'moment': float(conf['moment'])  } )
+        base_source = source.Source( sourcetype )
         
-        for p in 'time', 'north-shift', 'east-shift', 'depth', 'strike', 'dip', 'slip-rake', 'bord-radius':
+        for p in source.param_names(sourcetype):
             if d2u(p) in conf:
                 base_source[p] = float(conf[d2u(p)])
-        
+                
+        if 'plane' in conf and conf['plane'] == 2: 
+            strike, dip, slip_rake = float(conf['strike']), float(conf['dip']), float(conf['slip_rake'])
+            strike, dip, slip_rake = other_plane( strike, dip, slip_rake )
+            base_source['strike'] = strike
+            base_source['dip'] = dip
+            base_source['slip-rake'] = slip_rake
+            
+            
         grid_def = []
         for param in self.params:
             oldval = base_source[u2d(param)]
@@ -364,7 +515,7 @@ class ParamTuner(Step):
         rundir = self.make_rundir_path(run_id)
                 
         finder = self.load(self.stepname, run_id=run_id)
-        finder.plot( pjoin(rundir,self.stepname) )
+        finder.plot( pjoin(rundir,'plots') )
         self.post_plot()
         
 class PlaneTuner(Step):
@@ -373,7 +524,7 @@ class PlaneTuner(Step):
         Step.__init__(self, workdir, name)
         
         self.required |= Step.outer_misfit_method_params | Step.inner_misfit_method_params \
-                        | set(('duration',)) \
+                        | set(('rise_time',)) \
                         | set(('time', 'depth', 'moment', 'strike', 'dip', 'slip_rake')) \
                         | set([param+'_range' for param in 'strike', 'dip', 'slip_rake', 'moment', 'rough_moment' ])
         self.optional |= set(('north_shift', 'east_shift'))
@@ -386,10 +537,9 @@ class PlaneTuner(Step):
         mm_conf = self.in_config.get_config(keys=Step.outer_misfit_method_params)
         
         sourcetype = 'eikonal'
-        base_source = source.Source( sourcetype, { 'bord-radius': 0.,
-                                                   'rise-time': float(conf['duration'])  } )
+        base_source = source.Source( sourcetype, { 'bord-radius': 0. } )
         
-        for param in 'time', 'north-shift', 'east-shift', 'depth', 'moment', 'strike', 'dip', 'slip-rake':
+        for param in 'time', 'north-shift', 'east-shift', 'depth', 'moment', 'strike', 'dip', 'slip-rake', 'rise-time':
             if d2u(param) in conf:
                 base_source[param] = float(conf[d2u(param)])
         
@@ -457,20 +607,110 @@ class PlaneTuner(Step):
         self.pre_plot()
         rundir = self.make_rundir_path(run_id)
         
-        for substep in 'rough_moment', self.stepname:
-            finder = self.load(substep, run_id=run_id)
-            finder.plot( pjoin(rundir, substep) )
+        finder = self.load('rough_moment', run_id=run_id)
+        finder.plot( pjoin(rundir, 'plots_rough_moment') )
+        
+        finder = self.load(self.stepname, run_id=run_id)
+        finder.plot( pjoin(rundir, 'plots') )
+        
+        self.post_plot()
+    
+    
+class EnduringPointSource(Step):
+    
+    def __init__(self, workdir, name='extension'):
+        Step.__init__(self, workdir, name)
+        
+        self.params = ('rise_time',)
+        
+        self.required |= Step.outer_misfit_method_params | Step.inner_misfit_method_params \
+                        | set([param+'_range' for param in self.params]) \
+                        | set(self.params)
+                        
+        self.optional |= set([d2u(p) for p in source.param_names('eikonal')])
+    
+    def work(self, search=True, forward=True, run_id='current'):
+        self.pre_work(search or forward)
+        seis = self.seismosizer
+        conf = self.in_config.get_config()
+        mm_conf = self.in_config.get_config(keys=Step.outer_misfit_method_params)
+        
+        sourcetype = 'eikonal'
+        
+        base_source = source.Source( sourcetype, {} )
+    
+        for p in source.param_names(sourcetype):
+            if d2u(p) in conf:
+                base_source[p] = float(conf[d2u(p)])
+                
+        grid_def = []
+        for param in self.params:
+            oldval = base_source[u2d(param)]
+            descr = conf[param+'_range']            
+            grid_def.append(grid_defi(u2d(param),oldval,descr))
+            
+        if search or forward: self.setup_inner_misfit_method()
+        if search:
+            self.setup_inner_misfit_method()
+            finder = MisfitGrid( base_source, grid_def )
+            finder.compute(seis)
+        else:
+            finder = self.load(self.stepname, run_id=run_id)
+            
+        finder.postprocess(**mm_conf)
+        self.dump(finder, self.stepname)
+        
+        stats = finder.stats
+        for param in self.params:
+            altparam = param
+            if param == 'rise_time': altparam = 'duration'
+            str_result = stats[u2d(param)].str_best_and_confidence()
+            logging.info(str_result)
+            base_source[u2d(param)] = stats[u2d(param)].best        
+        
+        logging.info('reweighting')
+        xweights = num.where(finder.misfits_by_r != 0.,  1./finder.misfits_by_r, 0.)
+        
+        mm_conf_copy = copy.copy(mm_conf)
+        mm_conf_copy['receiver_weights'] = xweights*mm_conf['receiver_weights']
+        finder.postprocess(**mm_conf_copy)
+        self.dump(finder, self.stepname)
+        
+        stats = finder.stats
+        for param in self.params:
+            altparam = param
+            if param == 'rise_time': altparam = 'duration'
+            str_result = stats[u2d(param)].str_best_and_confidence()
+            logging.info(str_result)
+            self.result(str_result, altparam )
+            base_source[u2d(param)] = stats[u2d(param)].best
+            self.out_config.__dict__[altparam] = stats[u2d(param)].best
+        
+        self.out_config.receiver_weights = mm_conf_copy['receiver_weights']
+        self.out_config.best_point_source = base_source
+        
+        if forward:
+            self.snapshot( base_source, 'best' )
+            
+        self.post_work(search or forward)
+        
+    def plot( self, run_id='current' ):
+        self.pre_plot()
+        rundir = self.make_rundir_path(run_id)
+        
+        finder = self.load(self.stepname, run_id=run_id)
+        finder.plot( pjoin(rundir, 'plots') )
+        
         self.post_plot()
         
 class ExtensionFinder(Step):
-    
-    
     
     def __init__(self, workdir, name='extension'):
         Step.__init__(self, workdir, name)
         
         self.required |= Step.outer_misfit_method_params | Step.inner_misfit_method_params \
                         | set(('strike', 'dip', 'slip_rake')) \
+                        | set(('best_point_source',)) \
                         | set(('time', 'depth', 'moment', 'rise_time', 'rel_rupture_velocity')) \
                         | set(('maxradius', 'delta', 'rel_rupture_velocity', 'plane')) \
                           
@@ -483,13 +723,8 @@ class ExtensionFinder(Step):
         mm_conf = self.in_config.get_config(keys=Step.outer_misfit_method_params)
         
         strike, dip, slip_rake = float(conf['strike']), float(conf['dip']), float(conf['slip_rake'])
-        mt = moment_tensor.MomentTensor( strike=strike, dip=dip, rake=slip_rake )
-        both_sdr = mt.both_strike_dip_rake()
-        w = [ sum( [x-y for x,y in zip(both_sdr[i], (strike, dip, slip_rake)) ] ) for i in (0,1) ]
-        if w[0]<w[1]:
-            strike, dip, slip_rake = both_sdr[conf['plane']-1]
-        else:
-            strike, dip, slip_rake = both_sdr[2-conf['plane']]
+        if 'plane' in conf and conf['plane'] == 2:
+            strike, dip, slip_rake = other_plane( strike, dip, slip_rake )
                 
         sourcetype = 'eikonal'
         
@@ -508,10 +743,10 @@ class ExtensionFinder(Step):
         radius_grid         = ( 'bord-radius', 0., maxradius, delta ) 
         nukl_shift_x_grid   = ( 'nukl-shift-x', -maxradius, maxradius, delta )
         nukl_shift_y_grid   = ( 'nukl-shift-y', -maxradius, maxradius, delta )
-        
+                
         if search or forward: self.setup_inner_misfit_method()
         if search:
-            finder = MisfitGrid( base_source, [radius_grid, nukl_shift_x_grid, nukl_shift_y_grid] )
+            finder = MisfitGrid( base_source, [radius_grid, nukl_shift_x_grid, nukl_shift_y_grid], ref_source=conf['best_point_source'] )
             finder.compute(seis)
         else:
             finder = self.load(self.stepname, run_id=run_id)
@@ -537,7 +772,7 @@ class ExtensionFinder(Step):
         rundir = self.make_rundir_path(run_id)
         
         finder = self.load(self.stepname, run_id=run_id)
-        finder.plot( pjoin(rundir,self.stepname) )
+        finder.plot( pjoin(rundir, 'plots') )
         self.post_plot()
     
 class TracePlotter(Step):
@@ -570,7 +805,7 @@ class TracePlotter(Step):
                 compos.update(rec.components)
             
         ordered_compos = []
-        for c in 'wesndu':
+        for c in 'wesnducalr':
             if c in compos:
                 ordered_compos.append(c)
                 
@@ -593,6 +828,7 @@ class TracePlotter(Step):
                 data_by_compo = []
                 data_range = [None,None]
                 x_range = [None,None]
+                
                 for c in ordered_compos:
                     data = []
                     for r in recs:
@@ -614,6 +850,9 @@ class TracePlotter(Step):
                         
                     data_by_compo.append((c, data))
                 
+                if None in data_range or None in x_range:
+                    continue
+                
                 conf = {}
                 proto = recs[0]
                 conf['title'] = 'Receiver %i' % (irec+1)
@@ -625,7 +864,7 @@ class TracePlotter(Step):
                     
                 filename = pjoin(dirname, '%s_%i.pdf' % (typ,irec+1))
                 
-                plotting.seismogram_plot(data_by_compo, filename, conf_overrides=conf)
+                plotting.seismogram_plot(data_by_compo, filename, conf_overrides=conf, are_spectra = typ == 'spectrum')
                 if config.show_progress: pbar.update(irec+1)
                 filez.append(filename)
             
@@ -654,9 +893,15 @@ class MisfitGrid:
     
     def __init__( self, base_source,
                         param_ranges,
-                        source_constraints=None):
+                        source_constraints=None,
+                        ref_source=None):
         
         self.base_source = copy.copy(base_source)
+        if ref_source:
+            self.ref_source = copy.copy(ref_source)
+        else:
+            self.ref_source = copy.copy(base_source)
+            
         self.param_ranges = param_ranges
         self.sources = self.base_source.grid( self.param_ranges, 
                                               source_constraints=source_constraints)
@@ -666,17 +911,22 @@ class MisfitGrid:
         # will be set by compute()
         self.misfits_by_src = None
         self.norms_by_src = None
+        self.ref_misfits_by_src = None
+        self.ref_norms_by_src = None        
         self.receivers = None
         self.nreceivers = None
         
         # will be set by postprocess()
         self.best_source = None
         self.misfits_by_s = None
+        self.misfits_by_r = None
+        self.ref_misfits_by_r = None
+        self.variability_by_r = None
         self.bootstrap_sources = None
         self.stats = None
         
     def compute(self, seis):
-        '''Let seismosizer do the calculations'''
+        '''Let seismosizer calculate the trace misfits.'''
         
         nsources = len(self.sources)
         nreceivers = len(seis.receivers)
@@ -686,6 +936,8 @@ class MisfitGrid:
         # results gathered by (source,receiver,component)
         misfits_by_src = num.zeros( (nsources, nreceivers, ncomponents), dtype=num.float)
         norms_by_src = num.zeros(  (nsources, nreceivers, ncomponents), dtype=num.float)
+        ref_misfits_by_src = num.zeros( (1, nreceivers, ncomponents), dtype=num.float)
+        ref_norms_by_src = num.zeros(  (1, nreceivers, ncomponents), dtype=num.float)
         
         if config.show_progress:
             if len(self.sourceparams) == 1:
@@ -704,43 +956,79 @@ class MisfitGrid:
                 seis.make_misfits_for_source( source )
           
                 for ireceiver, receiver in enumerate(seis.receivers):
-                    for icomp, comp in enumerate(receiver.components):
-                        misfits_by_src[isource, ireceiver, icomp] = receiver.misfits[icomp]
-                        norms_by_src[isource, ireceiver, icomp] = receiver.misfit_norm_factors[icomp]
+                    if receiver.enabled:
+                        for icomp, comp in enumerate(receiver.components):
+                            misfits_by_src[isource, ireceiver, icomp] = receiver.misfits[icomp]
+                            norms_by_src[isource, ireceiver, icomp] = receiver.misfit_norm_factors[icomp]
                         
             except seismosizer.SeismosizersReturnedErrors:
                 failings.append(isource)
             
             if config.show_progress: pbar.update(isource+1)
-            
+                        
         if config.show_progress: pbar.finish()
-        
+              
+        # reference misfits
+        seis.make_misfits_for_source( self.ref_source )
+        for ireceiver, receiver in enumerate(seis.receivers):
+             for icomp, comp in enumerate(receiver.components):
+                 ref_misfits_by_src[0, ireceiver, icomp] = receiver.misfits[icomp]
+                 ref_norms_by_src[0, ireceiver, icomp] = receiver.misfit_norm_factors[icomp]
+                 
+                 
         self.misfits_by_src = misfits_by_src
         self.norms_by_src = norms_by_src
+        self.ref_misfits_by_src = ref_misfits_by_src
+        self.ref_norms_by_src = ref_norms_by_src
+        
         self.nreceivers = nreceivers
         self.receivers = seis.receivers
+        self.source_location = seis.source_location
         
         self.best_source = None
         self.misfits_by_s = None
+        self.misfits_by_r = None
+        self.ref_misfits_by_r = None
+        self.variability_by_r = None
         self.bootstrap_sources = None
         self.stats = None
     
     def postprocess(self, **outer_misfit_config):
-        self.best_source, self.misfits_by_s = self._best_source(**outer_misfit_config)
+        '''Combine trace misfits to global misfits, find best source, make statistics.'''
+        
+        self.best_source, self.misfits_by_s, self.misfits_by_r, self.variability_by_r = self._best_source(return_misfits_by_r=True, **outer_misfit_config)
+        
+        self.ref_misfits_by_r = self._ref_misfits_by_r(**outer_misfit_config)
+        
         self.bootstrap_sources = self._bootstrap(**outer_misfit_config)
         stepsizes = [ x[3] for x in self.param_ranges ]
         self.stats = self._stats(self.param_ranges, self.best_source, self.bootstrap_sources)
     
     def get_mean_misfits_by_r(self):
+        '''Get mean raw misfits by receiver, e.g. to auto-create weights.''' 
         mean_misfits_by_r = num.zeros( self.nreceivers, dtype=num.float )
         for irec in range(self.nreceivers):
-            mean_misfits_by_r[irec] = num.sum(self.misfits_by_src[:,irec,:])/(len(self.receivers[irec].components)*len(self.sources))
-            
+            ncomps = len(self.receivers[irec].components)
+            if ncomps != 0:
+                x = num.sum(self.misfits_by_src[:,irec,:]) /( ncomps*len(self.sources))
+            else:
+                x = -1.0
+            mean_misfits_by_r[irec] = x
         return mean_misfits_by_r
         
-    def _best_source(self, **outer_misfit_config):
-        misfits_by_s = self._make_global_misfits(**outer_misfit_config)
-        return self.sources[num.argmin(misfits_by_s)], misfits_by_s
+    def _best_source(self, return_misfits_by_r=False, **outer_misfit_config):
+        misfits_by_s, misfits_by_sr = self._make_global_misfits( **outer_misfit_config)
+        ibest = num.argmin(misfits_by_s)
+        if not return_misfits_by_r:
+            return self.sources[ibest], misfits_by_s
+        else:
+            # misfit variability by receiver
+            misfits_varia_by_r = num.std(misfits_by_sr,0)
+            return self.sources[ibest], misfits_by_s, misfits_by_sr[ibest,:], misfits_varia_by_r
+        
+    def _ref_misfits_by_r(self, **outer_misfit_config):
+        misfits_by_s, misfits_by_sr = self._make_global_misfits(process_ref_source=True, **outer_misfit_config)
+        return misfits_by_sr[0,:]
         
     def _bootstrap(self, bootstrap_iterations=1000, **outer_misfit_config):
         bootstrap_sources = []
@@ -783,7 +1071,14 @@ class MisfitGrid:
             
         return results
         
-    def _make_global_misfits(self, receiver_weights=1., outer_norm='l2norm', anarchy=False, bootstrap=False, **kwargs):
+    def _make_global_misfits(self, process_ref_source=False, receiver_weights=1., outer_norm='l2norm', anarchy=False, bootstrap=False, **kwargs):
+        
+        if process_ref_source:
+            misfits_by_src = self.ref_misfits_by_src
+            norms_by_src = self.ref_norms_by_src
+        else:
+            misfits_by_src = self.misfits_by_src
+            norms_by_src = self.norms_by_src
         
         if isinstance(receiver_weights, float):
             rweights = receiver_weights
@@ -796,26 +1091,31 @@ class MisfitGrid:
             bweights[:len(bweights_x)] = bweights_x[:]
         
         if outer_norm == 'l1norm':
-            misfits_by_sr = num.sum(self.misfits_by_src,2)
-            norms_by_sr   = num.sum(self.norms_by_src,2)
+            misfits_by_sr = num.sum(misfits_by_src,2)
+            norms_by_sr   = num.sum(norms_by_src,2)
             
             if anarchy:
-                rweights /= num.where( norms_by_sr != 0., norms_by_sr, -1.)
-                rweights = num.maximum(rweights, 0.)
+                xrweights = num.zeros(norms_by_sr.shape, dtype=float)
+                xrweights[:,:] = rweights
+                xrweights /= num.where( norms_by_sr != 0., norms_by_sr, -1.)
+                rweights = num.maximum(xrweights, 0.)
             
             if bootstrap:
                 rweights *= bweights
             
-            ms = num.sum( rweights*misfits_by_sr, 1 )
-            ns = num.sum( rweights*norms_by_sr, 1 )
+            misfits_by_sr *= rweights
+            norms_by_sr *= rweights
+            
+            ms = num.sum( misfits_by_sr, 1 )
+            ns = num.sum( norms_by_sr, 1 )
             
             misfits_by_s  = num.where(ns > 0., ms/ns, -1.)
             maxm = num.amax(misfits_by_s)
             misfits_by_s = num.where(misfits_by_s<0, maxm, misfits_by_s)
             
         elif outer_norm == 'l2norm':
-            misfits_by_sr = num.sqrt(num.sum(self.misfits_by_src**2,2))
-            norms_by_sr   = num.sqrt(num.sum(self.norms_by_src**2,2))
+            misfits_by_sr = num.sqrt(num.sum(misfits_by_src**2,2))
+            norms_by_sr   = num.sqrt(num.sum(norms_by_src**2,2))
             
             if anarchy:
                 rweights /= num.where( norms_by_sr != 0., norms_by_sr, -1.)
@@ -824,8 +1124,11 @@ class MisfitGrid:
             if bootstrap:
                 rweights *= num.sqrt(bweights)
             
-            ms = num.sum( (rweights*misfits_by_sr)**2, 1 )
-            ns = num.sum( (rweights*norms_by_sr)**2, 1 )
+            misfits_by_sr *= rweights
+            norms_by_sr *= rweights
+            
+            ms = num.sum( (misfits_by_sr)**2, 1 )
+            ns = num.sum( (norms_by_sr)**2, 1 )
             
             misfits_by_s  = num.where(ns > 0., num.sqrt(ms/ns), -1.)
             maxm = num.amax(misfits_by_s)
@@ -834,7 +1137,7 @@ class MisfitGrid:
         else:
             raise Exception('unknown norm method: %s' % outer_norm)
         
-        return misfits_by_s
+        return misfits_by_s, misfits_by_sr
         
     def plot(self, dirname):
         
@@ -949,5 +1252,76 @@ class MisfitGrid:
                                         pjoin(dirname, 'misfogram-%s-%s.pdf' % (xparam, yparam)),
                                         conf )
                                         
-                                        
-                                        
+        #
+        # Station plot
+        #
+        lats = num.array( [ r.lat for r in self.receivers ], dtype='float' )
+        lons = num.array( [ r.lon for r in self.receivers ], dtype='float' )
+        dists = num.array( [ r.distance_deg for r in self.receivers ], dtype='float' )
+        rnames = [ re.sub(r'\..*$', '', r.name) for r in self.receivers ]
+        slat, slon = self.source_location[:2]
+        station_misfits = self.misfits_by_r-self.ref_misfits_by_r
+        #station_varia = self.variability_by_r / num.sum(self.variability_by_r) * len(self.receivers)
+        station_varia = self.misfits_by_r / num.sum(self.misfits_by_r) * len(self.receivers)
+        plotting.station_plot( slat, slon, lats, lons, rnames, station_misfits, station_varia, 
+                               best_source, num.amax(dists)*1.05, pjoin(dirname, 'stations.pdf'), {})
+        
+
+def progress_off(option, opt_str, value, parser):
+    config.show_progress = False
+
+def main(steps):
+    
+    from optparse import OptionParser
+    parser = OptionParser()
+    parser.add_option('--loglevel', action='store', dest='loglevel', type='choice', choices=('info', 'debug'), default='info')
+    parser.add_option('--no-progress', action='callback', callback=progress_off)
+    parser.add_option('--no-search', action='store_false', dest='do_search', default=True)
+    parser.add_option('--no-forward', action='store_false', dest='do_forward', default=True)
+    parser.add_option('--run-id', action='store', dest='run_id', type='string', default='current')
+    
+    (options, args) = parser.parse_args()
+    
+    levels = { 'info' : logging.INFO, 'debug' : logging.DEBUG }
+    logging.basicConfig( level = levels[options.loglevel], format='%(relativeCreated)s: %(message)s' )
+    if options.loglevel == 'debug': progress_off
+   
+    commands = 'work', 'replot', 'show-steps', 'show-in-config', 'show-out-config', 'show-active-config'
+    try:
+        command = args.pop(0)
+        
+        assert(command in  commands)
+    except:
+        parser.error('available commands are: '+' '.join(commands))
+    
+    if command == 'show-steps':
+        for step in steps:
+            print step.stepname
+        sys.exit()
+    
+    stepnames_all = [ step.stepname for step in steps ]
+    
+    if args:
+        stepnames_to_do = args
+    else:
+        stepnames_to_do = list(stepnames_all)
+    
+    for stepname in stepnames_to_do:
+        if stepname not in stepnames_all:
+            parser.error('unknown stepname: %s\n' % stepname + 'available stepnames are: '+' '.join(stepnames_all))
+    
+    for step in steps:
+        if step.stepname in stepnames_to_do:
+            if command == 'work':
+                step.work(search=options.do_search, forward=options.do_forward, run_id=options.run_id)
+                step.plot(run_id=options.run_id)
+            if command == 'replot':
+                step.plot(run_id=options.run_id)
+            if command == 'show-in-config':
+                step.show_in_config(run_id=options.run_id)
+            if command == 'show-out-config':
+                step.show_out_config(run_id=options.run_id)
+            if command == 'show-active-config':
+                step.show_active_config(run_id=options.run_id)
+    
+    

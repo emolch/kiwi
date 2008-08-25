@@ -25,12 +25,13 @@ class Source:
             sourceparams_float = [ float(s) for s in sourceparams_str.split() ]
             for i,sparam in enumerate(param_names(self._sourcetype)):
                 self._params[sparam] = sourceparams_float[i]
-        
+        else:
+            for sparam in param_names(self._sourcetype):
+                self._params[sparam] = source_infos(self._sourcetype)[sparam].default
         if sourceparams is None:
             sourceparams = {}
             
-        for sparam in param_names(self._sourcetype):
-            self._params[sparam] = source_infos(self._sourcetype)[sparam].default
+        
         
         self.update( sourceparams )
     

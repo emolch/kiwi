@@ -143,7 +143,8 @@ def autoplot( *args, **kwargs ):
     subprocess.call( args )
     
     shutil.rmtree(tempdir)
-    
+
+
 if __name__ == '__main__':
     import random
     for i in range(0,15):
@@ -154,4 +155,5 @@ if __name__ == '__main__':
         print '|%s|' % gform(n)
     print '|%s|' % gform(0.)
     print '|%s|' % gform(0.1)
-    
+
+

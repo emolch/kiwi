@@ -3,9 +3,9 @@ import sys
 import logging
 from util import gmt_color
 
-logging.basicConfig(level=logging.INFO,
-                    format='%(relativeCreated)s: %(message)s' )
+
 show_progress = True
+default_loglevel = logging.INFO
 
 source_info_prog = 'source_info'
 gfdb_info_prog = 'gfdb_info'
@@ -57,12 +57,16 @@ graph_colors = [ tango_colors[x] for x in  [ 'skyblue2', 'scarletred2', 'chamele
 plot_background_color = (255,255,255)
 
 symbol_colors = graph_colors
-symbol_markers = [ 'c5p', 'd5p', 'r5p', 't5p', 'i5p' ]
+symbol_markers = [ 'c5p', 'd5p', 't5p', 'i5p' ]
 
 def taco(s):
     return gmt_color(tango_colors[s])
 
 symbol_best_result = '-Sa20p  -G%s -W1p/%s' % (taco('scarletred1'), taco('scarletred3'))
+
+#
+# Plot configurations using autoplot
+#
 
 misfit_plot_1d_config = dict(
     fit = True,
@@ -123,6 +127,31 @@ seismogram_plot_config = dict(
     xunit = 's',
     xautoscale = 'min-max',
 )
+
+spectrum_plot_config = dict(
+    fit = True,
+    width    = 4,
+    yspacing = 0.1,
+    symbols_SGW = ['-W1.5p/%s' % gmt_color(c) for c in zebra ],
+    yannotevery = 0,
+    yfunit = 'off',
+    ylabelofs = 0.15,
+    xlabel = 'Frequency',
+    xunit = 'Hz',
+    xautoscale = 'min-max',
+)
+
+
+# 
+# plot configurations using the gmt module
+#
+
+station_plot_config = dict(
+    width = 6.,
+    height = 6.,
+    margins = (0.2,0.2,0.2,0.2),
+)
+
 
 class Config:
     def __init__(self, *configs):
