@@ -227,7 +227,7 @@ module orthodrome
         h2 = (3.*r+1.)/(2.*s)
         
         distance_accurate50m = d * (1.+ earth_oblateness * h1 * sin(f)**2 * cos(g)**2 - &
-                                           earth_oblateness * h2 * cos(f)**2 * sin(g)**2)
+                                        earth_oblateness * h2 * cos(f)**2 * sin(g)**2)
         
     end function
     

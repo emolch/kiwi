@@ -32,13 +32,13 @@ module comparator
     
     include 'fftw3.f'
     
-    integer, public, parameter :: n_comparator_norms = 4
+    integer, public, parameter :: n_comparator_norms = 5
     
     integer, public, parameter :: L2NORM = 1
     integer, public, parameter :: L1NORM = 2
     integer, public, parameter :: AMPSPEC_L2NORM = 3
     integer, public, parameter :: AMPSPEC_L1NORM = 4
-    
+    integer, public, parameter :: SCALAR_PRODUCT = 5
 
   ! processing ids
     integer, parameter, public :: PLAIN = 1
@@ -138,6 +138,7 @@ module comparator
             comparator_norm_names(2) = "l1norm"
             comparator_norm_names(3) = "ampspec_l2norm"
             comparator_norm_names(4) = "ampspec_l1norm"
+            comparator_norm_names(5) = "scalar_product"
         end if
     
     end subroutine
@@ -469,7 +470,7 @@ module comparator
                 
     end subroutine
 
-    pure function scalar_product( a, b, dt, fa, fb ) result(prod)
+    pure function scalar_product_2( a, b, dt, fa, fb ) result(prod)
         real, dimension(:), intent(in) :: a,b
         real, intent(in) :: dt, fa, fb
         real :: prod
@@ -686,7 +687,11 @@ module comparator
             case (L1NORM)
                 norm = probes_norm_timedomain( a, b, l1norm_func )
                 return
-            
+
+            case (SCALAR_PRODUCT)
+                norm = probes_norm_timedomain( a, b, scalar_product_2 )
+                return
+
             case (AMPSPEC_L2NORM)
                 norm = probes_norm_frequencydomain( a, b, l2norm_func )
                 return
@@ -723,6 +728,10 @@ module comparator
                 norm = probe_norm_timedomain( a, l1norm_func_1 )
                 return
             
+            case (SCALAR_PRODUCT)
+                norm = probe_norm_timedomain( a, scalar_product_1 )
+                return
+
             case (AMPSPEC_L2NORM)
                 norm = probe_norm_frequencydomain( a, l2norm_func_1 )
                 return
@@ -741,7 +750,7 @@ module comparator
     function probes_scalar_product( a, b ) result(prod)
         type(t_probe), intent(inout) :: a, b
         real :: prod
-        prod = probes_norm_timedomain( a, b, scalar_product )
+        prod = probes_norm_timedomain( a, b, scalar_product_2 )
     end function
     
     subroutine probes_windowed_cross_corr( a, b, shiftrange, cross_corr )

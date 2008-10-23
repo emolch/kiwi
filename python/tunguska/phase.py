@@ -67,7 +67,7 @@ class Timing:
         
 class Taper:
     def __init__(self, timings=None,
-                       phases=None, offsets=None):
+                       phases=None, offsets=None, amplitude=1.):
         '''usage:
            t = Taper( timings=(Timing('P',-10),Timing('P', 0), ...)
            t = Taper( phases=('S','Sn'), offsets=(-10,0,40,50) )'''
@@ -77,12 +77,13 @@ class Taper:
             
         assert(len(timings) == 4)
         self.timings = timings
+        self.amplitude = amplitude
         
     def __call__(self, distance):
         '''Returns representation which can be used for Seismosizer.do_set_misfit_taper().'''
         return ( self.timings[0](distance), 0.,
-                 self.timings[1](distance), 1.,
-                 self.timings[2](distance), 1.,
+                 self.timings[1](distance), self.amplitude,
+                 self.timings[2](distance), self.amplitude,
                  self.timings[3](distance), 0. )
 
     def __repr__(self):

@@ -58,14 +58,17 @@ class Receiver:
     
     
 
-def load_table( filename, components ):
+def load_table( filename, components=None ):
     receivers = []
     
     file = open(filename, "r")
     irec = 0
     for line in file:        
         if line.lstrip().startswith('#') or line.strip() == '': continue
-        r = Receiver( from_string=line, components=components[irec%len(components)] )
+        if components is not None:
+            r = Receiver( from_string=line, components=components[irec%len(components)] )
+        else:
+            r = Receiver( from_string=line )
         receivers.append(r)
         irec += 1
     

@@ -296,7 +296,6 @@ class GMT:
         args = [ command ]
         args.extend( options )
         args.append( '+'+self.gmt_config_filename )
-                
         p = subprocess.Popen( args, stdin=subprocess.PIPE, stdout=subprocess.PIPE )
         out = p.stdin
         if data is not None:

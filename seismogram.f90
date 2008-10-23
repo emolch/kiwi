@@ -140,9 +140,9 @@ module seismogram
             m(:) = source%centroids(icentroid)%m
             
             rshift = time/greensf%dt
-            
             call approx_differential_azidist( dnorth, deast, azi_orig, bazi_orig, dist_orig, &
                                               azi, bazi, dist )
+            
             call make_weights( real(azi), m, f )
             
             

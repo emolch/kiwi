@@ -33,6 +33,7 @@ module parameterized_source
     
     public psm_destroy
     public psm_set_default_constraints
+    public psm_set_constraints    
     public psm_set_crustal_thickness_limit
     public psm_get_crustal_thickness
     public psm_point_in_constraints
@@ -133,6 +134,31 @@ module parameterized_source
         self%constraints(2)%normal = (/0.,0.,1./)
         
     end subroutine
+
+    subroutine psm_set_constraints( self, points, normals )
+
+        type(t_psm), intent(inout)       :: self
+        real, dimension(:,:), intent(in) :: points
+        real, dimension(:,:), intent(in) :: normals
+        
+        integer :: i,n
+
+        n = size(points,2)
+
+        if (allocated(self%constraints)) deallocate(self%constraints)
+        allocate( self%constraints(n) )
+
+        do i=1,n
+            self%constraints(i)%point(:) = points(:,i)
+            self%constraints(i)%normal(:) = normals(:,i)
+
+            write (stderr,*) self%constraints(i)%point(:), self%constraints(i)%normal(:)
+        end do
+        
+        
+
+    end subroutine
+
 
     pure function psm_point_in_constraints( self, point )
         type(t_psm), intent(in)  :: self

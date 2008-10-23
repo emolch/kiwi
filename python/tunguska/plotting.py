@@ -91,9 +91,9 @@ def misfogram_plot_2d( data, filename, conf_overrides ):
 def seismogram_plot( data_by_component, filename, conf_overrides, are_spectra=False ):
     
     if are_spectra:
-        conf = dict(**config.seismogram_plot_config)
-    else:
         conf = dict(**config.spectrum_plot_config)
+    else:
+        conf = dict(**config.seismogram_plot_config)
         
     conf.update( conf_overrides )
     
@@ -130,7 +130,7 @@ def seismogram_plot( data_by_component, filename, conf_overrides, are_spectra=Fa
         args = tuple(data) + (filename,)
         util.autoplot( *args, **conf )
         
-def station_plot( slat, slon, lat, lon, rnames, station_color, station_size, source, maxdist, filename, conf_overrides ):
+def station_plot( slat, slon, lat, lon, rnames, station_color, station_size, source, maxdist, filename, conf_overrides, zexpand=1.0, nsets=1):
     conf = dict(**config.station_plot_config)
     conf.update( conf_overrides )
     
@@ -145,22 +145,28 @@ def station_plot( slat, slon, lat, lon, rnames, station_color, station_size, sou
     # shift source location slightly, so that projection does not crash...
     plot.psmeca( rows=[[float(slon+0.01), float(slat+0.01), 1., source['strike'], source['dip'], source['slip-rake'], 6., 0.,0., '' ]],
                  S='a0.3' )
-    
-    mi = num.amin(station_color)
-    ma = num.amax(station_color)
-    ma = max(abs(mi),abs(ma))
+                 
+    mi = num.nanmin(station_color)
+    ma = num.nanmax(station_color)
+    ma = max(abs(mi),abs(ma)) * zexpand 
     mi = -ma
     inc = (ma-mi)/128.
     
     f_cpt, fn_cpt = plot.tempfile()
     plot.makecpt( C='polar', T=(mi,ma,inc), Z=True, output=f_cpt )
-    plot.psxy( columns=(lon,lat, station_color, num.sqrt(station_size)/5. ), C=fn_cpt, S='t', W='1p/black', G='white' )
+    
+    plot.psxy( columns=(lon[::nsets],lat[::nsets], station_color[::nsets], num.sqrt(station_size[::nsets])/1.5 ),
+               C=fn_cpt, S='klflag', W='1p/black', G='white', N=True )
+    if nsets == 2:
+        plot.psxy( columns=(lon[1::nsets],lat[1::nsets], station_color[1::nsets], num.sqrt(station_size[1::nsets])/1.5 ), 
+                   C=fn_cpt, S='krflag', W='1p/black', G='white', N=True )
+    
     nr = len(lat)
     size = [9]*nr
     angle = [0]*nr
     fontno = [1]*nr
     justify = ['MC']*nr
-    plot.pstext( columns=(lon,lat,size,angle,fontno,justify,rnames), D=(0.,-0.2) )
+    plot.pstext( columns=(lon,lat,size,angle,fontno,justify,rnames), D=(0.,-0.1), N=True )
     
     
     plot.save( filename )

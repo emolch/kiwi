@@ -19,7 +19,6 @@
 module minimizer_engine
 
   ! this thing represents a source - greensfunction - receiver - seismogram - misfit setup
-  
     use constants
     use util
     use unit
@@ -43,6 +42,7 @@ module minimizer_engine
     public set_spacial_undersampling
     public set_ref_seismograms
     public set_source_location
+    public set_source_constraints
     public set_source_crustal_thickness_limit
     public get_source_crustal_thickness
     public set_source_params
@@ -136,6 +136,7 @@ module minimizer_engine
 
         xundersample = xunder
         zundersample = zunder
+        call dirtyfy_database()
 
     end subroutine
     
@@ -391,6 +392,16 @@ module minimizer_engine
         source_location_inited = .true.
         call dirtyfy_source_location()
         
+    end subroutine
+
+    subroutine set_source_constraints( points, normals )
+    
+        real, dimension(:,:), intent(in) :: points
+        real, dimension(:,:), intent(in) :: normals
+
+        call psm_set_constraints( psm, points, normals )
+        call dirtyfy_source()
+
     end subroutine
 
     subroutine set_source_crustal_thickness_limit( thickness_limit )

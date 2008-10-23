@@ -43,6 +43,7 @@ class SeismosizerBase:
                 'set_source_params',
                 'set_source_params_mask',
                 'set_source_subparams',
+                'set_source_constraints',
                 'set_effective_dt',
                 'set_misfit_method',
                 'set_misfit_filter',
@@ -118,13 +119,12 @@ class SeismosizerBase:
             runners.append(p)
             
         # gather answers
-        seismosizer_went_mad = False
         answers = {}
         errors = {}
+        fatal = False
         while runners:
             p = runners.pop(0)
             try:
-                
                 answer = p.poll()
                 answers[p.tid] = answer
                 logging.debug('answer (%i): %s' % (p.tid, answer))
@@ -136,9 +136,13 @@ class SeismosizerBase:
                 errors[p.tid] = error.args[1]
             
             except ThreadIsDead:
-                sys.exit('shit happens!')
-            
+                logging.warn('Lost seismosizer process %s' % p.tid)
+                fatal = True
+                
             time.sleep(pollers_sleep)
+            
+        if fatal:
+            sys.exit('shit happens!')
             
         if errors:
             raise SeismosizersReturnedErrors(errors);
@@ -218,22 +222,26 @@ class SeismosizerProcess(threading.Thread):
         self.the_end_has_come = True
             
     def run(self):
-        while True:
-            retcode = self.p.poll()
-            if retcode is not None: 
-                raise SeismosizerDied('Seismosizer died with an exit status of %i' % retcode)
-            try:
-                if self.the_end_has_come: break
-                cmd = self.commands.get_nowait()
-                if type(cmd) is str:
-                    cmd = [cmd]
-                answer = self._do(cmd)
-                self.answers.put(answer)
-            except SeismosizerReturnedError, inst:
-                self.answers.put(inst)
-            except Queue.Empty:
-                time.sleep(runners_sleep)
-            
+        try:
+            while True:
+                retcode = self.p.poll()
+                if retcode is not None: 
+                    raise SeismosizerDied('Seismosizer %i died or has been killed. Exit status: %i' % (self.tid, retcode))
+                try:
+                    if self.the_end_has_come: break
+                    cmd = self.commands.get_nowait()
+                    if type(cmd) is str:
+                        cmd = [cmd]
+                    answer = self._do(cmd)
+                    self.answers.put(answer)
+                except SeismosizerReturnedError, inst:
+                    self.answers.put(inst)
+                except Queue.Empty:
+                    time.sleep(runners_sleep)
+                    
+        except SeismosizerDied, e:
+            logging.warn( e )
+        
         self.to_p.close()
         self.from_p.close()
         self.p.wait()
@@ -289,6 +297,7 @@ class Seismosizer(SeismosizerBase):
                       'set_source_params',
                       'set_source_params_mask',
                       'set_source_subparams',
+                      'set_source_constraints',
                       'set_effective_dt',
                       'set_synthetics_factor',
                       'output_seismograms',
@@ -340,6 +349,7 @@ class Seismosizer(SeismosizerBase):
         assert( 1 <= irec <= len(self.receivers) )
         if 'where' in kwargs: raise Exception("Can't use kwarg 'where' in switch_receiver")
         kwargs['where'] = self.receivers[irec-1].proc_id
+        args = (onoff,)
         self.do_switch_receiver( irec, *args, **kwargs)
         self.receivers[irec-1].enabled = onoff == 'on'
         
@@ -464,6 +474,23 @@ class Seismosizer(SeismosizerBase):
                         
         shutil.rmtree(tdir)
         return receivers
+                
+    def get_dsm_infos( self ):
+        si_base = pjoin(self.tempdir, "source-info")
+        self.do_output_source_model( si_base )
+        si_tdsm = si_base+'-tdsm.info'
+        f = open(si_tdsm,'r')
+        sect = ''
+        infos = {}
+        for line in f:
+            sline = line.strip()
+            if sline in ['ncentroids', '']: 
+                sect = sline
+                continue
+            
+            if sect == 'ncentroids':
+                infos['ncentroids'] = int(sline)
+        return infos
             
     def make_misfits_for_source( self, source ):
         """Calculate misfits for given source and fill these into the receivers datastructure."""
@@ -486,7 +513,7 @@ class Seismosizer(SeismosizerBase):
     def _locations_changed(self):
         if self.source_location is None or self.receivers is None: return
         self._fill_distazi()
-        
+        assert(len(self.receivers) >= len(self))
         if len(self) > 1:
             distances = [ r.distance_m for r in self.receivers ]
             dist_range = [min(distances), max(distances) ]

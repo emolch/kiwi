@@ -53,6 +53,7 @@ module minimizer_wrappers
     public do_set_spacial_undersampling
     public do_set_receivers
     public do_set_ref_seismograms
+    public do_set_source_constraints
     public do_set_source_location
     public do_set_source_crustal_thickness_limit
     public do_get_source_crustal_thickness
@@ -441,6 +442,66 @@ module minimizer_wrappers
 
     end subroutine
 
+    subroutine do_set_source_constraints( line, answer, ok )
+
+     !! === {{{set_source_constraints px1 py1 pz1 nx1 ny1 nz1 ...}}} ===
+      !
+      ! Set constraining planes which affect source geometry for certain source models.
+      ! 
+      ! Each constraining plane is defined by a point and a normal vector.
+      ! They are specified in the local carthesian coordinate system at the source, which has its principal
+      ! axes pointing north, east, and downward, and whose origin is at the surface
+      ! at the coordinates given with set_source_location.
+      !
+      !  * {{{px1 py1 pz1}}}: coordinates of point for plane number 1 in [m]
+      !  * {{{nx1 ny1 nz1}}}: components of normal vector of plane number 1
+      !
+          
+        type(varying_string), intent(in)  :: line
+        type(varying_string), intent(out) :: answer
+        logical, intent(out)              :: ok
+
+        real, dimension(:,:), allocatable :: points, normals
+        real, dimension(:), allocatable   :: numbers
+        integer                           :: n, nplanes, iplane, iostat
+        character(len=len(line))          :: buffer
+
+        answer = ''
+        ok = .true.
+        buffer = char(line)
+        n = count_words( buffer )
+        
+        if (mod(n,6) /= 0) then
+            ok = .false.
+            call error( "number of arguments is not divideable by 6" )
+            return
+        end if
+
+        nplanes = n / 6
+        allocate( numbers(n) )
+        allocate( points(3,nplanes) )
+        allocate( normals(3,nplanes) )
+
+        read (unit=buffer,fmt=*,iostat=iostat) numbers(:)
+
+        do iplane=1,nplanes
+            points(:,iplane) = numbers((iplane-1)*6+1:(iplane-1)*6+3) 
+            normals(:,iplane) = numbers((iplane-1)*6+4:(iplane-1)*6+6) 
+            if (iostat > 0) then
+                ok = .false.
+                call error( "failed to parse numbers at plane " // iplane )
+                return
+            end if
+        end do
+
+        call set_source_constraints( points, normals )
+
+        deallocate( points )
+        deallocate( normals )
+        deallocate( numbers )
+
+    end subroutine
+
     subroutine do_set_source_crustal_thickness_limit( line, answer, ok )
       
      !! === {{{set_source_crustal_thickness_limit thickness-limit}}} ===
@@ -671,6 +732,7 @@ module minimizer_wrappers
       !  * {{{l1norm}}}: L1 norm is done on difference of time traces
       !  * {{{ampspec_l2norm}}}: L2 norm is done on difference of amplitude spectra
       !  * {{{ampspec_l1norm}}}: L2 norm is done on difference of amplitude spectra
+      !  * {{{scalar_product}}}: instead of a norm, the scalar product is calculated
       
         type(varying_string), intent(in)  :: line
         type(varying_string), intent(out) :: answer
@@ -1339,6 +1401,8 @@ program minimizer
             call do_autoshift_ref_seismogram( arguments, answer, ok )
         else if (command == 'set_source_location') then
             call do_set_source_location( arguments, answer, ok )
+        else if (command == 'set_source_constraints') then
+            call do_set_source_constraints( arguments, answer, ok )
         else if (command == 'set_source_crustal_thickness_limit') then
             call do_set_source_crustal_thickness_limit( arguments, answer, ok )
         else if (command == 'get_source_crustal_thickness') then

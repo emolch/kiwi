@@ -19,8 +19,13 @@ import progressbar
 import pickle
 import copy
 import logging
+from subprocess import call
+from Cheetah.Template import Template
 
-from os.path import join as pjoin    
+from os.path import join as pjoin
+
+def convert_graph(in_filename, out_filename):
+    call(['convert', in_filename, out_filename])
 
 def all(x):
     for e in x:
@@ -167,7 +172,7 @@ def other_plane( strike, dip, rake ):
 class Step:
     
     
-    inner_misfit_method_params = set(('inner_norm', 'taper', 'filter'))
+    inner_misfit_method_params = set(('inner_norm', 'taper', 'filter', 'nsets'))
     outer_misfit_method_params = set(('outer_norm', 'bootstrap_iterations', 'anarchy', 'receiver_weights'))
     
     def __init__(self, workdir, name):
@@ -182,7 +187,10 @@ class Step:
         
     def make_rundir_path(self, run_id):
         return pjoin(self.stepdir, str(run_id))
-
+    
+    def make_plotdir_path(self, run_id):
+        return pjoin(self.stepdir, str(run_id), 'plots')
+        
     def next_available_rundir(self):
         entries = os.listdir(self.stepdir)
         is_int = re.compile('^\d+$')
@@ -231,9 +239,11 @@ class Step:
         seis = self.seismosizer
         
         tapers_by_set = conf['taper']
+        assert(len(tapers_by_set) == conf['nsets'])
         tapers = [ tapers_by_set[i%len(tapers_by_set)] for i in range(len(seis.receivers)) ] 
         seis.set_taper(tapers)
-        seis.set_filter(conf['filter'])
+        if conf['filter']:
+            seis.set_filter(conf['filter'])
         seis.set_misfit_method(conf['inner_norm'])
         
     def post_work(self, stop_seismosizer=True):
@@ -256,7 +266,6 @@ class Step:
         self.seismosizer.set_source( source )
         snapshot = self.seismosizer.get_receivers_snapshot()
         self.dump( snapshot, 'snapshot_%s' % ident )
-        self.seismosizer.do_output_seismograms('test', 'sac', "synthetics", 'plain')
         
     def get_snapshot(self, ident, run_id='current'):
         return self.load( ident='snapshot_%s' % ident, run_id=run_id )
@@ -283,18 +292,53 @@ class Step:
         f.close()
         return object
 
-    def pre_plot(self):
+    def plot(self, run_id='current'):
          logging.info('Starting plotting for step: %s' % self.stepname)
          
-    def post_plot(self):
+         plotdir = self.make_plotdir_path(run_id)
+         if os.path.exists( plotdir ): 
+            shutil.rmtree( plotdir )
+         os.makedirs( plotdir )
+         
+         plot_files = self._plot( run_id )
+         
+         # convert plots to png
+         for infn in plot_files:
+             inpath = pjoin( plotdir, infn )
+             fnbase = os.path.splitext(infn)[0]
+             outfn = fnbase+'.png'
+             outpath = pjoin( plotdir, outfn )
+             convert_graph( inpath, outpath )
+             
          logging.info('Done with plotting for step: %s' % self.stepname)
+
+    def _plot(self, rundir_id):
+        logging.info('Nothing to do')
+        return []
 
     def work(self, *args, **kwargs):
         pass
     
-    def plot(self, *args, **kwargs):
-        pass
     
+    def ic(self, run_id='current'):
+        c = self.load('config-in', run_id=run_id)
+        return c
+    
+    def oc(self, run_id='current'):
+        c = self.load('config-out', run_id=run_id)
+        return c
+            
+    def gx(self, arg):
+        plotdir = self.make_plotdir_path( 'current' )
+        location = pjoin(plotdir, arg)
+        img_snippet = '<a href="%s"><img style="border:none;" src="%s" /></a>'
+        return img_snippet % (location+'.pdf', location+'.png')
+    
+    def gxi(self, arg):
+        plotdir = self.make_plotdir_path( 'current' )
+        location = pjoin(plotdir, arg)
+        return location+'.png'
+
     def show_in_config(self, run_id='current'):
         c = self.load('config-in', run_id=run_id)
         for k in sorted(c.keys()):
@@ -362,8 +406,61 @@ class WeightMaker(Step):
         self.out_config.receiver_weights = gen_dweights(seis, base_source, **conf )
         self.post_work(True)
 
+
+class EffectiveDtTester(Step):
+    
+    def __init__(self, workdir, name='effective_dt_tester'):
+        Step.__init__(self, workdir, name)
+        
+        self.required |= Step.inner_misfit_method_params | gen_dweights.required \
+                        | set(('depth', 'moment', 'rise_time')) 
+        
+        self.optional |=  gen_dweights.optional
+    
+    def work(self, **kwargs):
+        self.pre_work(True)        
+        self.setup_inner_misfit_method()
+        seis = self.seismosizer
+        conf = self.in_config.get_config()
+        
+        
+        sourcetype = 'eikonal'
+        base_source = source.Source( sourcetype, 
+                               {"depth": float(conf['depth']),
+                                "bord-radius": float(conf['bord_radius']),
+                                "moment": float(conf['moment']),
+                                "rise-time": float(conf['rise_time']) } )
+                                
+        ref_seismogram_stem = 'reference'
+        ref_seismogram_format = 'sac'
+        
+        seis.set_source(base_source)
+        seis.set_synthetic_reference()
+        
+        for i in range(20):
+            effdt = i*0.25 + 0.5
+            seis.set_effective_dt(effdt)
+            seis.make_misfits_for_source( base_source )
+            ms = []
+            for ireceiver, receiver in enumerate(seis.receivers):
+                if receiver.enabled:
+                    for icomp, comp in enumerate(receiver.components):
+                        ms.append( receiver.misfits[icomp]/receiver.misfit_norm_factors[icomp] )
+            print i, sum(ms)
+        
+        
+        datadir = conf['datadir']
+        # reset reference seismograms
+        ref_seismogram_stem     = pjoin(datadir, ref_seismogram_stem)
+        seis.set_ref_seismograms( ref_seismogram_stem, ref_seismogram_format )
+        
+        self.post_work(True)
+
+
+
+
 class Shifter(Step):
-    def __init__(self, workdir, name='weightmaker'):
+    def __init__(self, workdir, name='shifter'):
         Step.__init__(self, workdir, name)
         
         self.required |= set(('taper', 'filter', 'autoshift_range', 'autoshift_limit'))
@@ -408,19 +505,22 @@ class Shifter(Step):
         save['fails'] = fails
         self.dump(save, 'source_receivers')
         
+        shifts_debug = []
+        for i,s in enumerate(shifts):
+            trace = {}
+            trace['name'] = seis.receivers[i].name
+            trace['shift'] = s
+            trace['failed'] = fails[i]
+            shifts_debug.append(trace)
         
         self.out_config.shifts = shifts
+        self.out_config.shifts_debug = shifts_debug
         self.post_work(True)
         
-    def plot( self, run_id='current' ):
-        self.pre_plot()
-        rundir = self.make_rundir_path(run_id)
-        
-        dirname = pjoin(rundir, 'plots')
-        if os.path.exists( dirname ): 
-            shutil.rmtree( dirname )
-        os.makedirs( dirname )
+    def _plot( self, run_id='current' ):
+                
         saved = self.load('source_receivers', run_id=run_id)
+        conf = self.in_config.get_config()
         #
         # Station plot
         #
@@ -443,8 +543,15 @@ class Shifter(Step):
                 station_color.append(s)
         
         station_size = [ 1. ] * len(receivers)
+        
+        plotdir = self.make_plotdir_path(run_id)
+
+        fn = pjoin(plotdir, 'stations.pdf')
         plotting.station_plot( slat, slon, lats, lons, rnames, station_color, station_size, 
-                               source, num.amax(dists)*1.05, pjoin(dirname, 'stations.pdf'), {})
+                               source, num.amax(dists)*1.05, fn, {}, zexpand=1.02, nsets=conf['nsets'])
+               
+        return [ 'stations.pdf' ]
+        
 
 class ParamTuner(Step):
      
@@ -504,19 +611,20 @@ class ParamTuner(Step):
             self.result(str_result, param )
             base_source[u2d(param)] = stats[u2d(param)].best
             self.out_config.__dict__[param] = stats[u2d(param)].best
+            self.out_config.__dict__[param+'_stats'] = stats[u2d(param)]
         
         if forward:
             self.snapshot( base_source, 'best' )
             
         self.post_work(search or forward)
         
-    def plot( self, run_id='current' ):
-        self.pre_plot()
-        rundir = self.make_rundir_path(run_id)
-                
+    def _plot( self, run_id='current' ):
+        
+        conf = self.in_config.get_config()
+        plotdir = self.make_plotdir_path(run_id)
         finder = self.load(self.stepname, run_id=run_id)
-        finder.plot( pjoin(rundir,'plots') )
-        self.post_plot()
+        plot_files = finder.plot( plotdir, conf['nsets'] )
+        return plot_files
         
 class PlaneTuner(Step):
      
@@ -597,23 +705,22 @@ class PlaneTuner(Step):
             self.result(str_result, param )
             base_source[param] = stats[param].best
             self.out_config.__dict__[d2u(param)] = stats[param].best
+            self.out_config.__dict__[d2u(param)+'_stats'] = stats[param]
         
         if forward:
             self.snapshot( base_source, 'best' )
             
         self.post_work(search or forward)
         
-    def plot( self, run_id='current' ):
-        self.pre_plot()
-        rundir = self.make_rundir_path(run_id)
-        
-        finder = self.load('rough_moment', run_id=run_id)
-        finder.plot( pjoin(rundir, 'plots_rough_moment') )
-        
+    def _plot( self, run_id='current' ):
+        #rundir = self.make_rundir_path(run_id)
+        #finder = self.load('rough_moment', run_id=run_id)
+        #finder.plot( pjoin(rundir, 'plots_rough_moment') )
+        conf = self.in_config.get_config()
+
+        plotdir = self.make_plotdir_path(run_id)
         finder = self.load(self.stepname, run_id=run_id)
-        finder.plot( pjoin(rundir, 'plots') )
-        
-        self.post_plot()
+        return finder.plot( plotdir, conf['nsets'] )
     
     
 class EnduringPointSource(Step):
@@ -685,6 +792,7 @@ class EnduringPointSource(Step):
             self.result(str_result, altparam )
             base_source[u2d(param)] = stats[u2d(param)].best
             self.out_config.__dict__[altparam] = stats[u2d(param)].best
+            self.out_config.__dict__[altparam+'_stats'] = stats[u2d(param)]
         
         self.out_config.receiver_weights = mm_conf_copy['receiver_weights']
         self.out_config.best_point_source = base_source
@@ -694,15 +802,15 @@ class EnduringPointSource(Step):
             
         self.post_work(search or forward)
         
-    def plot( self, run_id='current' ):
-        self.pre_plot()
-        rundir = self.make_rundir_path(run_id)
+    def _plot( self, run_id='current' ):
+        
+        conf = self.in_config.get_config()
+
+        plotdir = self.make_plotdir_path(run_id)
         
         finder = self.load(self.stepname, run_id=run_id)
-        finder.plot( pjoin(rundir, 'plots') )
-        
-        self.post_plot()
-        
+        return finder.plot( plotdir, conf['nsets'])
+                
 class ExtensionFinder(Step):
     
     def __init__(self, workdir, name='extension'):
@@ -761,19 +869,23 @@ class ExtensionFinder(Step):
             self.result(str_result, param )
             base_source[param] = stats[param].best
             self.out_config.__dict__[d2u(param)] = stats[param].best
+            self.out_config.__dict__[d2u(param)+'_stats'] = stats[param]
+            
+        for param in 'strike', 'dip', 'slip-rake':
+            self.out_config.__dict__['active_'+d2u(param)] = round(base_source[param])
     
         if forward:
             self.snapshot( base_source, 'best' )
             
         self.post_work(search or forward)        
    
-    def plot( self, run_id='current' ):
-        self.pre_plot()
-        rundir = self.make_rundir_path(run_id)
+    def _plot( self, run_id='current' ):
+        conf = self.in_config.get_config()
+
+        plotdir = self.make_plotdir_path(run_id)
         
         finder = self.load(self.stepname, run_id=run_id)
-        finder.plot( pjoin(rundir, 'plots') )
-        self.post_plot()
+        return finder.plot( plotdir, conf['nsets'] )
     
 class TracePlotter(Step):
     
@@ -784,21 +896,49 @@ class TracePlotter(Step):
         self.required |= set()
                         
         self.optional |= set()
-    
-    def plot(self, run_id='current'):
-    
-        rundir = self.make_rundir_path(run_id)
-        dirname = pjoin(rundir, 'plots')
         
-        if os.path.exists( dirname ): 
-            shutil.rmtree( dirname )
-        os.makedirs( dirname )
+    def work(self, search=True, forward=True, run_id='current'):
+        self.pre_work(False)
+        
+        conf = self.in_config.get_config()
+        
+        # make private copy of snapshots 
+        loaded_snapshots = []
+        for step, ident in self.snapshots:
+            snapshot = step.get_snapshot(ident, run_id='current')
+            loaded_snapshots.append(snapshot)
+            self.dump( snapshot, 'snapshot_%s_%s' % (step.stepname, ident) )
+        
+        nsets = conf['nsets']
+        set_names = conf['set_names']
+        plots = []
+        for irec, recs in enumerate(zip(*loaded_snapshots)):
+            proto = recs[0]
+            name = '????'
+            if all([r.name == proto.name for r in recs]):
+                name = r.name
+                
+            if all([len(r.components) == 0 for r in recs]): continue
+            
+            plots.append( { 'name': name, 'number': irec+1, 'set': set_names[irec%nsets] } )
+            
+            
+        self.out_config.__dict__['plots'] = plots
+            
+        self.post_work(False)
+        
+    def _plot(self, run_id='current'):
+    
+        plotdir = self.make_plotdir_path(run_id)
         
         loaded_snapshots = []
-        for i, (step, ident) in enumerate(self.snapshots):
-            
-            loaded_snapshots.append(step.get_snapshot(ident, run_id='current'))
-            
+        for step, ident in self.snapshots:
+            loaded_snapshots.append(self.get_snapshot("%s_%s" % (step.stepname, ident)))
+        
+        nrecs = len(loaded_snapshots[0])
+        for snap in loaded_snapshots:
+            assert(len(snap) == nrecs)
+        
         compos = set()
         for recs in zip(*loaded_snapshots):
             for rec in recs:
@@ -809,11 +949,10 @@ class TracePlotter(Step):
             if c in compos:
                 ordered_compos.append(c)
                 
-        nrecs = len(zip(*loaded_snapshots))
         
         plural = { 'seismogram': 'seismograms',
                    'spectrum': 'spectra' }
-                   
+        allfilez = []
         for typ in 'seismogram', 'spectrum':
         
             if config.show_progress:
@@ -858,36 +997,40 @@ class TracePlotter(Step):
                 conf['title'] = 'Receiver %i' % (irec+1)
                 if all([r.name == proto.name for r in recs]):
                     conf['title'] += ': %s' % proto.name
+                else:
+                    conf['title'] += ': %s' % 'comparing different stations'
                     
                 conf['yrange'] = data_range
                 conf['xrange'] = x_range
                     
-                filename = pjoin(dirname, '%s_%i.pdf' % (typ,irec+1))
+                filename = pjoin(plotdir, '%s_%i.pdf' % (typ,irec+1))
                 
                 plotting.seismogram_plot(data_by_compo, filename, conf_overrides=conf, are_spectra = typ == 'spectrum')
                 if config.show_progress: pbar.update(irec+1)
                 filez.append(filename)
             
-            filename = pjoin(dirname, '%s_all.pdf' % plural[typ])
+            filename = pjoin(plotdir, '%s_all.pdf' % plural[typ])
             plotting.pdfjoin(filez, filename)
+            allfilez.extend( filez )
             
             if config.show_progress: pbar.finish()
+        return [ os.path.basename(fn) for fn in allfilez ]
         
         
 class MisfitGridStats:
     
-    def str_best_and_confidence(self):
+    def str_best_and_confidence(self, factor=1., unit =''):
         lw = ''
         uw = ''
         if self.percentile16_warn: lw = ' (?)'
         if self.percentile84_warn: uw = '(?) '
            
-        return '%s = %g   (confidence interval 68%%) = [ %g%s, %g %s]' % \
-                (self.paramname, self.best, self.percentile16, lw, self.percentile84, uw)
+        return '%s = %g %s  (confidence interval 68%%) = [ %g%s, %g %s] %s' % \
+                (self.paramname.title(), self.best*factor, unit, self.percentile16*factor, lw, self.percentile84*factor, uw, unit)
 
     def str_mean_and_stddev(self):
         return '%(paramname)s = %(mean)g +- %(std)g' % self.__dict__
-
+    
 class MisfitGrid:
     '''Brute force grid search minimizer with builtin bootstrapping.'''
     
@@ -1139,14 +1282,13 @@ class MisfitGrid:
         
         return misfits_by_s, misfits_by_sr
         
-    def plot(self, dirname):
-        
-        if os.path.exists( dirname ): 
-            shutil.rmtree( dirname )
-        os.makedirs( dirname )
+    def plot(self, dirname, nsets):
         
         best_source = self.best_source
         bootstrap_sources = self.bootstrap_sources
+        
+        
+        plot_files = []
         
         for iparam, param in enumerate(self.sourceparams):
             
@@ -1158,10 +1300,13 @@ class MisfitGrid:
                          xunit = self.base_source.sourceinfo(param).unit )
             
             plotting.km_hack(conf)
+            fn = 'misfit-%s.pdf' % param
             plotting.misfit_plot_1d( [(xdata, self.misfits_by_s)],
-                                     pjoin(dirname, 'misfit-%s.pdf' % param),
+                                     pjoin(dirname, fn),
                                      conf )
-                                     
+            plot_files.append(fn)
+            
+           
             #
             # 1D histogram
             #
@@ -1181,9 +1326,12 @@ class MisfitGrid:
                          xrange = (mi-step/2., ma+step/2.), )
             
             plotting.km_hack(conf)
+            fn = 'histogram-%s.pdf' % param
             plotting.histogram_plot_1d( [(xdata, hist)],
-                                        pjoin(dirname, 'histogram-%s.pdf' % param),
+                                        pjoin(dirname, fn),
                                         conf )
+            
+            plot_files.append( fn )
             
         for ixparam, xparam in enumerate(self.sourceparams):
             for iyparam, yparam in enumerate(self.sourceparams):
@@ -1236,21 +1384,28 @@ class MisfitGrid:
                 best_loc = (num.array([ best_source[xparam]]), num.array([best_source[yparam]]))
                 
                 plotting.km_hack(conf)
+                fn = 'misfit-%s-%s.pdf' % (xparam, yparam)
                 plotting.misfit_plot_2d( [(ax, ay, az)],
-                                         pjoin(dirname, 'misfit-%s-%s.pdf' % (xparam, yparam)),
+                                         pjoin(dirname, fn),
                                          conf )
+                plot_files.append(fn)
                 
                 conf['xrange'] = (num.amin(ax), num.amax(ax))
                 conf['yrange'] = (num.amin(ay), num.amax(ay))
                 
+                fn = 'histogram-%s-%s.pdf' % (xparam, yparam)
                 plotting.histogram_plot_2d( [(axc, ayc, ac)],
-                                         pjoin(dirname, 'histogram-%s-%s.pdf' % (xparam, yparam)),
+                                         pjoin(dirname, fn),
                                          conf )
+                plot_files.append(fn)
                 
                 conf['zrange'] = (num.amin(az), num.amax(az))
+                fn = 'misfogram-%s-%s.pdf' % (xparam, yparam)
                 plotting.misfogram_plot_2d( [(ax, ay, az), best_loc, (axc, ayc, ac)],
-                                        pjoin(dirname, 'misfogram-%s-%s.pdf' % (xparam, yparam)),
+                                        pjoin(dirname, fn),
                                         conf )
+                plot_files.append(fn)
+                
                                         
         #
         # Station plot
@@ -1264,8 +1419,11 @@ class MisfitGrid:
         #station_varia = self.variability_by_r / num.sum(self.variability_by_r) * len(self.receivers)
         station_varia = self.misfits_by_r / num.sum(self.misfits_by_r) * len(self.receivers)
         plotting.station_plot( slat, slon, lats, lons, rnames, station_misfits, station_varia, 
-                               best_source, num.amax(dists)*1.05, pjoin(dirname, 'stations.pdf'), {})
+                               best_source, num.amax(dists)*1.05, pjoin(dirname, 'stations.pdf'), {}, nsets=nsets)
+        plot_files.append('stations.pdf')
         
+        return plot_files
+    
 
 def progress_off(option, opt_str, value, parser):
     config.show_progress = False
@@ -1286,7 +1444,7 @@ def main(steps):
     logging.basicConfig( level = levels[options.loglevel], format='%(relativeCreated)s: %(message)s' )
     if options.loglevel == 'debug': progress_off
    
-    commands = 'work', 'replot', 'show-steps', 'show-in-config', 'show-out-config', 'show-active-config'
+    commands = 'work', 'replot', 'show-steps', 'show-in-config', 'show-out-config', 'show-active-config', 'report'
     try:
         command = args.pop(0)
         
@@ -1300,6 +1458,15 @@ def main(steps):
         sys.exit()
     
     stepnames_all = [ step.stepname for step in steps ]
+    
+    if command == 'report':
+        data = {}
+        for step in steps: 
+            data[step.stepname] = step
+        
+        t = Template(file='report2.html', searchList=[ data ])
+        print t
+        sys.exit()
     
     if args:
         stepnames_to_do = args

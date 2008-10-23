@@ -107,6 +107,7 @@ histogram_plot_2d_config = dict(
 misfogram_plot_2d_config = dict(
     fit = True,
     width = 4.,
+    height = 4.,
     contour = True,
     zapproxticks = 7,
     autoscale = 'min-max',
