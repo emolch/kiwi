@@ -61,7 +61,9 @@ class SeismosizerBase:
                 'output_cross_correlations',
                 'shift_ref_seismogram',
                 'autoshift_ref_seismogram',
-                'set_verbose']
+                'get_cached_traces_memory',
+                'set_cached_traces_memory_limit',
+                'set_verbose',]
   
     def __init__(self, hosts):
         
@@ -305,6 +307,8 @@ class Seismosizer(SeismosizerBase):
                       'output_source_model',
                       'output_distances',
                       'output_cross_correlations',
+                      'get_cached_traces_memory',
+                      'set_cached_traces_memory_limit',
                       'set_verbose']
                       
     def __init__(self, hosts):
@@ -513,10 +517,15 @@ class Seismosizer(SeismosizerBase):
     def _locations_changed(self):
         if self.source_location is None or self.receivers is None: return
         self._fill_distazi()
+        self.balance()
+        
+    def balance(self):
         assert(len(self.receivers) >= len(self))
         if len(self) > 1:
             distances = [ r.distance_m for r in self.receivers ]
-            dist_range = [min(distances), max(distances) ]
+            distances_active = [ r.distance_m for r in self.receivers if r.enabled ]
+            dist_range = [ min(distances_active), max(distances_active) ]
+            logging.info( "%g %g" % (dist_range[0], dist_range[1]) )
             dist_center = (dist_range[0]+dist_range[1])/2.
             dist_delta = (dist_range[1]-dist_range[0])/len(self)/2.
             
@@ -536,7 +545,8 @@ class Seismosizer(SeismosizerBase):
         self.receivers[irec-1].proc_id = iproc
         if len(self) > 1:
             self.do_switch_receiver(irec, 'off')
-            self.do_switch_receiver(irec, 'on', where=iproc)
+            if self.receivers[irec-1].enabled:
+                self.do_switch_receiver(irec, 'on', where=iproc)
         
     def _fill_distazi( self ):
         fn = self.tempdir + '/distances'

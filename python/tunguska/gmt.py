@@ -379,13 +379,12 @@ if __name__ == '__main__':
 
 
     plot = GMT(width=8., height=8., margins=[0.5,0.5,0.5,0.5])
-    plot.pscoast( R='g', J='E%g/%g/%g/%gi' % (0., 0., 180., plot.width), B='0g0', 
+    plot.pscoast( R='g', J='E%g/%g/%g/%gi' % (0., 150., 180., plot.width), B='0g0', 
                   D='c', A=10000, S=(114,159,207), G=(233,185,110), W='thinnest')
-    for i in range(500):
+    for i in range(20):
         strike = random.random()*360.
         dip = random.random()*90.
         rake =random.random()*360.-180.
-        print strike, dip, rake
         lat = random.random() * 180.-90.
         lon = random.random() * 360.-180.
         plot.psmeca( 

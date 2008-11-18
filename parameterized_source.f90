@@ -151,8 +151,6 @@ module parameterized_source
         do i=1,n
             self%constraints(i)%point(:) = points(:,i)
             self%constraints(i)%normal(:) = normals(:,i)
-
-            write (stderr,*) self%constraints(i)%point(:), self%constraints(i)%normal(:)
         end do
         
         

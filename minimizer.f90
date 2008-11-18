@@ -77,7 +77,8 @@ module minimizer_wrappers
     public do_output_cross_correlations
     public do_shift_ref_seismogram
     public do_autoshift_ref_seismogram
-    
+    public do_get_cached_traces_memory
+    public do_set_cached_traces_memory_limit
     public do_set_verbose
 
   contains
@@ -1225,7 +1226,67 @@ module minimizer_wrappers
         call output_cross_correlations( filenamebase, r_shift, ok )
 
     end subroutine
+
+    subroutine do_get_cached_traces_memory( line, answer, ok )
+     
+     !! === {{{get_cached_traces_memory}}} ===
+      !
+      ! Get memory usage by Green's function database cache
+      ! 
+      ! Returns number of bytes allocated for traces in the Greens function database cache.
+      ! This number does not contain the overhead of header data in the traces, and index tables.
+      ! It is the plain number of bytes used to hold the seismogram traces.
+     
+        type(varying_string), intent(in)  :: line
+        type(varying_string), intent(out) :: answer
+        logical, intent(out) :: ok 
+
+        integer(kind=8) :: nbytes
+        character(len=128) :: buffer
+
+        answer = ''
+        ok = line /= '' ! get rid of warning, that line is not used
+
+        call get_cached_traces_memory(nbytes, ok)
+        write (buffer,*) nbytes
+        answer = buffer
+
+    end subroutine
     
+    subroutine do_set_cached_traces_memory_limit( line, answer,  ok )
+
+     !! === {{{set_cached_traces_memory_limit nbytes}}} ===
+      !
+      ! Set maximum memory usage by Green's function database cache
+      ! 
+      ! Sets the approximate maximum of memory used by the Greens function database cache.
+      ! This limit does not include the overhead of header data in the traces, and index tables.
+      ! It is the plain number of bytes which the Green's function database is allowed to use
+      ! to cache seismogram traces.
+
+        type(varying_string), intent(in)  :: line
+        type(varying_string), intent(out) :: answer
+        logical, intent(out) :: ok 
+
+        integer(kind=8)          :: nbytes_limit
+        character(len=len(line)) :: buffer
+        integer                  :: nerr
+
+        answer = ''
+        ok = .true.
+
+        buffer = char(line)
+        read (unit=buffer,fmt=*, iostat=nerr) nbytes_limit
+        if (nerr /= 0) then
+            call error( "usage: set_cached_traces_memory_limit limit" )
+            ok = .false.
+            return
+        end if
+        
+        call set_cached_traces_memory_limit( nbytes_limit, ok )
+
+    end subroutine
+
     subroutine do_set_verbose( line, answer, ok )
 
      !! === {{{set_verbose (T|F)}}} ===
@@ -1443,6 +1504,10 @@ program minimizer
             call do_set_misfit_method( arguments, answer, ok )
         else if (command == 'output_cross_correlations') then
             call do_output_cross_correlations( arguments, answer, ok )
+        else if (command == 'get_cached_traces_memory') then
+            call do_get_cached_traces_memory( arguments, answer, ok )
+        else if (command == 'set_cached_traces_memory_limit') then
+            call do_set_cached_traces_memory_limit( arguments, answer, ok )
         else if (command == 'set_verbose') then
             call do_set_verbose( arguments, answer, ok )
         else

@@ -290,6 +290,8 @@ module seismogram
             call probe_set_array(  receiver%syn_probes(i), receiver%displacement(i) )
         end do
 
+        call gfdb_housekeeping( greensf )
+        
     end subroutine
     
     elemental subroutine rotate( a, b, cos_angle, sin_angle)

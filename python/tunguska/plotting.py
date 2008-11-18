@@ -4,6 +4,33 @@ import copy
 import subprocess
 import gmt
 import numpy as num
+import progressbar
+from os.path import join as pjoin
+
+def ra(a):
+    return a.min(), a.max()
+
+def all(x):
+    for e in x:
+        if not e: return False
+    return True
+
+
+def grow(r,*args):
+    for a in args:
+        if r[0] is None: 
+            r[0] = a[0]
+        else:
+            r[0] = min(r[0],a[0])
+        
+        if r[1] is None:
+            r[1] = a[1]
+        else:
+            r[1] = max(r[1],a[1])
+
+def nonzero_range(a):
+    nz, = a[1].nonzero()
+    return a[0][nz.min()], a[0][nz.max()]
 
 def km_hack(conf):
     
@@ -129,6 +156,89 @@ def seismogram_plot( data_by_component, filename, conf_overrides, are_spectra=Fa
         
         args = tuple(data) + (filename,)
         util.autoplot( *args, **conf )
+        
+def multi_seismogram_plot( snapshots, plotdir ):
+    
+    nrecs = len(snapshots[0])
+    for snap in snapshots:
+        assert(len(snap) == nrecs)
+    
+    compos = set()
+    for recs in zip(*snapshots):
+        for rec in recs:
+            compos.update(rec.components)
+        
+    ordered_compos = []
+    for c in 'wesnducalr':
+        if c in compos:
+            ordered_compos.append(c)
+    
+    plural = { 'seismogram': 'seismograms',
+                'spectrum': 'spectra' }
+    allfilez = []
+    for typ in 'seismogram', 'spectrum':
+    
+        if config.show_progress:
+            widgets = ['Plotting %s' % plural[typ], ' ',
+                    progressbar.Bar(marker='-',left='[',right=']'), ' ',
+                    progressbar.Percentage(), ' ',]
+            
+            pbar = progressbar.ProgressBar(widgets=widgets, maxval=nrecs).start()
+        filez = []
+        dummy = (num.arange(1), num.arange(1))
+        for irec, recs in enumerate(zip(*snapshots)):
+            data_by_compo = []
+            data_range = [None,None]
+            x_range = [None,None]
+            
+            for c in ordered_compos:
+                data = []
+                for r in recs:
+                    icomp = r.components.find(c)
+                    if icomp >= 0:
+                        if typ == 'seismogram':
+                            dsyn = r.syn_seismograms[icomp]
+                            dref = r.ref_seismograms[icomp]
+                        elif typ == 'spectrum':
+                            dsyn = r.syn_spectra[icomp]
+                            dref = r.ref_spectra[icomp]
+                        data.append(dsyn)
+                        data.append(dref)
+                        grow( data_range, ra(dsyn[1]), ra(dref[1]) )
+                        grow( x_range,  nonzero_range( dsyn ), nonzero_range( dref ))
+                    else:
+                        data.append(dummy)
+                        data.append(dummy)
+                    
+                data_by_compo.append((c, data))
+            
+            if None in data_range or None in x_range:
+                continue
+            
+            conf = {}
+            proto = recs[0]
+            conf['title'] = 'Receiver %i' % (irec+1)
+            if all([r.name == proto.name for r in recs]):
+                conf['title'] += ': %s' % proto.name
+            else:
+                conf['title'] += ': %s' % 'comparing different stations'
+                
+            conf['yrange'] = data_range
+            conf['xrange'] = x_range
+                
+            filename = pjoin(plotdir, '%s_%i.pdf' % (typ,irec+1))
+            
+            seismogram_plot(data_by_compo, filename, conf_overrides=conf, are_spectra = typ == 'spectrum')
+            if config.show_progress: pbar.update(irec+1)
+            filez.append(filename)
+        
+        filename = pjoin(plotdir, '%s_all.pdf' % plural[typ])
+        pdfjoin(filez, filename)
+        allfilez.extend( filez )
+        
+        if config.show_progress: pbar.finish()
+        
+    return allfilez
         
 def station_plot( slat, slon, lat, lon, rnames, station_color, station_size, source, maxdist, filename, conf_overrides, zexpand=1.0, nsets=1):
     conf = dict(**config.station_plot_config)

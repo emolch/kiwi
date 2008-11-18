@@ -935,85 +935,8 @@ class TracePlotter(Step):
         for step, ident in self.snapshots:
             loaded_snapshots.append(self.get_snapshot("%s_%s" % (step.stepname, ident)))
         
-        nrecs = len(loaded_snapshots[0])
-        for snap in loaded_snapshots:
-            assert(len(snap) == nrecs)
+        allfilez = plotting.multi_seismograms_plot( loaded_snapshots, plotdir )
         
-        compos = set()
-        for recs in zip(*loaded_snapshots):
-            for rec in recs:
-                compos.update(rec.components)
-            
-        ordered_compos = []
-        for c in 'wesnducalr':
-            if c in compos:
-                ordered_compos.append(c)
-                
-        
-        plural = { 'seismogram': 'seismograms',
-                   'spectrum': 'spectra' }
-        allfilez = []
-        for typ in 'seismogram', 'spectrum':
-        
-            if config.show_progress:
-                widgets = ['Plotting %s' % plural[typ], ' ',
-                        progressbar.Bar(marker='-',left='[',right=']'), ' ',
-                        progressbar.Percentage(), ' ',]
-                
-                pbar = progressbar.ProgressBar(widgets=widgets, maxval=nrecs).start()
-            filez = []
-            dummy = (num.arange(1), num.arange(1))
-            for irec, recs in enumerate(zip(*loaded_snapshots)):
-                data_by_compo = []
-                data_range = [None,None]
-                x_range = [None,None]
-                
-                for c in ordered_compos:
-                    data = []
-                    for r in recs:
-                        icomp = r.components.find(c)
-                        if icomp >= 0:
-                            if typ == 'seismogram':
-                                dsyn = r.syn_seismograms[icomp]
-                                dref = r.ref_seismograms[icomp]
-                            elif typ == 'spectrum':
-                                dsyn = r.syn_spectra[icomp]
-                                dref = r.ref_spectra[icomp]
-                            data.append(dsyn)
-                            data.append(dref)
-                            grow( data_range, ra(dsyn[1]), ra(dref[1]) )
-                            grow( x_range,  nonzero_range( dsyn ), nonzero_range( dref ))
-                        else:
-                            data.append(dummy)
-                            data.append(dummy)
-                        
-                    data_by_compo.append((c, data))
-                
-                if None in data_range or None in x_range:
-                    continue
-                
-                conf = {}
-                proto = recs[0]
-                conf['title'] = 'Receiver %i' % (irec+1)
-                if all([r.name == proto.name for r in recs]):
-                    conf['title'] += ': %s' % proto.name
-                else:
-                    conf['title'] += ': %s' % 'comparing different stations'
-                    
-                conf['yrange'] = data_range
-                conf['xrange'] = x_range
-                    
-                filename = pjoin(plotdir, '%s_%i.pdf' % (typ,irec+1))
-                
-                plotting.seismogram_plot(data_by_compo, filename, conf_overrides=conf, are_spectra = typ == 'spectrum')
-                if config.show_progress: pbar.update(irec+1)
-                filez.append(filename)
-            
-            filename = pjoin(plotdir, '%s_all.pdf' % plural[typ])
-            plotting.pdfjoin(filez, filename)
-            allfilez.extend( filez )
-            
-            if config.show_progress: pbar.finish()
         return [ os.path.basename(fn) for fn in allfilez ]
         
         
@@ -1428,6 +1351,22 @@ class MisfitGrid:
 def progress_off(option, opt_str, value, parser):
     config.show_progress = False
 
+def install(src, dst):
+    dirs = os.path.split(dst)
+    d,x = os.path.split(dst)
+    dirs = []
+    while d and not os.path.isdir(d):
+        dirs.append(d)
+        d,x = os.path.split(d)
+        
+    dirs.reverse()
+    
+    for d in dirs:
+        if not os.path.exists(d):
+            os.mkdir(d)
+    
+    shutil.copy(src, dst)
+    
 def main(steps):
     
     from optparse import OptionParser
@@ -1465,7 +1404,18 @@ def main(steps):
             data[step.stepname] = step
         
         t = Template(file='report2.html', searchList=[ data ])
-        print t
+        
+        page = str(t)
+        files = [ x[1] or x[3] for x in re.findall(r'("([^"]+\.(png|pdf))"|\'([^\']+\.(png|pdf))\')', page) ]
+        report_dir = 'report'
+        
+        for file in files:
+            install(file, pjoin(report_dir, file))
+            
+        f = open(pjoin(report_dir,'index.html'),'w')
+        f.write( page )
+        f.close()
+            
         sys.exit()
     
     if args:

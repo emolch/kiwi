@@ -770,7 +770,8 @@ module source_eikonal
         type(t_polygon) :: rupture_poly, rupture_poly_rc
         type(t_crust2x2_1d_profile) :: profile
         real    :: vp, vs, rho
-        
+        real, dimension(3)    :: point_rc
+
         north = psm%params(2)
         east = psm%params(3)
         depth = psm%params(4)        
@@ -796,7 +797,7 @@ module source_eikonal
         
         write (unit,"(a)") "outline"
         do i=1,size(rupture_poly%points,2)
-            write (unit,*) rupture_poly%points(:,i)
+            write (unit,*) rupture_poly%points(:,i), rupture_poly_rc%points(1:2,i)
         end do
         write (unit,*)
         
@@ -829,7 +830,8 @@ module source_eikonal
         do iy=1,size(psm%cgrid%times,2)
             do ix=1,size(psm%cgrid%times,1)
                 call crust2x2_get_at_depth( profile, psm%cgrid%points(3,ix,iy), vp, vs, rho )
-                write (unit,*) psm%cgrid%points(:,ix,iy), psm%cgrid%times(ix,iy), vp, vs, rho
+                point_rc(:) = psm_ned_to_rc( psm, psm%cgrid%points(:,ix,iy) )
+                write (unit,*) psm%cgrid%points(:,ix,iy), point_rc(1:2), psm%cgrid%times(ix,iy), vp, vs, rho
             end do
         end do
         write (unit,*) 

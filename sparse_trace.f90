@@ -27,9 +27,11 @@ module sparse_trace
     
     integer, parameter :: maxgap = 5
 
+    integer, parameter :: real_kind = 4
+
     type, public :: t_strip  
       ! continuous strip of data at a specific offset
-        real, dimension(:), allocatable :: data
+        real(kind=real_kind), dimension(:), allocatable :: data
     
     end type
     
@@ -67,7 +69,8 @@ module sparse_trace
     public trace_copy, trace_destroy, trace_is_empty
     public trace_from_storable, trace_to_storable
     public trace_create_simple, trace_create_simple_nodata
-        
+    public trace_size_bytes
+
   contains
   
     subroutine strip_init( span, data, strip )
@@ -864,6 +867,23 @@ module sparse_trace
  
     end subroutine
     
+    pure function trace_size_bytes( trace )
+
+        type(t_trace), intent(in) :: trace
+        integer  :: trace_size_bytes
+
+        integer :: istrip
+
+        trace_size_bytes = 0
+        if ( allocated(trace%strips) ) then
+            do istrip=1,trace%nstrips
+                trace_size_bytes = trace_size_bytes + &
+                            size(trace%strips(istrip)%data) * real_kind
+            end do
+        end if
+
+    end function
+
     elemental subroutine trace_destroy( trace )
     
       ! deallocate all strips in a trace

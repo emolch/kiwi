@@ -69,6 +69,10 @@ module gfdb
         integer(hid_t) :: file = 0
         integer(hid_t) :: dataset_index = 0
         
+      ! bytes allocated inside traces cache        
+        integer(kind=8) :: nbytes = 0
+        integer(kind=8) :: last_access = 0
+
       ! references to the datasets are stored in this array for quick access:
         type(hobj_ref_t_f), dimension(:,:,:), allocatable :: references    ! (ng,nz/nipz,nxc/nipx)
       
@@ -79,6 +83,11 @@ module gfdb
       ! they have been put here, so that their allocation can be reused
         integer, dimension(:), allocatable :: ofs, pofs
         real, dimension(:), allocatable :: packed
+
+      ! access stack 
+      ! used to keep track of which chunks have been used most recently
+        integer :: accessed_earlier = 0
+        integer :: accessed_later = 0
         
     end type
     
@@ -123,6 +132,8 @@ module gfdb
         integer :: nblockz_overlap = nblockz_overlap_default   ! overlap between blocks (must be even)
         integer :: nblockz_payload = nblockz_payload_default   ! this is the width of the usable part of the blocks
         
+        integer(kind=8) :: nbytes = 0        ! bytes allocated inside traces cache
+        integer(kind=8) :: nbytes_limit = 0
         
       ! cache contains nchunks chunks:
         integer :: nchunks = 0
@@ -130,6 +141,9 @@ module gfdb
         type(t_chunk), dimension(:), allocatable :: chunks
         
         type(t_trace), pointer :: interpolated_trace => null()
+
+        integer :: accessed_latest = 0
+        integer :: accessed_earliest = 0
 
     end type
     
@@ -179,7 +193,8 @@ module gfdb
     
     public gfdb_init, gfdb_save_trace, gfdb_close, gfdb_get_trace, gfdb_uncache_trace
     public gfdb_get_indices, gfdb_infos, gfdb_dump_infomap, gfdb_dump_contents
-    public gfdb_dump_missing
+    public gfdb_dump_missing, gfdb_cached_traces_memory, gfdb_set_cached_traces_memory_limit
+    public gfdb_housekeeping
     
   contains
   
@@ -351,7 +366,7 @@ module gfdb
         if (allocated( ntraces_in_chunks )) deallocate( ntraces_in_chunks )
         allocate( ntraces_in_chunks(2,c%nchunks) )
         do ichunk=1,c%nchunks
-            call chunk_infos( c%chunks(ichunk), ntraces, ntraces_used )
+            call chunk_infos( c, c%chunks(ichunk), ntraces, ntraces_used )
             ntraces_in_chunks(1,ichunk) = ntraces_used
             ntraces_in_chunks(2,ichunk) = ntraces
         end do
@@ -364,20 +379,123 @@ module gfdb
         integer :: ichunk
         
         do ichunk=1,c%nchunks
-            call chunk_dump_infomap( c%chunks(ichunk), iunit,c%nxc/c%nipx  )
+            call chunk_dump_infomap( c, c%chunks(ichunk), iunit,c%nxc/c%nipx  )
         end do
         
     end subroutine
 
-    subroutine chunk_infos( c, ntraces, ntraces_used )
+    pure function gfdb_cached_traces_memory( db )
+
+        type(t_gfdb), intent(in) :: db
+        integer :: gfdb_cached_traces_memory
+
+        gfdb_cached_traces_memory = db%nbytes
+ 
+    end function
+
+    pure subroutine gfdb_set_cached_traces_memory_limit( db, nbytes_limit )
+
+        type(t_gfdb), intent(inout)        :: db
+        integer(kind=8), intent(in)     :: nbytes_limit
+
+        db%nbytes_limit = nbytes_limit 
+
+    end subroutine
+
+    pure subroutine gfdb_accesslist_remove(db, ichunk)
+
+        type(t_gfdb), intent(inout)  :: db
+        integer, intent(in) :: ichunk
+
+        integer :: ilate, iearl
+
+        if (ichunk == 0) return
+
+        ilate =  db%chunks(ichunk)%accessed_later
+        iearl = db%chunks(ichunk)%accessed_earlier
+
+        if (ilate .eq. 0 .and. iearl .eq. 0) return   ! not in list
+
+        db%chunks(ichunk)%accessed_later = 0
+        db%chunks(ichunk)%accessed_earlier = 0
+                
+        if (ilate .ne. 0) then
+            db%chunks(ilate)%accessed_earlier = iearl
+        else
+            db%accessed_latest = iearl
+        end if
+        
+        if (iearl .ne. 0) then
+            db%chunks(iearl)%accessed_later = ilate
+        else
+            db%accessed_earliest = ilate
+        end if
+
+    end subroutine
+
+    subroutine gfdb_accesslist_push_latest(db, ichunk)
+
+        type(t_gfdb), intent(inout)  :: db
+        integer, intent(in) :: ichunk
+
+        integer :: ioldlatest
+
+        if (ichunk == 0) return
+        if (ichunk == db%accessed_latest) return ! is already at latest position
+        
+        ioldlatest = db%accessed_latest
+        if (ioldlatest .ne. 0) then
+            db%chunks(ioldlatest)%accessed_later = ichunk
+        else
+            db%accessed_earliest = ichunk
+        end if
+
+        db%chunks(ichunk)%accessed_later = 0
+        db%chunks(ichunk)%accessed_earlier = ioldlatest
+        db%accessed_latest = ichunk
+
+    end subroutine
+
+    subroutine gfdb_housekeeping(db)
+
+      ! call periodically at times, when it is safe to uncache traces.
+      ! 
+        
+        type(t_gfdb), intent(inout)        :: db
+
+        integer :: ichunk, ichunknext
+
+        if (db%nbytes_limit > 0 .and. db%nbytes_limit < db%nbytes) then
+
+            call warn( "gfdb: cache memory limit reached. emptying..." )
+
+            ichunk = db%accessed_earliest
+            do while (ichunk .ne. 0 .and. db%nbytes > db%nbytes_limit/2) 
+                ichunknext = db%chunks(ichunk)%accessed_later
+                call chunk_close( db, db%chunks(ichunk) )
+                ichunk = ichunknext
+            end do
+
+            if (db%nbytes > db%nbytes_limit/2) then
+                call die("gfdb: cache management failure; if this program had no errors, this could not have happened...")
+            end if
+            
+        end if
+        
+
+
+    end subroutine
+
+    subroutine chunk_infos( db, c, ntraces, ntraces_used )
     
+        type(t_gfdb), intent(inout) :: db
         type(t_chunk), intent(inout) :: c
         integer, intent(out) :: ntraces, ntraces_used
         integer :: ixc, iz, ig
 
         ntraces = c%nxc/c%nipx*c%nz/c%nipz*c%ng
         
-        call chunk_open_read( c ) 
+        call chunk_open_read( db, c ) 
         
       ! count number of valid references to get number of traces
         ntraces_used = 0
@@ -390,19 +508,19 @@ module gfdb
                 end do
             end do
         end do
-        call chunk_close( c )
+        call chunk_close(db, c )
         
     end subroutine
     
     
-    subroutine chunk_dump_infomap( c, iunit, nxcfull )
-    
+    subroutine chunk_dump_infomap( db, c, iunit, nxcfull )
+        type(t_gfdb), intent(inout) :: db
         type(t_chunk), intent(inout) :: c
         integer, intent(in) :: iunit, nxcfull
         integer :: ixc, iz, ig
         integer :: ialloc
         
-        call chunk_open_read( c ) 
+        call chunk_open_read( db, c ) 
         
         do ixc=1,c%nxc/c%nipx
             do iz=1,c%nz/c%nipz
@@ -418,30 +536,29 @@ module gfdb
             end do
         end do
         
-        call chunk_close( c )
+        call chunk_close( db,c )
     
     end subroutine
     
-    subroutine gfdb_dump_contents( c, iunit )
-        type(t_gfdb), intent(inout) :: c
+    subroutine gfdb_dump_contents( db, iunit )
+        type(t_gfdb), intent(inout) :: db
         integer, intent(in) :: iunit
         integer :: ichunk
         
-        do ichunk=1,c%nchunks
-            call chunk_dump_contents( c%chunks(ichunk), c, iunit,c%nxc/c%nipx  )
+        do ichunk=1,db%nchunks
+            call chunk_dump_contents( db, db%chunks(ichunk), iunit,db%nxc/db%nipx  )
         end do
         
     end subroutine
     
-    subroutine chunk_dump_contents( c, db, iunit, nxcfull )
-    
+    subroutine chunk_dump_contents( db, c, iunit, nxcfull )
+        type(t_gfdb), intent(inout) :: db    
         type(t_chunk), intent(inout) :: c
-        type(t_gfdb), intent(inout) :: db
         integer, intent(in) :: iunit, nxcfull
         integer :: ixc,ix, iz, ig
         real :: x,z
         
-        call chunk_open_read( c ) 
+        call chunk_open_read( db, c ) 
         
         do ixc=1,c%nxc/c%nipx
             ix = (c%ichunk-1)*nxcfull+ixc
@@ -455,30 +572,30 @@ module gfdb
             end do
         end do
         
-        call chunk_close( c )
+        call chunk_close(db,c )
     
     end subroutine
     
-    subroutine gfdb_dump_missing( c, iunit )
-        type(t_gfdb), intent(inout) :: c
+    subroutine gfdb_dump_missing( db, iunit )
+        type(t_gfdb), intent(inout) :: db
         integer, intent(in) :: iunit
         integer :: ichunk
         
-        do ichunk=1,c%nchunks
-            call chunk_dump_missing( c%chunks(ichunk), c, iunit,c%nxc/c%nipx  )
+        do ichunk=1,db%nchunks
+            call chunk_dump_missing( db, db%chunks(ichunk), iunit,db%nxc/db%nipx  )
         end do
         
     end subroutine
     
-    subroutine chunk_dump_missing( c, db, iunit, nxcfull )
-    
+    subroutine chunk_dump_missing( db, c, iunit, nxcfull )
+
+        type(t_gfdb), intent(inout) :: db    
         type(t_chunk), intent(inout) :: c
-        type(t_gfdb), intent(inout) :: db
         integer, intent(in) :: iunit, nxcfull
         integer :: ixc,ix, iz, ig
         real :: x,z
         
-        call chunk_open_read( c ) 
+        call chunk_open_read( db, c ) 
         
         do ixc=1,c%nxc/c%nipx
             ix = (c%ichunk-1)*nxcfull+ixc
@@ -492,49 +609,50 @@ module gfdb
             end do
         end do
         
-        call chunk_close( c )
+        call chunk_close(db,c )
     
     end subroutine
 
 
-    subroutine gfdb_destroy( c )
+    subroutine gfdb_destroy( db )
     
-      ! destroy cache object c 
-      ! free all memory associated with c
+      ! destroy gfdb object db
+      ! free all memory associated with db
       ! reset everything to 0
       ! it should be safe to destroy a not initialized cache
          
-        type(t_gfdb), intent(inout) :: c
+        type(t_gfdb), intent(inout) :: db
         integer :: ichunk
         
-        call gfdb_close( c )
+        call gfdb_close( db)
 
-        if (allocated(c%chunks)) then
-            do ichunk=1,c%nchunks
-                call chunk_destroy( c%chunks(ichunk) )
+        if (allocated(db%chunks)) then
+            do ichunk=1,db%nchunks
+                call chunk_destroy( db,  db%chunks(ichunk) )
             end do
-            deallocate( c%chunks )
+            deallocate( db%chunks )
         end if
         
-        call delete(c%filenamebase)
-        c%nchunks = 0
-        c%nx = 0
-        c%nxc = 0
-        c%nz = 0
-        c%ng = 0
-        c%dt = 0.
-        c%dx = 0.
-        c%dz = 0.
-        c%nipx = 1
-        c%nipz = 1
+        call delete(db%filenamebase)
+        db%nchunks = 0
+        db%nx = 0
+        db%nxc = 0
+        db%nz = 0
+        db%ng = 0
+        db%dt = 0.
+        db%dx = 0.
+        db%dz = 0.
+        db%nipx = 1
+        db%nipz = 1
+        db%nbytes = 0
         
     end subroutine
     
-    subroutine chunk_destroy( c )
-    
+    subroutine chunk_destroy(db, c)
+        type(t_gfdb), intent(inout) :: db
         type(t_chunk), intent(inout) :: c
         
-        call chunk_close( c )
+        call chunk_close( db, c )
         c%nxc = 0
         c%nz = 0
         c%ng = 0
@@ -543,7 +661,8 @@ module gfdb
         c%readmode = .false.
         c%nipx = 1
         c%nipz = 1
-        
+        c%nbytes = 0
+
         if (allocated(c%ofs)) deallocate(c%ofs)
         if (allocated(c%pofs)) deallocate(c%pofs)
         if (allocated(c%packed)) deallocate(c%packed)
@@ -565,6 +684,7 @@ module gfdb
         c%ng = ng
         
         c%nipx = 1
+        c%nbytes = 0
         if (present(nipx)) c%nipx = nipx
         if (present(nipz)) c%nipz = nipz
         
@@ -679,28 +799,28 @@ module gfdb
              
     end subroutine
     
-    subroutine gfdb_save_trace( c, ix, iz, ig, data )
+    subroutine gfdb_save_trace( db, ix, iz, ig, data )
     
       ! save a trace to the database
         
-        type(t_gfdb), intent(inout) :: c
+        type(t_gfdb), intent(inout) :: db
         integer, intent(in) :: ix,iz,ig
         type(t_trace), intent(in) :: data
         
         integer :: ichunk, ixc
         
-        if (.not. allocated(c%chunks)) return
+        if (.not. allocated(db%chunks)) return
                         
-        call gfdb_index_to_chunk( c, ix, ichunk, ixc )
+        call gfdb_index_to_chunk( db, ix, ichunk, ixc )
         
-        call chunk_save_trace( c%chunks(ichunk), ixc,iz,ig, data )
+        call chunk_save_trace( db, db%chunks(ichunk), ixc,iz,ig, data )
         
     end subroutine
     
-    subroutine chunk_save_trace( c, ixc, iz, ig, data )
+    subroutine chunk_save_trace( db, c, ixc, iz, ig, data )
     
       ! save a trace to this chunks file
-    
+        type(t_gfdb), intent(inout) :: db
         type(t_chunk), intent(inout) :: c
         integer, intent(in) :: ixc,iz,ig
         type(t_trace), intent(in) :: data
@@ -730,7 +850,7 @@ module gfdb
         
         if (trace_is_empty(data)) return
         
-        call chunk_open_write( c ) ! ensure chunk is open for write
+        call chunk_open_write( db, c ) ! ensure chunk is open for write
         
       ! check that there is no trace already stored at that position
         if (c%references(ig,iz_file,ixc_file)%ref /= 0) then
@@ -993,6 +1113,7 @@ module gfdb
         integer(hsize_t) :: length
         integer :: ixc_file, ix
         integer :: iz_file
+        integer :: nbytes
         
         
         e=0
@@ -1011,8 +1132,10 @@ module gfdb
         iz_file = (iz-1)/c%nipz+1
         
       ! ensure that chunk is open for read
-        call chunk_open_read( c ) 
+        call chunk_open_read( db, c ) 
         
+        call gfdb_accesslist_remove( db, c%ichunk )
+        call gfdb_accesslist_push_latest(db, c%ichunk )
      
       ! directly return pointer if it is already in memory
         if (associated(c%traces(ig,iz,ixc)%p)) then
@@ -1106,6 +1229,10 @@ module gfdb
       ! convert to sparse trace
         call trace_from_storable( tracep, c%packed(1:compactsize), &
                                   c%pofs(1:nstrips), c%ofs(1:nstrips) )
+        
+        nbytes = trace_size_bytes( tracep )
+        c%nbytes = c%nbytes + nbytes
+        db%nbytes = db%nbytes + nbytes
     
     end subroutine
     
@@ -1133,21 +1260,23 @@ module gfdb
         end if
         call gfdb_index_to_chunk( db, ix, ichunk, ixc )
         
-        call chunk_set_trace( db%chunks(ichunk), ixc,iz,ig, data, span )
+        call chunk_set_trace( db, db%chunks(ichunk), ixc,iz,ig, data, span )
     
     end subroutine
     
-    subroutine chunk_set_trace( c, ixc, iz, ig, data, span )
+    subroutine chunk_set_trace( db, c, ixc, iz, ig, data, span )
     
       ! insert an interpolated trace into this chunk
       ! this does not save the trace as gfdb_save_trace does.
-            
+        
+        type(t_gfdb), intent(inout)              :: db
         type(t_chunk), intent(inout)          :: c
         integer, intent(in)                   :: ixc, iz, ig
         real, dimension(:), intent(in)        :: data
         integer, dimension(:), intent(in)     :: span
 
         type(t_trace), pointer                :: tracep
+        integer :: nbytes
         
         tracep => null()  
       
@@ -1161,7 +1290,7 @@ module gfdb
                 
       ! ensure that chunk is open for read  
       ! ( here, nothing is read, but this ensures, that the pointer arrays are allocated...)
-        call chunk_open_read( c )
+        call chunk_open_read( db, c )
      
       ! fail if trace already in
         if (associated(c%traces(ig,iz,ixc)%p)) then
@@ -1176,7 +1305,11 @@ module gfdb
         tracep => c%traces(ig,iz,ixc)%p
                 
         call trace_create_simple( tracep, data, span )
-        
+
+        nbytes = trace_size_bytes( tracep )
+        c%nbytes = c%nbytes + nbytes
+        db%nbytes = db%nbytes + nbytes
+
     end subroutine
     
     subroutine gfdb_interpolate_block( db, ix_in, iz_in )
@@ -1411,25 +1544,25 @@ module gfdb
     
     end function
     
-    subroutine gfdb_uncache_trace( c, ix,iz,ig )
+    subroutine gfdb_uncache_trace( db, ix,iz,ig )
     
       ! remove a cached trace from the trace cache
         
-        type(t_gfdb), intent(inout)            :: c
+        type(t_gfdb), intent(inout)            :: db
         integer, intent(in)                   :: ix, iz, ig
         
         integer :: ichunk, ixc
         
-        if (.not. allocated(c%chunks) .or. &
-            ix > c%nx .or. ix < 1 .or. &
-            iz > c%nz .or. iz < 1 .or. &
-            ig > c%ng .or. ig < 1) then
+        if (.not. allocated(db%chunks) .or. &
+            ix > db%nx .or. ix < 1 .or. &
+            iz > db%nz .or. iz < 1 .or. &
+            ig > db%ng .or. ig < 1) then
             call warn("gfdb: gfdb_uncache_trace(): invalid request: out of bounds: " // &
                       "("//ix//","//iz//","//ig//")")
             return
         end if
-        call gfdb_index_to_chunk( c, ix, ichunk, ixc )
-        call chunk_uncache_trace( c%chunks(ichunk), ixc,iz,ig )
+        call gfdb_index_to_chunk( db, ix, ichunk, ixc )
+        call chunk_uncache_trace( db, db%chunks(ichunk), ixc,iz,ig )
     
     end subroutine
     
@@ -1439,11 +1572,14 @@ module gfdb
         slen = span(2) - span(1) + 1
     end function
     
-    subroutine chunk_uncache_trace( c, ixc,iz,ig )
+    subroutine chunk_uncache_trace(db, c, ixc,iz,ig )
     
+        type(t_gfdb), intent(inout)           :: db
         type(t_chunk), intent(inout)          :: c
-        integer, intent(in)                 :: ixc, iz,ig
+        integer, intent(in)                   :: ixc, iz,ig
     
+        integer :: nbytes
+
         if (ixc > c%nxc .or. ixc < 1 .or. &
             iz > c%nz .or. iz < 1 .or. &
             ig > c%ng .or. ig < 1) then
@@ -1452,14 +1588,20 @@ module gfdb
             return
         end if
                 
-        call chunk_open_read( c ) ! ensure that chunk is open for read
+        call chunk_open_read( db, c ) ! ensure that chunk is open for read
         
-        if (associated(c%traces(ig,iz,ixc)%p)) then       
+        if (associated(c%traces(ig,iz,ixc)%p)) then
+             nbytes = trace_size_bytes( c%traces(ig,iz,ixc)%p )
+             c%nbytes = c%nbytes - nbytes
+             db%nbytes = db%nbytes - nbytes
+
              call trace_destroy( c%traces(ig,iz,ixc)%p )
              deallocate( c%traces(ig,iz,ixc)%p )
              c%traces(ig,iz,ixc)%p => null()
         end if
         
+        
+
     end subroutine
     
     subroutine gfdb_index_to_chunk( c, ix, ichunk, ixc )
@@ -1476,31 +1618,31 @@ module gfdb
     
     end subroutine
     
-    subroutine gfdb_close( c )
+    subroutine gfdb_close( db )
         
-        type(t_gfdb), intent(inout) :: c
+        type(t_gfdb), intent(inout) :: db
         integer :: ichunk
 
-        if (.not. allocated(c%chunks)) return
+        if (.not. allocated(db%chunks)) return
         
-        do ichunk=1,c%nchunks     
-            call chunk_close(c%chunks(ichunk))
+        do ichunk=1,db%nchunks     
+            call chunk_close(db, db%chunks(ichunk))
         end do
 
-        if (associated( c%interpolated_trace )) then
-            call trace_destroy( c%interpolated_trace )
-            deallocate( c%interpolated_trace )
+        if (associated( db%interpolated_trace )) then
+            call trace_destroy( db%interpolated_trace )
+            deallocate( db%interpolated_trace )
         end if
 
     end subroutine
     
-    subroutine chunk_open_read( c )
+    subroutine chunk_open_read( db, c )
     
       ! open chunk for read
       ! this opens the associated database file
       ! and reads the index dataset.
       ! it also initializes the traces cache
-        
+        type(t_gfdb), intent(inout) :: db
         type(t_chunk), intent(inout) :: c
         
         integer(hid_t) :: error, egal
@@ -1508,7 +1650,7 @@ module gfdb
         integer :: ig,iz,ixc
         
         if ( c%readmode ) return
-        if ( c%writemode ) call chunk_close( c )
+        if ( c%writemode ) call chunk_close( db, c )
 
       ! the file will stay open
         call h5eset_auto_f(0,egal)
@@ -1540,18 +1682,19 @@ module gfdb
 
     end subroutine 
     
-    subroutine chunk_open_write( c )
+    subroutine chunk_open_write(db,c)
     
       ! open chunk for write
       ! this opens the associated database file 
       ! and the index dataset.
-        
+
+        type(t_gfdb), intent(inout) :: db
         type(t_chunk), intent(inout) :: c
         integer(hsize_t), dimension(3) :: dims
         integer(hid_t) :: error, egal
         
         if ( c%writemode ) return
-        if ( c%readmode ) call chunk_close( c )
+        if ( c%readmode ) call chunk_close(db,c)
         
      
       ! file will is kept open
@@ -1580,12 +1723,13 @@ module gfdb
 
     end subroutine
     
-    subroutine chunk_close( c )
-        
+    subroutine chunk_close( db, c )
+        type(t_gfdb), intent(inout) :: db
         type(t_chunk), intent(inout) :: c   
         integer(hid_t) :: err
         integer(hid_t), dimension(2) :: e
         integer :: ixc,iz,ig
+        integer :: nbytes
         
         if (c%file /= 0) then
             call h5dclose_f(c%dataset_index,e(1))
@@ -1606,6 +1750,10 @@ module gfdb
                 do iz=1,c%nz
                     do ig=1,c%ng
                         if (associated( c%traces(ig,iz,ixc)%p )) then
+                            nbytes = trace_size_bytes( c%traces(ig,iz,ixc)%p )
+                            c%nbytes = c%nbytes - nbytes
+                            db%nbytes = db%nbytes - nbytes
+
                             call trace_destroy( c%traces(ig,iz,ixc)%p )
                             deallocate( c%traces(ig,iz,ixc)%p )
                         end if
@@ -1616,7 +1764,9 @@ module gfdb
         end if
         
         call h5garbage_collect_f(err)
-        
+
+        call gfdb_accesslist_remove( db, c%ichunk )
+
     end subroutine
     
     subroutine h5_opencreategroup( file, name, group, error, sizehint )

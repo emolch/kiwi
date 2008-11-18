@@ -68,6 +68,8 @@ module minimizer_engine
     public output_cross_correlations
     public shift_ref_seismogram
     public autoshift_ref_seismogram
+    public get_cached_traces_memory
+    public set_cached_traces_memory_limit
         
     type(t_psm), save                               :: psm
     real                                            :: effective_dt = 1.
@@ -994,6 +996,34 @@ module minimizer_engine
             call receiver_output_cross_correlations( receivers(ireceiver), outfn, ok )
             if (.not. ok) return
         end do
+
+    end subroutine
+
+
+    subroutine get_cached_traces_memory( nbytes, ok )
+        integer(kind=8), intent(out) :: nbytes
+        logical, intent(out) :: ok 
+        
+        ok = .true.
+
+        nbytes = 0
+        call update_database( ok )
+        if (.not. ok) return
+
+        nbytes = gfdb_cached_traces_memory(db)
+
+    end subroutine
+
+    subroutine set_cached_traces_memory_limit( nbytes_limit, ok )
+        integer(kind=8), intent(in) :: nbytes_limit
+        logical, intent(out) :: ok 
+        
+        ok = .true.
+
+        call update_database( ok )
+        if (.not. ok) return
+
+        call gfdb_set_cached_traces_memory_limit( db, nbytes_limit )
 
     end subroutine
     

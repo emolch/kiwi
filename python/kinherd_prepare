@@ -677,7 +677,9 @@ if step == 'setup' or step == 'all':
     # sort traces by distance
     
     def compare_distance(a,b):
-        return cmp(stations[(a.sid,a.nid)].dist_m, stations[(b.sid,b.nid)].dist_m)
+        return (cmp(stations[(a.sid,a.nid)].dist_m, stations[(b.sid,b.nid)].dist_m) or 
+               cmp(a.sid, b.sid) or 
+               cmp(a.nid, b.nid) )
     
     traces.sort(cmp=compare_distance)
     
@@ -688,6 +690,7 @@ if step == 'setup' or step == 'all':
     stations_seen = set()
     for t in traces:
         if not t.component in wanted_components: continue
+                
         if not (t.sid,t.nid) in stations_seen:
             s = stations[(t.sid,t.nid)]
             compos = ''.join([component_translate[x] for x in  station_components[(t.sid,t.nid)]])
