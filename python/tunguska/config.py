@@ -10,7 +10,7 @@ default_loglevel = logging.INFO
 source_info_prog = 'source_info'
 gfdb_info_prog = 'gfdb_info'
 gfdb_extract_prog = 'gfdb_extract'
-seismosizer_prog = '/bonus/src/invearthquake/minimizer'
+seismosizer_prog = '/bonus/src/kiwi/minimizer'
 
 component_names = {     'a':'R@-+@-',
                         'c':'R@--@-',

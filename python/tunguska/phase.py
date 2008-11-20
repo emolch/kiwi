@@ -8,7 +8,7 @@ class Phase:
         self.name = name
         self.filename = filename
         if filename is None:
-            filename = os.path.join(util.invearthquake_aux_dir(), 'phases', name)
+            filename = os.path.join(util.kiwi_aux_dir(), 'phases', name)
         
         f = open(filename,'r')
         self.ref_points = []

@@ -296,7 +296,7 @@ end module
 
 program gfdb_build_ahfull
   
-  ! This program is used to create and fill a Greens function database to be used with the invearthquake programs
+  ! This program is used to create and fill a Greens function database to be used with the kiwi programs
   ! It calculates Greens functions for an analytical fullspace
   !
   ! usage: gfdb_build_ahfull database material stf <<EOF

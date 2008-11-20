@@ -1,4 +1,4 @@
-# makefile for invearthquake
+# makefile for kiwi core tools
 
 SHELL = /bin/sh
 MAKEDEPEND = ./fdepend.pl -g -d -i hdf5.mod
@@ -93,11 +93,11 @@ targets : $(TARGETS)
 install : targets
 	install -d $(bindir)
 	install $(TARGETS) $(bindir)
-	install -d $(datadir)/invearthquake
+	install -d $(datadir)/kiwi
 	find aux -type d -and -not -path '*/.svn/*' -print0 | \
-	    xargs --replace='{}' -0 install -d $(datadir)/invearthquake/'{}'
+	    xargs --replace='{}' -0 install -d $(datadir)/kiwi/'{}'
 	find aux -type f -and -not -path '*/.svn/*' -print0 | \
-	    xargs --replace='{}' -0 install  '{}' $(datadir)/invearthquake/'{}'
+	    xargs --replace='{}' -0 install  '{}' $(datadir)/kiwi/'{}'
 
 	@echo 
 	@echo '-----------------------------------------------------------------------'
@@ -107,12 +107,12 @@ install : targets
 	@echo '   * PATH should contain:'
 	@echo '      ' $(bindir)
 	@echo
-	@echo '   * INVEARTHQUAKE_HOME should be set to:'
-	@echo '      ' $(datadir)/invearthquake
+	@echo '   * KIWI_HOME should be set to:'
+	@echo '      ' $(datadir)/kiwi
 	@echo '-----------------------------------------------------------------------'
 
 uninstall :
-	rm -rf -d $(datadir)/invearthquake
+	rm -rf -d $(datadir)/kiwi
 	cd $(bindir) ; rm -f $(TARGETS)
 
 tests : $(TESTS)

@@ -16,15 +16,15 @@ umask 077;
 my $server = "http://kinherd.org";
 my $progs_path = "/scratch/localB/webseismosizer/bin";
 
-my $self_url = "http://serv01/invearthquake/cgi-bin/seismograms.pl";
+my $self_url = "http://serv01/kiwi/cgi-bin/seismograms.pl";
 
 if ($ENV{REMOTE_ADDR} eq '136.172.75.134') {
-    $self_url = "http://localhost:8083/invearthquake/cgi-bin/seismograms.pl";
+    $self_url = "http://localhost:8083/kiwi/cgi-bin/seismograms.pl";
 }
 
 my $gfdb_path = "/home/cesca/KINHERD/gfdb";
 
-$ENV{PATH} = join(':', $progs_path, '/bin', '/home/cesca/wc/invearthquake/bin', '/home/cesca/sw/GMT4.2.0/bin', '/home/cesca/bin', '/usr/bin' );
+$ENV{PATH} = join(':', $progs_path, '/bin', '/home/cesca/wc/kiwi/bin', '/home/cesca/sw/GMT4.2.0/bin', '/home/cesca/bin', '/usr/bin' );
 
 $ENV{LD_LIBRARY_PATH} .= ":/home/cesca/sw/netcdf-3.6.2/lib";
 

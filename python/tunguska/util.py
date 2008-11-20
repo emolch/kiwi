@@ -10,10 +10,10 @@ import shutil
 
 pjoin = os.path.join
 
-def invearthquake_aux_dir():
-    ieq_home = os.getenv('INVEARTHQUAKE_HOME')
+def kiwi_aux_dir():
+    ieq_home = os.getenv('KIWI_HOME')
     if ieq_home is None:
-         sys.exit('INVEARTHQUAKE_HOME environment variable not set')
+         sys.exit('KIWI_HOME environment variable not set')
     d = pjoin(ieq_home, 'aux')
     if not os.path.isdir(d):
         sys.exit('directory not found: "%s"' % d)

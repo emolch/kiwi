@@ -1,9 +1,9 @@
 --------------------------------------------------------------------------------
-The Invearthquake codes of the Kinherd Project shall be licensed under the 
+The Kiwi codes of the Kinherd Project shall be licensed under the 
 Apache License Version 2.0. Please scroll down to the end of this file, if you 
 need a translation of the lawyer-bla-bla below.
 
-"Invearthquake Codes" refers to all software and source code in this directory.
+"Kiwi Codes" refers to all software and source code in this directory.
 "Kinherd Project" means the informal group of individual authors who contributed
 to these codes.
 
@@ -216,7 +216,7 @@ to these codes.
 EXPLANATION
 
 Taken from http://www.apache.org/foundation/licence-FAQ.html: 
-(replaced "Apache" with "Invearthquake" and "Apache Foundation" with
+(replaced "Apache" with "Kiwi" and "Apache Foundation" with
  "Kinherd Project")
    
    I'm not a lawyer. What does it all MEAN?
@@ -229,30 +229,30 @@ Taken from http://www.apache.org/foundation/licence-FAQ.html:
     
     It allows you to:
     
-        * freely download and use the Invearthquake software, in whole or in 
+        * freely download and use the Kiwi software, in whole or in 
           part, for personal, company internal, or commercial purposes;
-        * use Invearthquake software in packages or distributions that you 
+        * use Kiwi software in packages or distributions that you 
           create.
     
     It forbids you to:
     
-        * redistribute any piece of Invearthquake-originated software without
+        * redistribute any piece of Kiwi-originated software without
           proper attribution;
         * use any marks owned by the Kinherd Project in any way that might state
           or imply that Kinherd endorses your distribution;
         * use any marks owned by the Kinherd Project in any way that might state
-          or imply that you created the Invearthquake software in question.
+          or imply that you created the Kiwi software in question.
     
     It requires you to:
     
         * include a copy of the license in any redistribution you may make that
-          includes Invearthquake software;
+          includes Kiwi software;
         * provide clear attribution to the Kinherd Project for any distributions
-          that include Invearthquake software.
+          that include Kiwi software.
     
     It does not require you to:
     
-        * include the source of the Invearthquake software itself, or of any
+        * include the source of the Kiwi software itself, or of any
           modifications you may have made to it, in any redistribution you may
           assemble that includes it;
         * submit changes that you make to the software back to the Kinherd 

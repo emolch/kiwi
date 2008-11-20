@@ -153,7 +153,7 @@ end module
 
 program gfdb_build
   
-  ! This program is used to create and fill a Greens function database to be used with the invearthquake programs.
+  ! This program is used to create and fill a Greens function database to be used with the kiwi programs.
   !
   ! usage: gfdb_build database [ nchunks nx nz ng dt dx dz [ firstx firstz ] ] <<EOF
   ! x z ig 'filename1' ...

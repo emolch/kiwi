@@ -1377,15 +1377,15 @@ program minimizer
               "documentation:  " // &
               "http://kinherd.org/power/trac/wiki/MinimizerTool"
     
-    call vs_getenv( 'INVEARTHQUAKE_HOME', aux_path )
+    call vs_getenv( 'KIWI_HOME', aux_path )
     if (aux_path == '') then
-        call die('Environment variable INVEARTHQUAKE_HOME not set.' //eol // eol // &
-                 'INVEARTHQUAKE_HOME should contain the path to the directory' // eol // &
+        call die('Environment variable KIWI_HOME not set.' //eol // eol // &
+                 'KIWI_HOME should contain the path to the directory' // eol // &
                  'containing the "aux" directory where minimizer looks for crustal' // eol // &
                  'models etc.' // eol // &
                  'An initial "aux" directory resides in the directory where' // eol // &
-                 'you have built the invearthquake tools, so you can set' // eol // &
-                 'INVEARTHQUAKE_HOME to your build directory.')
+                 'you have built the kiwi tools, so you can set' // eol // &
+                 'KIWI_HOME to your build directory.')
     end if
     aux_path = aux_path // '/aux'
     

@@ -17,10 +17,10 @@ import scipy.optimize
 
 pjoin = os.path.join
 
-def invearthquake_aux_dir():
-    ieq_home = os.getenv('INVEARTHQUAKE_HOME')
+def kiwi_aux_dir():
+    ieq_home = os.getenv('KIWI_HOME')
     if ieq_home is None:
-         sys.exit('INVEARTHQUAKE_HOME environment variable not set')
+         sys.exit('KIWI_HOME environment variable not set')
     d = pjoin(ieq_home, 'aux')
     if not os.path.isdir(d):
         sys.exit('directory not found: "%s"' % d)
@@ -966,7 +966,7 @@ class Phase:
     
         self.name = name
         if filename is None:
-            filename = os.path.join(invearthquake_aux_dir(), 'phases', name)
+            filename = os.path.join(kiwi_aux_dir(), 'phases', name)
             
         f = open(filename,'r')
         self.ref_points = []
