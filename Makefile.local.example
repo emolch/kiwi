@@ -1,6 +1,13 @@
+# Fortran 95 compiler:
 FORTRANC = g95
+
+# Select compilation flag preset, or specify your own compilation flags
 CFLAGS += $(CFAST)
 #CFLAGS += $(CDEBUG)
 
+# Adjust to where HDF5 is installed
 INCHDF = -I/bonus/hdf5-$(FORTRANC)/include
 LIBHDF = -L/bonus/hdf5-$(FORTRANC)/lib -lhdf5_fortran -lhdf5 -lz
+
+# Installation prefix
+# prefix = .
