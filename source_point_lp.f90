@@ -189,17 +189,16 @@ module source_point_lp
     end subroutine psm_get_param_id_point_lp
     !---------------------------------------
     
-    subroutine psm_set_point_lp( psm,  params, normalized_ )
-      
-      type(t_psm), intent(inout)     :: psm
-      real, dimension(:), intent(in) :: params
-      logical, intent(in), optional  :: normalized_
+    subroutine psm_set_point_lp( psm, params,  normalized, only_moment_changed )
+    
+        type(t_psm), intent(inout)     :: psm
+        real, dimension(:), intent(in) :: params
+        logical, intent(in)            :: normalized
+        logical, intent(out)           :: only_moment_changed
+        
       
       logical :: must_reset_grid
-      logical :: normalized
-      
-      normalized = .false.
-      if (present(normalized_)) normalized = normalized_
+      real, dimension(size(params)) :: new_params
         
       must_reset_grid = .false.
       if (.not. allocated(psm%grid_size) .or. (psm%sourcetype .ne. psm_point_lp)) then
@@ -219,10 +218,16 @@ module source_point_lp
       if (size(params,1) .ne. size(psm%params)) call die("wrong number of source parameters in psm_set_point_lp()")
       
       if (normalized) then
-         psm%params = params * psm%params_norm
+            new_params = params * psm%params_norm
       else
-         psm%params = params 
-      end if
+            new_params = params 
+     end if
+
+     only_moment_changed = (count(new_params .ne. psm%params) .le. 1 .and. new_params(5) .ne. psm%params(5))
+    
+     psm%params = new_params
+    
+     psm%moment = psm%params(5)
       
       
     end subroutine psm_set_point_lp

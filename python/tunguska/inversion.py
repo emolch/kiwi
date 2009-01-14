@@ -79,7 +79,8 @@ def standard_setup( datadir,
                     crustal_thickness_limit = None,
                     shifts = None,
                     blacklist = None,
-                    
+                    verbose = False,
+    
                     local_interpolation = 'bilinear',
                     source_origin_file = 'source-origin.table',
                     receivers_file = 'receivers.table',
@@ -96,6 +97,7 @@ def standard_setup( datadir,
     # setup database
     database = gfdb.Gfdb(gfdb_path)
     seis = seismosizer.Seismosizer(hosts)
+    if verbose: seis.set_verbose('T')
     seis.set_database(database)
     seis.set_effective_dt(effective_dt)
     seis.set_local_interpolation(local_interpolation)
@@ -126,7 +128,7 @@ standard_setup.required = set(('datadir', 'gfdb_path', 'components'))
 standard_setup.optional = set(('effective_dt', 'spacial_undersampling', 'hosts', 
                                'crustal_thickness_limit', 'shifts', 'local_interpolation', 
                                'source_origin_file', 'receivers_file',
-                               'ref_seismogram_stem', 'ref_seismogram_format'))
+                               'ref_seismogram_stem', 'ref_seismogram_format', 'blacklist', 'verbose'))
 
 def gen_dweights( seis, base_source, datadir,
                                  ref_seismogram_stem = 'reference',
@@ -811,82 +813,7 @@ class EnduringPointSource(Step):
         finder = self.load(self.stepname, run_id=run_id)
         return finder.plot( plotdir, conf['nsets'])
                 
-class ExtensionFinder(Step):
-    
-    def __init__(self, workdir, name='extension'):
-        Step.__init__(self, workdir, name)
-        
-        self.required |= Step.outer_misfit_method_params | Step.inner_misfit_method_params \
-                        | set(('strike', 'dip', 'slip_rake')) \
-                        | set(('best_point_source',)) \
-                        | set(('time', 'depth', 'moment', 'rise_time', 'rel_rupture_velocity')) \
-                        | set(('maxradius', 'delta', 'rel_rupture_velocity', 'plane')) \
-                          
-        self.optional |= set(('north_shift', 'east_shift'))
-        
-    def work(self, search=True, forward=True, run_id='current'):
-        self.pre_work(search or forward)
-        seis = self.seismosizer
-        conf = self.in_config.get_config()
-        mm_conf = self.in_config.get_config(keys=Step.outer_misfit_method_params)
-        
-        strike, dip, slip_rake = float(conf['strike']), float(conf['dip']), float(conf['slip_rake'])
-        if 'plane' in conf and conf['plane'] == 2:
-            strike, dip, slip_rake = other_plane( strike, dip, slip_rake )
-                
-        sourcetype = 'eikonal'
-        
-        base_source = source.Source( sourcetype, {  'strike':strike,
-                                                    'dip':dip,
-                                                    'slip-rake':slip_rake,
-                                                    'bord-radius': 0.  } )
-        
-        for param in 'time', 'depth', 'moment', 'rise-time', 'rel-rupture-velocity', 'north-shift', 'east-shift':
-            if d2u(param) in conf:
-                base_source[param] = float(conf[d2u(param)])
-        
-        maxradius = conf['maxradius']
-        delta = conf['delta']
-        
-        radius_grid         = ( 'bord-radius', 0., maxradius, delta ) 
-        nukl_shift_x_grid   = ( 'nukl-shift-x', -maxradius, maxradius, delta )
-        nukl_shift_y_grid   = ( 'nukl-shift-y', -maxradius, maxradius, delta )
-                
-        if search or forward: self.setup_inner_misfit_method()
-        if search:
-            finder = MisfitGrid( base_source, [radius_grid, nukl_shift_x_grid, nukl_shift_y_grid], ref_source=conf['best_point_source'] )
-            finder.compute(seis)
-        else:
-            finder = self.load(self.stepname, run_id=run_id)
-        self.dump(finder, self.stepname)
-        finder.postprocess(**mm_conf)
-        self.dump(finder, self.stepname)
-        
-        stats = finder.stats
-        for param in 'bord-radius', 'nukl-shift-x', 'nukl-shift-y':
-            str_result = stats[param].str_best_and_confidence()
-            logging.info(str_result)
-            self.result(str_result, param )
-            base_source[param] = stats[param].best
-            self.out_config.__dict__[d2u(param)] = stats[param].best
-            self.out_config.__dict__[d2u(param)+'_stats'] = stats[param]
-            
-        for param in 'strike', 'dip', 'slip-rake':
-            self.out_config.__dict__['active_'+d2u(param)] = round(base_source[param])
-    
-        if forward:
-            self.snapshot( base_source, 'best' )
-            
-        self.post_work(search or forward)        
-   
-    def _plot( self, run_id='current' ):
-        conf = self.in_config.get_config()
 
-        plotdir = self.make_plotdir_path(run_id)
-        
-        finder = self.load(self.stepname, run_id=run_id)
-        return finder.plot( plotdir, conf['nsets'] )
-    
 class TracePlotter(Step):
     
     def __init__(self, workdir, snapshots, name='traceplotter'):
@@ -935,7 +862,7 @@ class TracePlotter(Step):
         for step, ident in self.snapshots:
             loaded_snapshots.append(self.get_snapshot("%s_%s" % (step.stepname, ident)))
         
-        allfilez = plotting.multi_seismograms_plot( loaded_snapshots, plotdir )
+        allfilez = plotting.multi_seismogram_plot( loaded_snapshots, plotdir )
         
         return [ os.path.basename(fn) for fn in allfilez ]
         

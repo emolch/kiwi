@@ -15,7 +15,7 @@ import copy
 import config
 import phase
 
-runners_sleep = 0.001
+runners_sleep = 0.01
 pollers_sleep = 0.001
 
 
@@ -79,7 +79,8 @@ class SeismosizerBase:
         signal.signal(signal.SIGINT, self.sighandler)
         signal.signal(signal.SIGTERM, self.sighandler)
         signal.signal(signal.SIGQUIT, self.sighandler)
-        
+        self.batch = []
+        self.batchmode = False
 
     def __del__(self):
         self.close()
@@ -95,13 +96,39 @@ class SeismosizerBase:
     def __len__(self):
         return len(self.processes)
         
-    def do(self, cmd, where=None):
+    def batch_record(self):
+        self.batch = []
+        self.batchmode = True
+        
+    def batch_execute(self):
+        self.batchmode = False
+        batch = self.batch 
+        self.batch = []
+        
+        if batch:
+            xwhere = batch[0][1]
+            cmds = []
+            for (cmd, where) in batch:
+                assert(where == xwhere)
+                cmds.append(cmd)
+                
+            return self.do( where=xwhere, multi_cmd=cmds )
+                
+    def do(self, cmd, where=None, multi_cmd=None):
         '''Parallel execution of same command on selected processes.
         
            everywhere:            s.do( ['command','arg' ] )
            on single process:     s.do( ['command','arg' ], where=2 )
            on group of processes: s.do( ['command','arg' ], where=range(1,4) )
         '''
+        
+        if self.batchmode:
+            if multi_cmd:
+                for cmd in multi_cmd:
+                    self.batch.append((cmd,where))
+            else:
+                self.batch.append((cmd,where))
+            return
         
         if where is None:
             processes = self.processes
@@ -111,13 +138,16 @@ class SeismosizerBase:
             else:
                 processes = [ self.processes[i] for i in where ]
         
-        strcommand  = ' '.join( [str(arg) for arg in cmd ] )
+        if multi_cmd:
+            strcommand  = '\n'.join(  [ ' '.join( [str(arg) for arg in cmd ] ) for cmd in multi_cmd ] )
+        else:
+            strcommand  =  ' '.join( [str(arg) for arg in cmd ] )
         
         # distribute command to each process
         runners = []
         for p in processes:
             logging.debug('do (%i): %s' % (p.tid, strcommand))
-            p.push( cmd )
+            p.push( strcommand )
             runners.append(p)
             
         # gather answers
@@ -224,6 +254,7 @@ class SeismosizerProcess(threading.Thread):
         self.the_end_has_come = True
             
     def run(self):
+        i = 0
         try:
             while True:
                 retcode = self.p.poll()
@@ -232,14 +263,13 @@ class SeismosizerProcess(threading.Thread):
                 try:
                     if self.the_end_has_come: break
                     cmd = self.commands.get_nowait()
-                    if type(cmd) is str:
-                        cmd = [cmd]
                     answer = self._do(cmd)
                     self.answers.put(answer)
                 except SeismosizerReturnedError, inst:
                     self.answers.put(inst)
                 except Queue.Empty:
                     time.sleep(runners_sleep)
+                i += 1
                     
         except SeismosizerDied, e:
             logging.warn( e )
@@ -247,29 +277,35 @@ class SeismosizerProcess(threading.Thread):
         self.to_p.close()
         self.from_p.close()
         self.p.wait()
-       
-    def _do(self, cmd):
-        '''Put command to minimizer and return the results'''
         
-        command  = ' '.join( [str(arg) for arg in cmd ] )
+        logging.warn('xx %i' % i )
        
+    def _do(self, command):
+        '''Put command to minimizer and return the results'''
+               
         answer = None
             
-        self.to_p.write(command+"\n")
-        self.to_p.flush()
-        retval = self.from_p.readline().rstrip()
-        
-        if retval.endswith('nok'):
-            raise SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
-                        (config.seismosizer_prog, self.host, self.tid, command), '' )
-                        
-        if retval.endswith('nok >'):
-            error_str = self.from_p.readline().rstrip()
-            raise SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
-                        (config.seismosizer_prog, self.host, self.tid, command), error_str )
+        lines = command.strip().splitlines()
+        for line in lines:
+            self.to_p.write(line+"\n")
             
-        if retval.endswith('ok >'):
-            answer = self.from_p.readline().rstrip()
+        self.to_p.flush()
+        
+        answer = ''
+        for line in lines:
+            retval = self.from_p.readline().rstrip()
+            
+            if retval.endswith('nok'):
+                raise SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
+                            (config.seismosizer_prog, self.host, self.tid, command), '' )
+                            
+            if retval.endswith('nok >'):
+                error_str = self.from_p.readline().rstrip()
+                raise SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
+                            (config.seismosizer_prog, self.host, self.tid, command), error_str )
+                
+            if retval.endswith('ok >'):
+                answer += self.from_p.readline().rstrip()
                 
         return answer
 
@@ -503,14 +539,15 @@ class Seismosizer(SeismosizerBase):
         results = self.do_get_misfits()
         values = [[ float(x) for x in result.split() ] for result in results ]
         
-        ipos = 0
+        ipos = [ 0 ] * len(results)
         for irec, rec in enumerate(self.receivers):
             iproc = rec.proc_id
             for icomp in xrange(len(rec.components)):
-                rec.misfits[icomp] = values[iproc][ipos]
-                ipos += 1
-                rec.misfit_norm_factors[icomp] = values[iproc][ipos]
-                ipos += 1
+                rec.misfits[icomp] = values[iproc][ipos[iproc]]
+                ipos[iproc] += 1
+                rec.misfit_norm_factors[icomp] = values[iproc][ipos[iproc]]
+                ipos[iproc] += 1
+    
     
     # "private" methods:
     

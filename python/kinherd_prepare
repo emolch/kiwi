@@ -29,6 +29,7 @@ import tempfile
 import time, calendar
 import pickle
 import shutil
+import math
 from optparse import OptionParser
 
 pjoin = os.path.join
@@ -113,6 +114,7 @@ class Trace:
     
     def __cmp__(self,other):
          return cmp(self.sid, other.sid) or cmp(self.component, other.component) or cmp(self.locid, other.locid) or cmp(self.nid, other.nid) 
+    
     
 def get_events_from_file( rdseed_event_file ):
     f = open(rdseed_event_file, 'r')
@@ -289,15 +291,17 @@ def sac_datetime_to_secs(sacdate, sactime):
     secs = calendar.timegm( time.strptime(date+' '+sactime[:-4], format) )
     return secs + mili
 
-def get_traces( stations, datadir_raw ):
+def get_traces( stations, datadir_raw, reference_time ):
     traces = {}
     for s in stations:
         for component in s.components:
             sacfiles = glob.glob( pjoin(datadir_raw,'????.???.??.??.??.????_????.???.??.??.??.????.%s.%s.*.%s.?.SAC' % (s.nid,s.sid,component) ) )
             if not sacfiles:
                 sys.exit('no SAC file for station %s.%s compontent %s found' % ( s.sid, s.nid, component ) )
-            
+                        
             for sacfile in sacfiles:
+                set_ref_time( sacfile, reference_time )
+
                 print 'reading: ', sacfile
                 locid = re.findall( '[A-Z0-9]+\.[A-Z0-9]+\.(\d*)\.[A-Z0-9]+\..\.SAC$', sacfile )[0]
                 polezerofiles = glob.glob( os.path.join(datadir_raw, 'SAC_PZs_%s_%s_%s_%s_*' % (s.nid,s.sid,component,locid) ) )
@@ -308,10 +312,9 @@ def get_traces( stations, datadir_raw ):
                 if len(polezerofiles) > 1:
                     sys.stderr.write('more than one polezero file for SAC file: %s\n' % sacfile + '\n'.join(polezerofiles) + '\n')
                     continue
-                try:
-                    traces[(s.nid, s.sid, component, locid, sacfile)] = Trace(sacfile, polezerofiles[0], respfile, s.sid, s.nid, component, locid)
-                except:
-                    sys.stderr.write(sys.exc_info()[0])
+                                
+                t = Trace(sacfile, polezerofiles[0], respfile, s.sid, s.nid, component, locid)
+                traces[(s.nid, s.sid, component, locid, sacfile)] = t                
                     
     return traces
 
@@ -321,15 +324,13 @@ def sactime( secs ):
     return ( t[0], t[7], t[3], t[4], t[5], ms )
 
 
-def set_ref_time( filenames, reftime ):
+def set_ref_time( filename, reftime ):
     '''Set common reference time'''
-    
-    joined_filenames = ' '.join(filenames)
-    
+        
     sac_command = '''read %s
 chnhdr O gmt %i %i %i %i %i %i
 listhdr O
-''' % ((joined_filenames,)+sactime( reftime ))
+''' % ((filename,)+sactime( reftime ))
     (out,err) = sac_exec(sac_command)
     
     for line in out.splitlines():
@@ -340,13 +341,12 @@ listhdr O
                 offset = float(v)
                 
     sac_command = '''read %s
+chnhdr O gmt %i %i %i %i %i %i
 chnhdr ALLT %g IZTYPE IO
 write %s
-''' % (joined_filenames, -offset, joined_filenames)
+''' % ((filename,) + sactime( reftime ) + ( -offset, filename))
     (out,err) = sac_exec(sac_command)
-                
-                
-    
+                    
 def preprocess( datadir_dis, seismograms, ref_time, c_low=0.01, c_high=1., new_delta_t=0.5):
 
     if os.path.exists( datadir_dis ):
@@ -384,36 +384,43 @@ write %s
             length = end - beg
             cutbeg = 2./c_low
             cutend = length-2./c_low
-            
-      #      try:
-            if True:
+                        
+            try:
                 if abs(new_delta_t/s.delta - 10.) < 10./10000.:
                     d = (2, 5)
                 elif abs(new_delta_t/s.delta - 20.) < 20./10000.:
                     d = (4, 5)
                 elif abs(new_delta_t/s.delta - 50.) < 50./10000.:
                     d = (5, 5, 2)
+                elif abs(new_delta_t/s.delta - 25.) < 25./10000.:
+                    d = (5, 5)
+                elif abs(new_delta_t/s.delta - 5.) < 5./10000.:
+                    d = (5,)
                 else:
                     raise Exception('unexpected sampling interval: %g' % s.delta)
+                
+                
+                
                 decimations = ''.join(['decimate %i\n' % dd for dd in d])
                     
                 taper_width = 2./c_low / (s.end-s.begin)
                 
                 # correct for instrument response
                 sac_command = commands % (s.filename, taper_width, s.resp_filename, 
-                                          c_low/2., c_low, c_high, c_high*2.,  
-                                          cutbeg, cutend, decimations, new_delta_t, displ_filename)
+                                        c_low/2., c_low, c_high, c_high*2.,  
+                                        cutbeg, cutend, decimations, new_delta_t, displ_filename)
                 (out,err) = sac_exec(sac_command)
                 
                 # set common reference time
-                set_ref_time( (displ_filename,), ref_time )
+                set_ref_time( displ_filename, ref_time )
                 
                 s_pro = Trace(displ_filename, '', '', s.sid, s.nid, s.component, s.locid)
                 
                 processed.append( s_pro )
                 
-          #  except:
-          #      print 'ignoring:', s.sid, s.nid, s.component, s.locid
+            except Exception, e:
+                print 'ignoring:', s.sid, s.nid, s.component, s.locid
+                print e
                 
     return processed
 
@@ -448,14 +455,17 @@ def make_rotated_horizontals( traces ):
         
         beg = max(tnorth.begin, teast.begin) - reftime
         end = min(tnorth.end, teast.end) - reftime
-        length = end-beg
+        beg = math.ceil(beg/delta)*delta
+        end = beg + math.floor((end-beg)/delta) * delta
         
         radial_filename = re.sub(r'BHN', 'BHR', tnorth.filename)
         transversal_filename = re.sub(r'BHE', 'BHT', teast.filename)
         
         com  = 'read %s %s\n' % (tnorth.filename, teast.filename)
         com += 'synchronize round on\n'
-        com += 'cutim %g %g\n' % (delta/2., length-delta/2.)
+
+        com += 'cutim o %g %g\n' % (beg+delta/2., end-delta/2.)
+
         com += 'chnhdr file 1 cmpaz 0\n'     # in case components are not exactly north / east
         com += 'chnhdr file 2 cmpaz 90\n'
         com += 'rotate to gcp\n' 
@@ -465,7 +475,8 @@ def make_rotated_horizontals( traces ):
         
         sac_exec(com)
         
-        set_ref_time( (radial_filename, transversal_filename), reftime )
+        set_ref_time( radial_filename, reftime )
+        set_ref_time( transversal_filename, reftime )
         
         
         
@@ -607,7 +618,8 @@ if step == 'preprocess' or step == 'all':
     stations = get_stations_from_file( os.path.join(datadir,'rdseed.stations') )
 
     set_time_ranges( event, stations.values() )
-    traces = get_traces( stations.values(), datadir_raw )
+
+    traces = get_traces( stations.values(), datadir_raw, event.time )
     blacklist = get_stations_blacklist( blacklist_station_file )
     selected_traces = select_traces( traces, event, stations, blacklist, set(('BHN', 'BHE', 'BHZ')), gfdb, low_freq=frequency_range[0], margin_gfdb=margin_gfdb )
     

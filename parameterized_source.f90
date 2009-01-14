@@ -67,6 +67,7 @@ module parameterized_source
         double precision                  :: ref_time           ! reference time
         type(t_geo_coords)                :: origin             ! reference origin at surface
         
+        real                              :: moment = 1.0       ! may be used to apply moment after seismogram generation
         real, dimension(:),allocatable    :: params             ! the parameters of the source
         
         

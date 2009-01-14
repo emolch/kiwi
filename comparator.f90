@@ -209,20 +209,25 @@ module comparator
         
     end subroutine
     
-    subroutine probe_set_array( self, strip, allow_shrink_, span_hint )
+    subroutine probe_set_array( self, strip, allow_shrink_, span_hint, factor_ )
     
         type(t_probe), intent(inout) :: self
         type(t_strip), intent(in) :: strip
         logical, intent(in), optional :: allow_shrink_ ! defaults to .false.
         integer, dimension(2), intent(in), optional :: span_hint
+        real, intent(in), optional :: factor_
         
         integer, dimension(2) :: newspan, tempspan
         logical :: allow_shrink
         integer :: datalength
+        real :: factor
         
         allow_shrink = .false.
         if (present( allow_shrink_ )) allow_shrink = allow_shrink_
-        
+
+        factor = 1.
+        if (present( factor_ )) factor = factor_        
+
         self%dataspan = strip_span( strip )
 
       ! resize strip such that length is a power of two
@@ -247,7 +252,7 @@ module comparator
         self%span = newspan
         
         if (self%span(1) <= self%dataspan(1)-1) self%array(:self%dataspan(1)-1) = 0.
-        self%array(self%dataspan(1):self%dataspan(2)) = strip%data(:)
+        self%array(self%dataspan(1):self%dataspan(2)) = strip%data(:) * factor
         if (self%dataspan(2)+1 <= self%span(2)) self%array(self%dataspan(2)+1:) = &
                                                 self%array(self%dataspan(2))
 

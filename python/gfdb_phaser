@@ -21,16 +21,19 @@
 
 import os, sys
 from subprocess import Popen, PIPE
-import ugly_minimizer as minimizer
+from tunguska.phase import Phase
+from tunguska.gfdb import Gfdb
 pjoin = os.path.join
 
 
-def get_arrival(phases, distance):
+def get_arrivals(phases, distance):
+    arrivals = []
     for phase in phases:
         t = phase(distance)
         if t is not None:
-            return t
-
+            arrivals.append(t)
+    return arrivals
+        
 # argument processing
 
 if len(sys.argv) < 5 and len(sys.argv) != 3:
@@ -48,7 +51,7 @@ if len(sys.argv) > 3:
 
 # create database if it does not exist already
 
-in_db = minimizer.get_gfdb_infos( in_db_path )
+in_db = Gfdb( in_db_path )
 if not os.path.isfile( out_db_path + '.index' ):
     cmd = [str(x) for x in ['gfdb_build',   out_db_path, 
                                             in_db.nchunks, 
@@ -65,9 +68,9 @@ if not os.path.isfile( out_db_path + '.index' ):
     
 
 if cut_mode:
-    phases = [ minimizer.Phase(phase_name) for phase_name in phase_names]
-    beg = minimizer.Phase('begin')
-    end = minimizer.Phase('end')
+    phases = [ Phase(phase_name) for phase_name in phase_names]
+    beg = Phase('begin')
+    end = Phase('end')
 
 cmd = [str(x) for x in ['gfdb_redeploy', in_db_path, out_db_path ]]
 p = Popen( cmd, stdin=PIPE )
@@ -75,9 +78,12 @@ p = Popen( cmd, stdin=PIPE )
 for ix in xrange(in_db.nx):
     x = in_db.firstx + ix * in_db.dx
     if cut_mode:
-        arrival = get_arrival( phases+[beg], x )
-        twin_begin = max(arrival+trange[0], get_arrival((beg,),x))
-        twin_end   = min(arrival+trange[1], get_arrival((end,),x))
+        arrivals = get_arrivals( phases, x )
+        (tbeg,tend) = get_arrivals((beg,end), x)
+        if not arrivals:
+            arrivals.append( tbeg )
+        twin_begin = max(min(arrivals)+trange[0], tbeg)
+        twin_end   = min(max(arrivals)+trange[1], tend)
         print 'distance: %g  time window: %g %g' % (x, twin_begin, twin_end)
     else:
         print 'distance: %g' % x

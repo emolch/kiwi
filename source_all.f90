@@ -199,14 +199,16 @@ module source_all
 
     end subroutine
         
-    subroutine psm_set( psm, sourcetype, params, normalized_ )
+    subroutine psm_set( psm, sourcetype, params, normalized_, only_moment_changed_)
     
         type(t_psm), intent(inout)     :: psm
         integer, intent(in)            :: sourcetype
         real, dimension(:), intent(in) :: params
         logical, intent(in), optional  :: normalized_
+        logical, intent(out), optional  :: only_moment_changed_
+
         
-        logical :: normalized
+        logical :: normalized, only_moment_changed
         
         normalized = .false.
         if (present(normalized_)) normalized = normalized_
@@ -214,25 +216,30 @@ module source_all
         select case(sourcetype)
             
             case (psm_bilat)
-                call psm_set_bilat( psm, params, normalized )
+                call psm_set_bilat( psm, params, normalized, only_moment_changed )
             case (psm_circular)
-                call psm_set_circular( psm, params, normalized )
+                call psm_set_circular( psm, params, normalized, only_moment_changed )
             case (psm_point_lp)
-                call psm_set_point_lp( psm, params, normalized )
+                call psm_set_point_lp( psm, params, normalized, only_moment_changed )
             case (psm_eikonal)
-                call psm_set_eikonal( psm, params, normalized )
+                call psm_set_eikonal( psm, params, normalized, only_moment_changed )
             case (psm_moment_tensor)
-                call psm_set_moment_tensor( psm, params, normalized )
+                call psm_set_moment_tensor( psm, params, normalized, only_moment_changed )
             
         end select
-       
+        
         call resize( psm%params_mask, 1, size(psm%params) )
         if (psm%sourcetype /= sourcetype) then
             psm%params_mask(:) = .true.
+            only_moment_changed = .false.
         end if
         
         psm%sourcetype = sourcetype
         
+        if (present(only_moment_changed_)) then
+            only_moment_changed_ = only_moment_changed
+        end if
+
     end subroutine
     
     
@@ -337,17 +344,18 @@ module source_all
     
     
     
-    subroutine psm_set_subparams( psm, subparams, normalized_ )
+    subroutine psm_set_subparams( psm, subparams, normalized_, only_moment_changed_ )
     
       ! set params where params_mask is true with values from subparams array
       
         type(t_psm), intent(inout)        :: psm
         real, intent(in), dimension(:)    :: subparams
         logical, intent(in), optional     :: normalized_
+        logical, intent(out), optional    :: only_moment_changed_
     
         real, dimension(:), allocatable :: paramscopy
         integer :: iparam, isub
-        logical :: normalized
+        logical :: normalized, only_moment_changed
         
         normalized = .false.
         if (present(normalized_)) normalized = normalized_
@@ -370,17 +378,19 @@ module source_all
         select case(psm%sourcetype)
             
             case (psm_bilat)
-                call psm_set_bilat( psm, paramscopy, normalized )
+                call psm_set_bilat( psm, paramscopy, normalized, only_moment_changed )
             case (psm_circular)
-                call psm_set_circular( psm, paramscopy, normalized )
+                call psm_set_circular( psm, paramscopy, normalized, only_moment_changed )
             case (psm_point_lp)
-                call psm_set_point_lp( psm, paramscopy, normalized )
+                call psm_set_point_lp( psm, paramscopy, normalized, only_moment_changed )
             case (psm_eikonal)
-                call psm_set_eikonal( psm, paramscopy, normalized )
+                call psm_set_eikonal( psm, paramscopy, normalized, only_moment_changed )
             case (psm_moment_tensor)
-                call psm_set_moment_tensor( psm, paramscopy, normalized )
+                call psm_set_moment_tensor( psm, paramscopy, normalized, only_moment_changed )
             
         end select
+
+        if (present(only_moment_changed_)) only_moment_changed_ = only_moment_changed
 
         call resize(paramscopy,1,0)
         

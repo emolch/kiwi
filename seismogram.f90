@@ -286,10 +286,6 @@ module seismogram
             deallocate( rshifts )
         end if
 
-        do i=1,receiver%ncomponents
-            call probe_set_array(  receiver%syn_probes(i), receiver%displacement(i) )
-        end do
-
         call gfdb_housekeeping( greensf )
         
     end subroutine

@@ -172,17 +172,15 @@ module source_bilat
     
     end subroutine
   
-    subroutine psm_set_bilat( psm,  params, normalized_ )
+    subroutine psm_set_bilat( psm,  params, normalized, only_moment_changed )
     
         type(t_psm), intent(inout)     :: psm
         real, dimension(:), intent(in) :: params
-        logical, intent(in), optional  :: normalized_
+        logical, intent(in)            :: normalized
+        logical, intent(out)           :: only_moment_changed
         
         logical :: must_reset_grid
-        logical :: normalized
-        
-        normalized = .false.
-        if (present(normalized_)) normalized = normalized_
+        real, dimension(size(params)) :: new_params
         
         must_reset_grid = .false.
         if (.not. allocated(psm%grid_size) .or. (psm%sourcetype .ne. psm_bilat)) then
@@ -200,13 +198,19 @@ module source_bilat
         end if
         
         if (size(params,1) .ne. size(psm%params)) call die("wrong number of source parameters in psm_set_bilat()")
-                
-        if (normalized) then
-            psm%params = params * psm%params_norm
-        else
-            psm%params = params 
-        end if
         
+        if (normalized) then
+            new_params = params * psm%params_norm
+        else
+            new_params = params 
+        end if
+    
+        only_moment_changed = (count(new_params .ne. psm%params) .le. 1 .and. new_params(5) .ne. psm%params(5))
+        
+        psm%params = new_params
+        
+        psm%moment = psm%params(5)
+
         call psm_update_dep_params_bilat( psm )
         
     end subroutine
@@ -324,7 +328,7 @@ module source_bilat
         integer, intent(in)             :: nx,ny,nt
          
       ! make some aliases to the parameters, so that the code get's readable
-        real :: depth, moment, length, width, rupvel, risetime
+        real :: depth, length, width, rupvel, risetime
         real :: north, east, length_a, length_b
         
         
@@ -344,7 +348,6 @@ module source_bilat
         north = psm%params(2)
         east = psm%params(3)
         depth = psm%params(4)
-        moment = psm%params(5)
         
         length_a = psm%params(10)
         length_b = psm%params(11)
@@ -435,7 +438,7 @@ module source_bilat
       ! according to strike, dip and rake
         trotmat = transpose(psm%rotmat_slip)
         m_rot = matmul( psm%rotmat_slip, matmul( m_unrot, trotmat ) )
-        m_rot(:,:) = m_rot(:,:) * moment / np        
+        m_rot(:,:) = m_rot(:,:) / np        
         
       ! fill output arrays
         id = 1

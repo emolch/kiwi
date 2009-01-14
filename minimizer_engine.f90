@@ -84,7 +84,8 @@ module minimizer_engine
     integer                                         :: zundersample = 1
     
     logical :: database_inited = .false.
-    logical :: probes_inited = .false.
+    logical :: ref_probes_inited = .false.
+    logical :: syn_probes_inited = .false.
     logical :: receivers_inited = .false.
     logical :: source_inited = .false.
     logical :: source_location_inited = .false.
@@ -92,7 +93,8 @@ module minimizer_engine
     logical :: misfits_inited = .false.
     
     logical :: database_dirty = .true.
-    logical :: probes_dirty = .true.
+    logical :: ref_probes_dirty = .true.
+    logical :: syn_probes_dirty = .true.
     logical :: receivers_dirty = .true.
     logical :: source_dirty = .true.
     logical :: source_location_dirty = .true.
@@ -258,7 +260,7 @@ module minimizer_engine
         end if
         
         receivers_inited = .true.
-        probes_inited = .false.
+        ref_probes_inited = .false.
         call dirtyfy_receivers()
         
     end subroutine
@@ -284,7 +286,7 @@ module minimizer_engine
 
         call receiver_set_enabled( receivers(ireceiver), newstate )
 
-        call dirtyfy_probes()
+        call dirtyfy_receivers()
 
     end subroutine
     
@@ -308,8 +310,8 @@ module minimizer_engine
             call receiver_set_ref_seismogram( receivers(ireceiver), reffn, refformat, ok )
         end do
         
-        probes_inited = .true.
-        call dirtyfy_probes()
+        ref_probes_inited = .true.
+        call dirtyfy_ref_probes()
         
     end subroutine
     
@@ -322,7 +324,7 @@ module minimizer_engine
         integer :: nreceivers
         integer :: ishift
         
-        call update_probes( ok )
+        call update_ref_probes( ok )
         if (.not. ok) return
         
         nreceivers = size(receivers)
@@ -335,7 +337,7 @@ module minimizer_engine
         ishift = int(nint(shift/db%dt))
         call receiver_shift_ref_seismogram( receivers(ireceiver), ishift )
 
-        call dirtyfy_probes()
+        call dirtyfy_ref_probes()
         
     end subroutine
 
@@ -376,7 +378,7 @@ module minimizer_engine
 
         end if
         
-        call dirtyfy_probes()
+        call dirtyfy_ref_probes()
         
     end subroutine
 
@@ -433,17 +435,23 @@ module minimizer_engine
         real, dimension(:),intent(in)    :: sourceparams
         logical, intent(out) :: ok
         
+        logical :: only_moment_changed        
+
         call update_source_location( ok )
         if (.not. ok) return
         
         if (source_inited .and. sourcetype == psm%sourcetype) then
             if (all(psm%params == sourceparams)) return ! this source has already been set
         end if
-        call psm_set(psm, sourcetype, sourceparams )
+        call psm_set(psm, sourcetype, sourceparams, only_moment_changed_=only_moment_changed )
         
-        source_inited = .true.
-        call dirtyfy_source()
-        
+        if (only_moment_changed) then
+            call dirtyfy_syn_probes()
+        else
+            source_inited = .true.
+            call dirtyfy_source()
+        end if
+            
     end subroutine
         
     subroutine set_source_params_mask( params_mask , ok)
@@ -537,7 +545,7 @@ module minimizer_engine
         integer :: nreceivers
         type(t_plf) :: taper
          
-        call update_probes( ok )
+        call update_ref_probes( ok )
         if (.not. ok) return
         
         nreceivers = size(receivers)
@@ -732,6 +740,26 @@ module minimizer_engine
         
     end subroutine
     
+    subroutine scale_seismograms()
+
+      ! Put seismogram data into probes and apply moment
+
+        integer :: icomp, irec
+
+        call inform("scaling seismograms")
+        do irec=1,size(receivers)
+            if (receivers(irec)%enabled) then
+                do icomp=1,receivers(irec)%ncomponents
+                    call probe_set_array( receivers(irec)%syn_probes(icomp), &
+                                        receivers(irec)%displacement(icomp), &
+                                        factor_=psm%moment )
+                end do
+            end if
+        end do
+
+    end subroutine
+
+
     subroutine calculate_misfits()
     
       ! calculate distance between reference and synthetic seismograms
@@ -798,10 +826,10 @@ module minimizer_engine
         integer                     :: ireceiver, nreceivers
         
         if (which_probe == SYNTHETICS) then
-            call update_seismograms( ok )
+            call update_syn_probes( ok )
             if (.not. ok) return
         else if (which_probe == REFERENCES) then
-            call update_probes( ok )
+            call update_ref_probes( ok )
             if (.not. ok) return
         else
             ok = .false.
@@ -829,10 +857,10 @@ module minimizer_engine
         integer                     :: ireceiver
         
         if (which_probe == SYNTHETICS) then
-            call update_seismograms( ok )
+            call update_syn_probes( ok )
             if (.not. ok) return
         else if (which_probe == REFERENCES) then
-            call update_probes( ok )
+            call update_ref_probes( ok )
             if (.not. ok) return
         else
             ok = .false.
@@ -919,8 +947,10 @@ module minimizer_engine
         nreceivers = size(receivers)
         nmisfits = 0
         do ireceiver=1,nreceivers
-            ncomps = size(receivers(ireceiver)%misfits)
-            nmisfits = nmisfits + ncomps
+            if (receivers(ireceiver)%enabled) then
+                ncomps = size(receivers(ireceiver)%misfits)
+                nmisfits = nmisfits + ncomps
+            end if
         end do
         
         if ( allocated(misfits_) ) deallocate(misfits_)
@@ -929,12 +959,14 @@ module minimizer_engine
       ! fill into temporary array
         imisfit = 1
         do ireceiver=1,nreceivers
-            ncomps = size(receivers(ireceiver)%misfits)
-            do icomp=1,ncomps
-                misfits_(1,imisfit) = receivers(ireceiver)%misfits(icomp)
-                misfits_(2,imisfit) = receivers(ireceiver)%misfits_norm_factors(icomp)
-                imisfit = imisfit + 1
-            end do
+            if (receivers(ireceiver)%enabled) then
+                ncomps = size(receivers(ireceiver)%misfits)
+                do icomp=1,ncomps
+                    misfits_(1,imisfit) = receivers(ireceiver)%misfits(icomp)
+                    misfits_(2,imisfit) = receivers(ireceiver)%misfits_norm_factors(icomp)
+                    imisfit = imisfit + 1
+                end do
+            end if
         end do
         
     end subroutine
@@ -983,9 +1015,9 @@ module minimizer_engine
         integer                           :: ireceiver
         integer, dimension(2)             :: shiftrange
 
-        call update_seismograms( ok )
+        call update_syn_probes( ok )
         if (.not. ok) return
-        call update_probes( ok )
+        call update_ref_probes( ok )
         if (.not. ok) return
         
         shiftrange(:) = int( nint(shiftrange_(:)/db%dt) )
@@ -1113,20 +1145,34 @@ module minimizer_engine
         
     end subroutine
     
-    subroutine update_probes( ok )
+    subroutine update_ref_probes( ok )
     
         logical, intent(out) :: ok
         
         call update_receivers( ok )
         if (.not. ok) return
         
-        if (.not. probes_inited) then
+        if (.not. ref_probes_inited) then
             call error("no reference seismograms set")
             ok = .false.
             return
-        end if 
+        end if
         
-        probes_dirty = .false.
+        ref_probes_dirty = .false.
+        
+    end subroutine
+
+    subroutine update_syn_probes( ok )
+    
+        logical, intent(out) :: ok
+        
+        call update_seismograms( ok )
+        if (.not. ok) return
+        
+        if (syn_probes_dirty) then
+            call scale_seismograms()
+        end if
+        syn_probes_dirty = .false.
         
     end subroutine
     
@@ -1134,9 +1180,9 @@ module minimizer_engine
     
         logical, intent(out) :: ok
                 
-        call update_probes( ok )
+        call update_ref_probes( ok )
         if (.not. ok) return
-        call update_seismograms( ok )
+        call update_syn_probes( ok )
         if (.not. ok) return
         
         if (misfits_dirty) then
@@ -1166,16 +1212,21 @@ module minimizer_engine
     subroutine dirtyfy_receivers()
         receivers_dirty = .true.
         call dirtyfy_seismograms()
-        call dirtyfy_probes()
+        call dirtyfy_ref_probes()
     end subroutine
     
     subroutine dirtyfy_seismograms()
         seismograms_dirty = .true.
-        call dirtyfy_misfits()
+        call dirtyfy_syn_probes()
     end subroutine
     
-    subroutine dirtyfy_probes()
-        probes_dirty = .true.
+    subroutine dirtyfy_ref_probes()
+        ref_probes_dirty = .true.
+        call dirtyfy_misfits()
+    end subroutine
+
+    subroutine dirtyfy_syn_probes()
+        syn_probes_dirty = .true.
         call dirtyfy_misfits()
     end subroutine
     

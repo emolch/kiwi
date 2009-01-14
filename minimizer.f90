@@ -1098,6 +1098,8 @@ module minimizer_wrappers
       ! Returns the misfit and normalization factors between the synthetic 
       ! seismograms for the current source model and the reference seismograms.
       !
+      ! Disabled stations are omitted in output list.
+      !
       ! Returns: {{{misfit-receiver1-component1 normfactor-receiver1-component1 ...}}}
       
         type(varying_string), intent(in)  :: line

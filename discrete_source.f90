@@ -38,7 +38,7 @@ module discrete_source
     
         double precision   :: ref_time           ! reference time
         type(t_geo_coords) :: origin             ! reference origin at surface
-        
+ 
       ! table of moment tensor approximating the rupture
         type(t_centroid), allocatable, dimension(:) :: centroids
       
