@@ -72,6 +72,7 @@ module minimizer_wrappers
     public do_get_source_subparams
     public do_get_global_misfit
     public do_get_misfits
+    public do_get_peak_amplitudes
     public do_get_principal_axes
     public do_output_distances
     public do_output_cross_correlations
@@ -1119,6 +1120,33 @@ module minimizer_wrappers
         
     end subroutine
     
+    subroutine do_get_peak_amplitudes( line, answer, ok )
+    
+     !! === {{{get_peak_amplitudes}}} ===
+      ! 
+      ! Get the horizonal and vertical peak amplitudes of the synthetic traces. 
+      !
+      ! Disabled stations are omitted in output list.
+      !
+      ! Returns: {{{maxabs_receiver_1_horizontal maxabs_receiver_1_vertical ...}}}
+      
+        type(varying_string), intent(in)  :: line
+        type(varying_string), intent(out) :: answer
+        logical, intent(out)              :: ok
+        
+        real, dimension(:,:), allocatable :: maxabs_
+        
+        ok = line /= '' ! get rid of warning, that line is not used
+        answer = ""
+        
+        call get_peak_amplitudes( maxabs_, ok )
+        if (.not. ok) return
+     
+        call array2d_to_string( maxabs_, answer )
+        if (allocated(maxabs_)) deallocate(maxabs_)
+        
+    end subroutine
+
     subroutine do_get_principal_axes( line, answer, ok )
     
      !! === {{{get_principal_axes}}} ===
@@ -1492,6 +1520,8 @@ program minimizer
             call do_get_global_misfit( arguments, answer, ok )
         else if (command == 'get_misfits') then
             call do_get_misfits( arguments, answer, ok )
+        else if (command == 'get_peak_amplitudes') then
+            call do_get_peak_amplitudes( arguments, answer, ok )
         else if (command == 'get_principal_axes') then
             call do_get_principal_axes( arguments, answer, ok )
         else if (command == 'output_distances') then

@@ -34,7 +34,7 @@ LIBSMINPACK = -Lsminpack -lsminpack
 
 # compiler and linker flag defaults
 CFLAGS =  $(INCMSEED) $(INCHDF) $(INCSAC) $(INCFFTW)
-LDFLAGS =  $(LIBMSEED) $(LIBSAC) $(LIBFFTW) $(LIBHDF) $(LIBSMINPACK)
+LDFLAGS =  $(LIBMSEED) $(LIBSAC)  $(LIBHDF) $(LIBSMINPACK) $(LIBFFTW)
 
 # use the Makefile.local if you want to append to FORTRANC, CFLAGS or LDFLAGS
 # some abbreviations that can be used to append to cflags
@@ -94,10 +94,10 @@ install : targets
 	install -d $(bindir)
 	install $(TARGETS) $(bindir)
 	install -d $(datadir)/kiwi
-	find aux -type d -and -not -path '*/.svn/*' -print0 | \
-	    xargs --replace='{}' -0 install -d $(datadir)/kiwi/'{}'
-	find aux -type f -and -not -path '*/.svn/*' -print0 | \
-	    xargs --replace='{}' -0 install  '{}' $(datadir)/kiwi/'{}'
+	for f in `find aux -type d -and -not -path '*/.svn*'` ; do \
+	    install -d $(datadir)/kiwi/$$f ; done
+	for f in `find aux -type f -and -not -path '*/.svn/*'` ; do \
+	    install  $$f $(datadir)/kiwi/$$f ; done
 
 	@echo 
 	@echo '-----------------------------------------------------------------------'
@@ -124,7 +124,7 @@ seismosizer : $(OBJECTS) seismosizer.o
 	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
 
 minimizer : $(OBJECTS) minimizer.o
-	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
+	$(FORTRANC) -o $@ $(OBJECTS) $@.o $(LDFLAGS)
 
 eulermt : $(OBJECTS) eulermt.o
 	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@

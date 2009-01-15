@@ -7,7 +7,7 @@ import scipy
 import scipy.io
 import pickle
 import shutil
-
+import sys
 pjoin = os.path.join
 
 def kiwi_aux_dir():
@@ -81,7 +81,7 @@ def autoplot( *args, **kwargs ):
         elif isinstance(thing, num.ndarray):
             tfn = pjoin(tempdir, 'plotdata-%i.table' % ithing)
             f = open(tfn, 'w')
-            scipy.io.write_array(f,thing)
+            num.savetxt(f,thing)
             f.close()
             infiles.append(tfn)
         
@@ -100,7 +100,7 @@ def autoplot( *args, **kwargs ):
                 tab[:,2] = z.reshape((nz,))
                 tab[:,1] = y.repeat(nx)
                 for i in range(ny): tab[i*nx:i*nx+nx,0] = x
-                scipy.io.write_array(f,tab)
+                num.savetxt(f,tab)
             else:
                 nrows = thing[0].size
                 ncols = len(thing)
@@ -108,7 +108,7 @@ def autoplot( *args, **kwargs ):
                 for icol,col in enumerate(thing):
                     assert(col.size == nrows)
                     tab[:,icol] = col
-                scipy.io.write_array(f,tab)
+                num.savetxt(f,tab)
             
             f.close()
             infiles.append(tfn)

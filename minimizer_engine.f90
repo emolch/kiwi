@@ -64,6 +64,7 @@ module minimizer_engine
     public get_distances
     public get_global_misfit
     public get_misfits
+    public get_peak_amplitudes
     public get_principal_axes
     public output_cross_correlations
     public shift_ref_seismogram
@@ -970,7 +971,42 @@ module minimizer_engine
         end do
         
     end subroutine
+    
+    subroutine get_peak_amplitudes( maxabs_, ok )
+    
+        real, dimension(:,:), allocatable, intent(inout) :: maxabs_
+        logical, intent(out)  :: ok
         
+        integer :: imaxabs, nmaxabs, ireceiver, nreceivers
+        real :: max_hor, max_ver
+        
+        call update_syn_probes( ok )
+        if (.not. ok) return
+        
+        ! how many are needed?
+        nreceivers = size(receivers)
+        nmaxabs = 0
+        do ireceiver=1,nreceivers
+            if (receivers(ireceiver)%enabled) then
+                nmaxabs = nmaxabs + 1
+            end if
+        end do
+
+        if ( allocated(maxabs_) ) deallocate(maxabs_)
+        allocate( maxabs_(2,nmaxabs) )
+        
+        imaxabs = 1
+        do ireceiver=1,nreceivers
+            if (receivers(ireceiver)%enabled) then
+                call receiver_get_maxabs(receivers(ireceiver), max_hor, max_ver)
+                maxabs_(1,imaxabs) = max_hor
+                maxabs_(2,imaxabs) = max_ver
+                imaxabs = imaxabs + 1
+            end if
+        end do
+        
+    end subroutine
+    
     subroutine get_principal_axes( pax, tax, ok )
         
         real, dimension(2), intent(out)  :: pax, tax

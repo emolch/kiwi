@@ -105,6 +105,7 @@ module receiver
     public receiver_calculate_misfits
     public receiver_calculate_cross_correlations
     public receiver_output_cross_correlations
+    public receiver_get_maxabs
 
     public character_to_id
     
@@ -385,6 +386,58 @@ module receiver
 
         end do
     
+    end subroutine
+
+    subroutine get_component_ids( self, iver, ihor1, ihor2 )
+    
+      ! get the horizontal components, preferably a/c and r/l
+    
+        type(t_receiver), intent(in) :: self
+        integer, intent(out) :: iver, ihor1, ihor2
+        
+        integer ict, icomponent
+        ihor1 = 0
+        ihor2 = 0
+        iver = 0
+        do icomponent=1, self%ncomponents
+            ict = abs(self%components(icomponent))
+            if (ict == 1) ihor1 = icomponent
+            if (ict == 2) ihor2 = icomponent
+            if (ict == 3) iver = icomponent
+        end do
+        if (ihor1 == 0 .or. ihor2 == 0) then
+            do icomponent=1, self%ncomponents
+                ict = abs(self%components(icomponent))
+                if (ict == 4) ihor1 = icomponent
+                if (ict == 5) ihor2 = icomponent
+            end do
+        end if
+        if (ihor1 == 0 .or. ihor2 == 0) then 
+          ! return none, if incomplete 
+            ihor1 = 0 
+            ihor2 = 0
+        end if
+
+    end subroutine
+
+    subroutine receiver_get_maxabs( self, max_hor, max_ver )
+    
+        type(t_receiver), intent(inout) :: self
+        real, intent(out) :: max_hor, max_ver
+        
+        integer iver, ihor1, ihor2
+        
+        max_hor = 0.
+        max_ver = 0.
+        if (self%enabled) then 
+            call get_component_ids( self, iver, ihor1, ihor2 )
+            if (iver /= 0) then
+                max_ver = probe_norm( self%syn_probes(iver), PEAK )
+            end if
+            if (ihor1 /= 0 .and. ihor2 /= 0) then
+                max_hor = probes_norm( self%syn_probes(ihor1), self%syn_probes(ihor2), PEAK )
+            end if
+        end if
     end subroutine
 
     subroutine receiver_calculate_cross_correlations( self, shiftrange )

@@ -39,6 +39,7 @@ module comparator
     integer, public, parameter :: AMPSPEC_L2NORM = 3
     integer, public, parameter :: AMPSPEC_L1NORM = 4
     integer, public, parameter :: SCALAR_PRODUCT = 5
+    integer, public, parameter :: PEAK = 6
 
   ! processing ids
     integer, parameter, public :: PLAIN = 1
@@ -509,6 +510,13 @@ module comparator
         end if
     end function
     
+    pure function maxabs_func( a, b, dt, fa, fb ) result(maxabs)
+        real, dimension(:), intent(in) :: a,b
+        real, intent(in) :: dt, fa, fb
+        real :: maxabs
+        maxabs = dt * 0. ! (get rid of compiler warning)
+        maxabs = maxval(sqrt(real(fa*a,8)**2 + real(fb*b,8)**2))
+    end function
 
     pure function scalar_product_1( a, dt, fa ) result(prod)
         real, dimension(:), intent(in) :: a
@@ -530,6 +538,14 @@ module comparator
         real, intent(in) :: dt, fa
         real :: norm
         norm = fa * real(sqrt(dt*sum(real(a,8)**2)))
+    end function
+    
+    pure function maxabs_func_1( a, dt, fa ) result(maxabs)
+        real, dimension(:), intent(in) :: a
+        real, intent(in) :: dt, fa
+        real :: maxabs
+        maxabs = dt * 0. ! (get rid of compiler warning)
+        maxabs = fa * maxval(abs(a))
     end function
     
     function probes_norm_timedomain( a, b, normfunction ) result(norm)
@@ -705,6 +721,10 @@ module comparator
                 norm = probes_norm_frequencydomain( a, b, l1norm_func )
                 return
             
+            case (PEAK)
+                norm = probes_norm_timedomain( a, b, maxabs_func )
+                return
+            
             case default
                 call die( "probes_norm(): unknown norm method" )
             
@@ -743,6 +763,10 @@ module comparator
             
             case (AMPSPEC_L1NORM)
                 norm = probe_norm_frequencydomain( a, l1norm_func_1 )
+                return
+                
+            case (PEAK)
+                norm = probe_norm_timedomain( a, maxabs_func_1 )
                 return
             
             case default
