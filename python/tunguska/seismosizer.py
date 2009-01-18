@@ -518,7 +518,7 @@ class Seismosizer(SeismosizerBase):
                 
     def get_dsm_infos( self ):
         si_base = pjoin(self.tempdir, "source-info")
-        self.do_output_source_model( si_base )
+        self.do_output_source_model( si_base, where=0 )
         si_tdsm = si_base+'-tdsm.info'
         f = open(si_tdsm,'r')
         sect = ''
@@ -533,6 +533,40 @@ class Seismosizer(SeismosizerBase):
                 infos['ncentroids'] = int(sline)
         return infos
             
+    def get_psm_infos( self ):
+        si_base = pjoin(self.tempdir, "source-info")
+        self.do_output_source_model( si_base, where=0 )
+        si_psm = si_base+'-psm.info'
+        sections = set(["center","outline","rupture","slip","eikonal-grid"])
+        f = open(si_psm)
+        atsec = ''
+        points = []
+        data = {}
+        def fill(atsec, points):
+            if atsec == 'eikonal-grid': nhead = 1
+            else: nhead = 0
+            data[atsec] = (num.array(points[:nhead],dtype=num.float), num.array(points[nhead:], dtype=num.float))
+            
+        for line in f:
+            sline = line.strip()
+            
+            if sline == '':    # at a section end
+                if atsec != '':
+                    fill(atsec, points)
+                atsec = ''
+                points = []
+                continue
+            if sline in sections:
+                atsec = sline
+                continue
+            if atsec != '':
+                points.append( sline.split() )
+        if atsec != '':
+            fill(atsec, points)
+        
+        f.close()
+        return data
+        
     def make_misfits_for_source( self, source ):
         """Calculate misfits for given source and fill these into the receivers datastructure."""
         

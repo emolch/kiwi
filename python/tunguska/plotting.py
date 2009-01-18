@@ -2,9 +2,11 @@ import util
 import config
 import copy
 import subprocess
-import gmt
+import gmt              # <- must get rid of this old version of gmtpy
+import gmtpy
 import numpy as num
 import progressbar
+import math
 from os.path import join as pjoin
 
 def ra(a):
@@ -280,5 +282,140 @@ def station_plot( slat, slon, lat, lon, rnames, station_color, station_size, sou
     
     
     plot.save( filename )
+    
+    
+def point_in_region(p,r):
+    p = [ num.mod(x,360.) for x in p ]
+    r = [ num.mod(x,360.) for x in r ]
+    if r[0] <= r[1]:
+        blon = r[0] <= p[0] <= r[1] 
+    else:
+        blon = not (r[1] < p[0] < r[0])
+    if r[2] <= r[3]:
+        blat = r[2] <= p[1] <= r[3] 
+    else:
+        blat = not (r[3] < p[1] < r[2])
+        
+    return blon and blat
+
+    
+def location_map( filename, lat, lon, lat_delta, source, source_model_info, conf_overrides ):
+
+    conf = dict(**config.location_map_config)
+    conf.update( conf_overrides )
+    
+    w = conf.pop('width')
+    h = conf.pop('height')
+    margins = conf.pop('margins')
+    
+    topo_img_file_1m = conf.pop('topo_img_file_1m')
+    topo_grd_file_5m = conf.pop('topo_grd_file_5m')
+    cptfile = conf.pop('topocpt_sealand')
+    cptfile1 = conf.pop('topocpt_sea')
+    cptfile2 = conf.pop('topocpt_land')
+
+    
+    
+    gmt = gmtpy.GMT( config={ 'ANNOT_FONT_PRIMARY': 'Helvetica',
+                              'PLOT_DEGREE_FORMAT':'dddF',
+                              'PAPER_MEDIA':'Custom_%ix%i' % (w,h),
+                              'GRID_PEN_PRIMARY': 'thinnest/0/0/0' } )
+    
+    d2r = math.pi/180.0
+    
+    lat_delta = 5.
+    
+    south = lat - 0.5*lat_delta
+    north = lat + 0.5*lat_delta
+    if lat_delta > 20. or south < -80. or north > 80.:
+        resolution = 5
+        coastline_resolution = 'i'
+        rivers=[]
+    else:
+        resolution = 1
+        coastline_resolution = 'f'
+        rivers = ['-Ir',]
+        
+    lon_delta = lat_delta/math.cos(lat*d2r)
+    
+    delta = lat_delta/360.*config.earthradius*2.*math.pi
+    scale_km = gmtpy.nice_value(delta/10.)/1000.
+    
+    west = lon - 0.5*lon_delta
+    east = lon + 0.5*lon_delta
+    
+    x,y,z = (west, east), (south,north), (-6000.,4500.)
+    xax = gmtpy.Ax(mode='min-max', approx_ticks=4.)
+    yax = gmtpy.Ax(mode='min-max', approx_ticks=4.)
+    zax = gmtpy.Ax(mode='min-max', inc=1000., label='Height', scaled_unit='km', scaled_unit_factor=0.001)
+    scaler = gmtpy.ScaleGuru( data_tuples=[(x,y,z)], axes=(xax,yax,zax))    
+    
+    layout = gmt.default_layout(with_palette=True)
+    layout.set_fixed_margins(*margins)
+    widget = layout.get_widget().get_widget(0,0)
+    palette_layout = gmtpy.FrameLayout()
+    palette_layout.set_policy( *layout.get_widget().get_widget(2,0).get_policy() )
+    layout.get_widget().set_widget(2,0,palette_layout)
+    inset = h-margins[2]-margins[3]
+    palette_layout.set_fixed_margins(0.,0.,inset/6., inset/6.)
+    palette_widget = palette_layout.get_widget()
+
+    widget['J'] =  ('-JT%g/%g'  % (lon, lat)) + '/%(width)gp'
+    aspect = gmtpy.aspect_for_projection( *(widget.J() + scaler.R()) )
+    widget.set_aspect(aspect)
+    if resolution == 1:
+        grdfile = gmt.tempfilename()
+        gmt.img2grd( topo_img_file_1m, T=1, S=1, m=1, D=True, G=grdfile, out_discard=True, suppress_defaults=True, *scaler.R())
+    else:
+        grdfile = topo_grd_file_5m
+    
+    # work around GMT bug... detect if region contains coastlines
+    checkfile = gmt.tempfilename()
+    gmt.pscoast( M=True, D=coastline_resolution, W='thinnest/black', A=10., out_filename=checkfile, *(widget.JXY()+scaler.R()))
+    f = open(checkfile, 'r')
+    has_coastlines = False
+    for line in f:
+        ls = line.strip()
+        if ls.startswith('#') or ls.startswith('>') or ls == '': continue
+        clon, clat = [ float(x) for x in ls.split() ]
+        
+        if point_in_region( (clon,clat), (west,east,south,north) ):
+            has_coastlines = True
+            break
+        else:
+            continue
+        
+    f.close()
+    
+    if has_coastlines:
+        gmt.pscoast( D=coastline_resolution, S='c', A=10., *(widget.JXY()+scaler.R()) )
+        gmt.grdimage( grdfile, C=cptfile1, *(widget.JXY()+scaler.R()) )
+        gmt.pscoast( Q=True, *(widget.JXY()+scaler.R()))
+    
+        gmt.pscoast(  D=coastline_resolution, G='c', A=10., *(widget.JXY()+scaler.R()) )
+        gmt.grdimage( grdfile, C=cptfile2, *(widget.JXY()+scaler.R()) )
+        gmt.pscoast( Q=True, *(widget.JXY()+scaler.R()))
+    else:
+        gmt.grdimage( grdfile, C=cptfile, *(widget.JXY()+scaler.R()) )
+    
+    gmt.pscoast( D=coastline_resolution, W='thinnest/black', A=10., *(rivers+widget.JXY()+scaler.R()))
+
+    gmt.psmeca( in_rows=[[lon, lat, 1., source['strike'], source['dip'], source['slip-rake'], 6., 0.,0., '' ]],
+                 S='a0.3', *(widget.JXY()+scaler.R()) )
+
+    if lat > 0:
+        axes_layout = 'WSen'
+    else:
+        axes_layout = 'WseN'
+        
+    print lon, lat
+    gmt.psbasemap( B=('%(xinc)gg%(xinc)g:%(xlabel)s:/%(yinc)gg%(yinc)g:%(ylabel)s:' % scaler.get_params())+axes_layout,
+                   L=('x%gp/%gp/%g/%g/%gk' % (widget.width()/2., widget.height()/7.,lon,lat,scale_km) ),
+                   *(widget.JXY()+scaler.R()) )
+
+    gmtpy.nice_palette(gmt, palette_widget, scaler, cptfile, innerticks=False, zlabeloffset=1.5*gmtpy.cm)
+    
+    gmt.save(filename)
+    
     
     

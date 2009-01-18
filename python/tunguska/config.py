@@ -2,6 +2,11 @@ import pickle
 import sys
 import logging
 from util import gmt_color
+import gmtpy
+from os.path import join as pjoin
+
+
+earthradius = 6371.*1000.
 
 
 show_progress = True
@@ -11,6 +16,14 @@ source_info_prog = 'source_info'
 gfdb_info_prog = 'gfdb_info'
 gfdb_extract_prog = 'gfdb_extract'
 seismosizer_prog = '/bonus/src/kiwi/minimizer'
+
+topo_dir = '/bonus/topo'
+topo_img_file_1m = pjoin(topo_dir,'topo_11.1.img')
+topo_grd_file_5m = pjoin(topo_dir,'ETOPO1_Ice_g_gmt4_downsampled_5m.grd')
+topocpt_sealand = pjoin(topo_dir, 'light_topo_continuous.cpt')
+topocpt_sea = pjoin(topo_dir, 'light_topo_continuous_sea_only.cpt')
+topocpt_land = pjoin(topo_dir, 'light_topo_continuous_land_only.cpt')
+
 
 component_names = {     'a':'R@-+@-',
                         'c':'R@--@-',
@@ -144,13 +157,29 @@ spectrum_plot_config = dict(
 
 
 # 
-# plot configurations using the gmt module
+# plot configurations using the old gmt module
 #
 
 station_plot_config = dict(
     width = 6.,
     height = 6.,
     margins = (0.2,0.2,0.2,0.2),
+)
+
+# 
+# plot configurations using the new gmtpy module
+#
+mw = 2.5*gmtpy.cm
+
+location_map_config = dict(
+    width = 20.*gmtpy.cm,
+    height = 15.*gmtpy.cm,
+    margins = (mw,mw,mw/gmtpy.golden_ratio,mw/gmtpy.golden_ratio),
+    topo_img_file_1m = topo_img_file_1m,
+    topo_grd_file_5m = topo_grd_file_5m,
+    topocpt_sealand = topocpt_sealand,
+    topocpt_sea = topocpt_sea,
+    topocpt_land = topocpt_land
 )
 
 
