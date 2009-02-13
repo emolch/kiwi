@@ -25,7 +25,7 @@ INCHDF =
 LIBHDF = -lhdf5_fortran -lhdf5 -lz
 
 INCSAC = 
-LIBSAC = -lsacio
+LIBSAC = #-lsacio
 
 INCFFTW = 
 LIBFFTW = -lfftw3f 

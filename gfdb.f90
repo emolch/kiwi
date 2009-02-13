@@ -785,7 +785,7 @@ module gfdb
 
         deallocate(refs)
             
-        call h5gcreate_f(file,"gf",group,error,int(c%nxc/c%nipx*(floor(log10(real(c%nxc/c%nipx)))+2)))
+        call h5gcreate_f(file,"gf",group,error,int(c%nxc/c%nipx*(floor(log10(real(c%nxc/c%nipx)))+2),8))
         if (error /= 0) &
             call die( "gfdb: failed to create group gf in file: "//c%filename )
         
@@ -864,9 +864,9 @@ module gfdb
       ! open/create group for the dataset
                 
         gloc = var_str("/gf/") // ixc_file
-        call h5_opencreategroup( c%file, char(gloc), group_dist, e(1), int(c%nz/c%nipz*(floor(log10(real(c%nz/c%nipz)))+2)) )
+        call h5_opencreategroup( c%file, char(gloc), group_dist, e(1), int(c%nz/c%nipz*(floor(log10(real(c%nz/c%nipz)))+2),8) )
         gloc = iz_file
-        call h5_opencreategroup( group_dist, char(gloc), group, e(2), int(8*(floor(log10(8.))+2)) )
+        call h5_opencreategroup( group_dist, char(gloc), group, e(2), int(8*(floor(log10(8.))+2),8) )
         if (any(e /= 0)) call die( "gfdb: failed to open/create group "//gloc//" in file: " &
                                       // c%filename )
                 
@@ -918,7 +918,7 @@ module gfdb
         
         dims(1) = 1
         call h5dget_space_f(c%dataset_index,dataspace_for_ref,e(2))
-        call h5sselect_elements_f(dataspace_for_ref,H5S_SELECT_SET_F,3, 1, coord, e(3))
+        call h5sselect_elements_f(dataspace_for_ref,H5S_SELECT_SET_F,3, 1_8, coord, e(3))
         call h5screate_simple_f(1, dims, memspace, e(4))
         
         call h5dwrite_f(c%dataset_index, H5T_STD_REF_OBJ, reference, dims, e(5), &

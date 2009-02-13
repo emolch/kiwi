@@ -92,8 +92,8 @@ module seismogram_io
             
             filename_cstr = filename//char(0)
             nlen = size(seismogram_copy)
-            call wsac1( filename_cstr, seismogram_copy, nlen, &
-                        toffset, deltat, nerr )
+           ! call wsac1( filename_cstr, seismogram_copy, nlen, &
+           !             toffset, deltat, nerr )
         end if
         
         if (fileformat_ == 'mseed') then
@@ -178,7 +178,7 @@ module seismogram_io
                 allocate( scratch(maxlen) )
                 
                 filename_cstr = filename//char(0)
-                call rsac1(filename_cstr, scratch, nlen, toffset, deltat, maxlen, nerr)
+            !    call rsac1(filename_cstr, scratch, nlen, toffset, deltat, maxlen, nerr)
                 if (nerr > 0) then
                     call error( "rsac1 returned an error" )
                     if (allocated(scratch)) deallocate(scratch)
