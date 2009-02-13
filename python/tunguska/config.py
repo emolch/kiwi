@@ -15,7 +15,7 @@ default_loglevel = logging.INFO
 source_info_prog = 'source_info'
 gfdb_info_prog = 'gfdb_info'
 gfdb_extract_prog = 'gfdb_extract'
-seismosizer_prog = '/bonus/src/kiwi/minimizer'
+seismosizer_prog = 'minimizer'
 
 topo_dir = '/bonus/topo'
 topo_img_file_1m = pjoin(topo_dir,'topo_11.1.img')

@@ -4,7 +4,7 @@ import subprocess
 import numpy as num
 import tempfile
 import scipy
-import scipy.io
+#import scipy.io
 import pickle
 import shutil
 import sys
@@ -80,16 +80,13 @@ def autoplot( *args, **kwargs ):
             
         elif isinstance(thing, num.ndarray):
             tfn = pjoin(tempdir, 'plotdata-%i.table' % ithing)
-            f = open(tfn, 'w')
-            num.savetxt(f,thing)
-            f.close()
+            num.savetxt(tfn, thing)
             infiles.append(tfn)
         
         elif type(thing) is tuple or type(thing) is list:
             
             tfn = pjoin(tempdir, 'plotdata-%i.table' % ithing)
-            f = open(tfn, 'w')
-            
+                        
             if thing[-1].ndim == 2 and len(thing) == 3:     # (x[:],y[:],z[:,:])
                 x,y,z = thing
                 nx = x.size
@@ -100,7 +97,7 @@ def autoplot( *args, **kwargs ):
                 tab[:,2] = z.reshape((nz,))
                 tab[:,1] = y.repeat(nx)
                 for i in range(ny): tab[i*nx:i*nx+nx,0] = x
-                num.savetxt(f,tab)
+                num.savetxt(tfn,tab)
             else:
                 nrows = thing[0].size
                 ncols = len(thing)
@@ -108,9 +105,7 @@ def autoplot( *args, **kwargs ):
                 for icol,col in enumerate(thing):
                     assert(col.size == nrows)
                     tab[:,icol] = col
-                num.savetxt(f,tab)
-            
-            f.close()
+                num.savetxt(tfn,tab)
             infiles.append(tfn)
             
         

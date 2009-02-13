@@ -1330,7 +1330,7 @@ def main(steps):
         for step in steps: 
             data[step.stepname] = step
         
-        t = Template(file='report2.html', searchList=[ data ])
+        t = Template(file='report.html', searchList=[ data ])
         
         page = str(t)
         files = [ x[1] or x[3] for x in re.findall(r'("([^"]+\.(png|pdf))"|\'([^\']+\.(png|pdf))\')', page) ]

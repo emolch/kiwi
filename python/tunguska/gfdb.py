@@ -6,7 +6,6 @@ import os
 import shutil
 import numpy as num
 import scipy
-from scipy.io import read_array
 import tempfile
 
 pjoin = os.path.join
