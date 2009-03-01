@@ -279,8 +279,7 @@ class SeismosizerProcess(threading.Thread):
         self.from_p.close()
         self.p.wait()
         
-        logging.warn('xx %i' % i )
-       
+               
     def _do(self, command):
         '''Put command to minimizer and return the results'''
                

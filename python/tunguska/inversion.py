@@ -85,7 +85,7 @@ def standard_setup( datadir,
                     source_origin_file = 'source-origin.table',
                     receivers_file = 'receivers.table',
                     ref_seismogram_stem = 'reference',
-                    ref_seismogram_format = 'sac', **kwargs):
+                    ref_seismogram_format = 'mseed', **kwargs):
                     
     '''Start seismosizers and setup source location, Greens functions, 
        receivers, and reference seismograms.'''

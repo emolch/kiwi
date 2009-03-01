@@ -549,7 +549,7 @@ def read_config(filename):
                 'blacklist_station_file', 
                 'wanted_components',
                 'data_dir', 
-                'ieq_data_dir',
+                'kiwi_data_dir',
                 'nsets',
                 'margin_gfdb')
                 
@@ -567,13 +567,34 @@ def read_config(filename):
         
     #except:
     #    sys.exit("cannot read config file: %s" % filename)
+
+
+def sac2mseed(sacfn, mseedfn):
+    import pymseed
+    import pysacio
+    
+    sac = pysacio.SacFile(sacfn)
+    network = sac.knetwk.strip('\x00').strip()
+    station = sac.kstnm.strip('\x00').strip()
+    location = sac.khole.strip('\x00').strip()
+    channel = sac.kcmpnm.strip('\x00').strip()
+    #starttime = int(round((sac.get_ref_time() + sac.b) * pymseed.HPTMODULUS))
+    #endtime = int(round( (sac.get_ref_time() + sac.b + (len(sac.data[0])-1)*sac.delta) * pymseed.HPTMODULUS))
+    starttime = int(round(sac.b * pymseed.HPTMODULUS))
+    endtime = int(round((sac.b + (len(sac.data[0])-1)*sac.delta) * pymseed.HPTMODULUS))
+    traces = [(network,station,location,channel,starttime,endtime,1./sac.delta,sac.data[0])]
+    pymseed.store_traces(traces, mseedfn)
         
 steps = ('unpack', 'preprocess', 'setup', 'all')
 
-usage = 'usage: kinherd_prepare config-file ( unpack | preprocess | setup | all )'
-if len(sys.argv) != 3: sys.exit(usage)
+usage = 'usage: kiwi_prepare config-file { unpack | preprocess | setup | all }'
+if not 2 <= len(sys.argv) <= 3 : sys.exit(usage)
 config_file = sys.argv[1]
-step = sys.argv[2]
+if len(sys.argv) == 3:
+    step = sys.argv[2]
+else:
+    step = 'all'
+
 if not step in steps: sys.exit(usage)
         
 c = read_config(config_file)
@@ -658,7 +679,7 @@ if step == 'setup' or step == 'all':
     
     wanted_components = c['wanted_components'].split()
 
-    ieq_datadir = c['ieq_data_dir']
+    ieq_datadir = c['kiwi_data_dir']
     if os.path.exists( ieq_datadir ):
         shutil.rmtree( ieq_datadir )
     ensure_dir( ieq_datadir )
@@ -713,8 +734,9 @@ if step == 'setup' or step == 'all':
             istation += nsets
         
         for iset in range(nsets):
-            dstfn = os.path.join(ieq_datadir, 'reference-%i-%c.sac' % (istation-nsets+iset+1, component_translate[t.component]))
-            shutil.copy(t.filename, dstfn )
+            dstfn = os.path.join(ieq_datadir, 'reference-%i-%c.mseed' % (istation-nsets+iset+1, component_translate[t.component]))
+            sac2mseed(t.filename, dstfn)
+	    #shutil.copy(t.filename, dstfn )
         
     f.close()
     
