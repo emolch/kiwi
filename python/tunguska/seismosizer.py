@@ -572,15 +572,18 @@ class Seismosizer(SeismosizerBase):
         self.set_source(source)
         results = self.do_get_misfits()
         values = [[ float(x) for x in result.split() ] for result in results ]
-        print 'must consider disabled... is iproc 0 ????'
         ipos = [ 0 ] * len(results)
         for irec, rec in enumerate(self.receivers):
-            iproc = rec.proc_id
-            for icomp in xrange(len(rec.components)):
-                rec.misfits[icomp] = values[iproc][ipos[iproc]]
-                ipos[iproc] += 1
-                rec.misfit_norm_factors[icomp] = values[iproc][ipos[iproc]]
-                ipos[iproc] += 1
+            if rec.enabled:
+                iproc = rec.proc_id
+                for icomp in xrange(len(rec.components)):
+                    rec.misfits[icomp] = values[iproc][ipos[iproc]]
+                    ipos[iproc] += 1
+                    rec.misfit_norm_factors[icomp] = values[iproc][ipos[iproc]]
+                    ipos[iproc] += 1
+        
+        for iproc in range(len(results)):
+            assert(ipos[iproc] == len(values[iproc]), "if this is printed, there is a bug in make_misifits_for_source()") 
     
     def get_peak_amplitudes_for_source( self, source ):
         """Calculate peak amplitudes at receivers for given source."""
