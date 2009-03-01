@@ -312,9 +312,7 @@ def location_map( filename, lat, lon, lat_delta, source, source_model_info, conf
     topo_grd_file_5m = conf.pop('topo_grd_file_5m')
     cptfile = conf.pop('topocpt_sealand')
     cptfile1 = conf.pop('topocpt_sea')
-    cptfile2 = conf.pop('topocpt_land')
-
-    
+    cptfile2 = conf.pop('topocpt_land')    
     
     gmt = gmtpy.GMT( config={ 'ANNOT_FONT_PRIMARY': 'Helvetica',
                               'PLOT_DEGREE_FORMAT':'dddF',
