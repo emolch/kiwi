@@ -588,7 +588,10 @@ class ParamTuner(Step):
             base_source['dip'] = dip
             base_source['slip-rake'] = slip_rake
             
-            
+        if 'plane' in conf:
+            for param in 'strike', 'dip', 'slip-rake':
+                self.out_config.__dict__['active_'+d2u(param)] = base_source[param]
+                
         grid_def = []
         for param in self.params:
             oldval = base_source[u2d(param)]
