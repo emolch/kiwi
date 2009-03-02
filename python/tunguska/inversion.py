@@ -16,7 +16,7 @@ import numpy as num
 import scipy
 import scipy.stats
 import progressbar
-import pickle
+import cPickle as pickle
 import copy
 import logging
 from subprocess import call
@@ -132,7 +132,7 @@ standard_setup.optional = set(('effective_dt', 'spacial_undersampling', 'hosts',
 
 def gen_dweights( seis, base_source, datadir,
                                  ref_seismogram_stem = 'reference',
-                                 ref_seismogram_format = 'sac', **kwargs):
+                                 ref_seismogram_format = 'mseed', **kwargs):
     
     
     base_source = copy.copy(base_source)
