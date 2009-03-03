@@ -1306,7 +1306,7 @@ def install(src, dst):
     
     shutil.copy(src, dst)
     
-def main(steps):
+def kiwi_main(steps):
     
     from optparse import OptionParser
     parser = OptionParser()
