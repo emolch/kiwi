@@ -77,6 +77,7 @@ def standard_setup( datadir,
                     spacial_undersampling = [ 1, 1 ],
                     hosts = ['localhost'],
                     crustal_thickness_limit = None,
+                    constraining_planes = None,
                     shifts = None,
                     blacklist = None,
                     verbose = False,
@@ -111,6 +112,9 @@ def standard_setup( datadir,
     if crustal_thickness_limit is not None:
         seis.set_source_crustal_thickness_limit( crustal_thickness_limit )
     
+    if constraining_planes is not None:
+        seis.set_source_constraints( *constraining_planes )
+    
     # setup receivers
     receivers = receiver.load_table(receivers_file, components=components)
     seis.set_receivers(receivers)
@@ -126,7 +130,7 @@ def standard_setup( datadir,
     
 standard_setup.required = set(('datadir', 'gfdb_path', 'components')) 
 standard_setup.optional = set(('effective_dt', 'spacial_undersampling', 'hosts', 
-                               'crustal_thickness_limit', 'shifts', 'local_interpolation', 
+                               'crustal_thickness_limit', 'constraining_planes', 'shifts', 'local_interpolation', 
                                'source_origin_file', 'receivers_file',
                                'ref_seismogram_stem', 'ref_seismogram_format', 'blacklist', 'verbose'))
 
