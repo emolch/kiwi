@@ -113,7 +113,12 @@ def standard_setup( datadir,
         seis.set_source_crustal_thickness_limit( crustal_thickness_limit )
     
     if constraining_planes is not None:
-        seis.set_source_constraints( *constraining_planes )
+        values = []
+        for plane in constraining_planes:
+            for vect in plane:
+                values.extend(vect)
+                
+        seis.set_source_constraints( *values )
     
     # setup receivers
     receivers = receiver.load_table(receivers_file, components=components)
