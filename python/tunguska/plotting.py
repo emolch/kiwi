@@ -299,7 +299,7 @@ def point_in_region(p,r):
     return blon and blat
 
     
-def location_map( filename, lat, lon, lat_delta, source, source_model_info, conf_overrides ):
+def location_map( filename, lat, lon, lat_delta, conf_overrides, source=None, source_model_info=None ):
 
     conf = dict(**config.location_map_config)
     conf.update( conf_overrides )
@@ -397,8 +397,9 @@ def location_map( filename, lat, lon, lat_delta, source, source_model_info, conf
         gmt.grdimage( grdfile, C=cptfile, *(widget.JXY()+scaler.R()) )
     
     gmt.pscoast( D=coastline_resolution, W='thinnest/black', A=10., *(rivers+widget.JXY()+scaler.R()))
-
-    gmt.psmeca( in_rows=[[lon, lat, 1., source['strike'], source['dip'], source['slip-rake'], 6., 0.,0., '' ]],
+    
+    if source:
+        gmt.psmeca( in_rows=[[lon, lat, 1., source['strike'], source['dip'], source['slip-rake'], 6., 0.,0., '' ]],
                  S='a0.3', *(widget.JXY()+scaler.R()) )
 
     if lat > 0:

@@ -180,6 +180,115 @@ def other_plane( strike, dip, rake ):
     else:
         return both_sdr[0]
 
+
+def make_misfits_for_sources(seis, sources, show_progress=False, progress_title='grid search'):
+    nsources = len(sources)
+    nreceivers = len(seis.receivers)
+    ncomponents = max([ len(r.components) for r in seis.receivers ])
+    
+    # results gathered by (source,receiver,component)
+    misfits_by_src = num.zeros( (nsources, nreceivers, ncomponents), dtype=num.float)
+    norms_by_src = num.zeros(  (nsources, nreceivers, ncomponents), dtype=num.float)
+    
+    if show_progress:
+        widgets = [progress_title, ' ',
+                progressbar.Bar(marker='-',left='[',right=']'), ' ',
+                progressbar.Percentage(), ' ',]
+        
+        pbar = progressbar.ProgressBar(widgets=widgets, maxval=len(sources)).start()
+    
+    failings = []
+    for isource, source in enumerate(sources):
+        try:
+            seis.make_misfits_for_source( source )
+            for ireceiver, receiver in enumerate(seis.receivers):
+                if receiver.enabled:
+                    for icomp, comp in enumerate(receiver.components):
+                        misfits_by_src[isource, ireceiver, icomp] = receiver.misfits[icomp]
+                        norms_by_src[isource, ireceiver, icomp] = receiver.misfit_norm_factors[icomp]
+                    
+        except seismosizer.SeismosizersReturnedErrors:
+            failings.append(isource)
+        
+        if show_progress: pbar.update(isource+1)
+                    
+    if show_progress: pbar.finish()
+    
+    return misfits_by_src, norms_by_src, failings
+
+def make_global_misfits(misfits_by_src, norms_by_src, receiver_weights=1., outer_norm='l2norm', anarchy=False, bootstrap=False, **kwargs):
+    
+    nreceivers = misfits_by_src.shape[1]
+    
+    if isinstance(receiver_weights, float):
+        rweights = receiver_weights
+    else:
+        rweights = receiver_weights[num.newaxis,:].copy()
+    
+    if bootstrap:
+        bweights = num.zeros(nreceivers, dtype=num.float)
+        bweights_x = num.bincount(num.random.randint(0,nreceivers,nreceivers))
+        bweights[:len(bweights_x)] = bweights_x[:]
+    
+    if outer_norm == 'l1norm':
+        misfits_by_sr = num.sum(misfits_by_src,2)
+        norms_by_sr   = num.sum(norms_by_src,2)
+        
+        if anarchy:
+            xrweights = num.zeros(norms_by_sr.shape, dtype=float)
+            xrweights[:,:] = rweights
+            xrweights /= num.where( norms_by_sr != 0., norms_by_sr, -1.)
+            rweights = num.maximum(xrweights, 0.)
+        
+        if bootstrap:
+            rweights *= bweights
+        
+        misfits_by_sr *= rweights
+        norms_by_sr *= rweights
+        
+        ms = num.sum( misfits_by_sr, 1 )
+        ns = num.sum( norms_by_sr, 1 )
+        
+        misfits_by_s  = num.where(ns > 0., ms/ns, -1.)
+        maxm = num.amax(misfits_by_s)
+        misfits_by_s = num.where(misfits_by_s<0, maxm, misfits_by_s)
+        
+    elif outer_norm == 'l2norm':
+        misfits_by_sr = num.sqrt(num.sum(misfits_by_src**2,2))
+        norms_by_sr   = num.sqrt(num.sum(norms_by_src**2,2))
+        
+        if anarchy:
+            rweights /= num.where( norms_by_sr != 0., norms_by_sr, -1.)
+            rweights = num.maximum(rweights, 0.)
+            
+        if bootstrap:
+            rweights *= num.sqrt(bweights)
+        
+        misfits_by_sr *= rweights
+        norms_by_sr *= rweights
+        
+        ms = num.sum( (misfits_by_sr)**2, 1 )
+        ns = num.sum( (norms_by_sr)**2, 1 )
+        
+        misfits_by_s  = num.where(ns > 0., num.sqrt(ms/ns), -1.)
+        maxm = num.amax(misfits_by_s)
+        misfits_by_s = num.where(misfits_by_s<0, maxm, misfits_by_s)
+    
+    else:
+        raise Exception('unknown norm method: %s' % outer_norm)
+    
+    return misfits_by_s, misfits_by_sr
+
+def best_source(self, return_misfits_by_r=False, **outer_misfit_config):
+        misfits_by_s, misfits_by_sr = make_global_misfits( self.misfits_by_src, self.norms_by_src, **outer_misfit_config)
+        ibest = num.argmin(misfits_by_s)
+        if not return_misfits_by_r:
+            return self.sources[ibest], misfits_by_s
+        else:
+            # misfit variability by receiver
+            misfits_varia_by_r = num.std(misfits_by_sr,0)
+            return self.sources[ibest], misfits_by_s, misfits_by_sr[ibest,:], misfits_varia_by_r
+
 class Step:
     
     
@@ -878,7 +987,75 @@ class TracePlotter(Step):
         
         return [ os.path.basename(fn) for fn in allfilez ]
         
+class Greeper(Step):
+     
+    def __init__(self, workdir, params=['time'], name=None):
+        if name is None: name = '-'.join(params)+'-greeper'
+        Step.__init__(self, workdir, name)
+        self.params = params
         
+        self.required |= Step.outer_misfit_method_params | Step.inner_misfit_method_params \
+                        | set([param+'_range' for param in self.params]) \
+                        | set(self.params)
+                        
+        self.optional |= set([d2u(p) for p in source.param_names('eikonal')])
+        
+    def work(self, search=True, forward=True, run_id='current'):
+        self.pre_work(search or forward)
+        seis = self.seismosizer
+        conf = self.in_config.get_config()
+        mm_conf = self.in_config.get_config(keys=Step.outer_misfit_method_params)
+        
+        sourcetype = 'eikonal'
+        base_source = source.Source( sourcetype )
+        
+        for p in source.param_names(sourcetype):
+            if d2u(p) in conf:
+                base_source[p] = float(conf[d2u(p)])
+                
+        if 'plane' in conf and conf['plane'] == 2: 
+            strike, dip, slip_rake = float(conf['strike']), float(conf['dip']), float(conf['slip_rake'])
+            strike, dip, slip_rake = other_plane( strike, dip, slip_rake )
+            base_source['strike'] = strike
+            base_source['dip'] = dip
+            base_source['slip-rake'] = slip_rake
+            
+        if 'plane' in conf:
+            for param in 'strike', 'dip', 'slip-rake':
+                self.out_config.__dict__['active_'+d2u(param)] = base_source[param]
+                
+        grid_def = []
+        for param in self.params:
+            oldval = base_source[u2d(param)]
+            descr = conf[param+'_range']
+            grid_def.append(grid_defi(u2d(param),oldval,descr))
+            
+        if search or forward: self.setup_inner_misfit_method()
+        if search:
+            self.setup_inner_misfit_method()
+            while True:
+                for dim in grid_def:
+                    param, mi, ma, inc = dim
+                    
+
+            
+        else:
+            
+        
+        
+        for param in self.params:
+            str_result = 
+            logging.info(str_result)
+            self.result(str_result, param)
+            base_source[u2d(param)] = stats[u2d(param)].best
+            self.out_config.__dict__[param] = stats[u2d(param)].best
+            self.out_config.__dict__[param+'_stats'] = stats[u2d(param)]
+        
+        if forward:
+            self.snapshot( base_source, 'best' )
+            
+        self.post_work(search or forward)
+    
 class MisfitGridStats:
     
     def str_best_and_confidence(self, factor=1., unit =''):
@@ -933,54 +1110,22 @@ class MisfitGrid:
     def compute(self, seis):
         '''Let seismosizer calculate the trace misfits.'''
         
-        nsources = len(self.sources)
+        if len(self.sourceparams) == 1:
+            progress_title = 'Grid search param: ' + ', '.join(self.sourceparams)
+        else:
+            progres_title = 'Grid search params: ' + ', '.join(self.sourceparams)
+            
         nreceivers = len(seis.receivers)
-        ncomponents = max([ len(r.components) for r in seis.receivers ])
         
-        
-        # results gathered by (source,receiver,component)
-        misfits_by_src = num.zeros( (nsources, nreceivers, ncomponents), dtype=num.float)
-        norms_by_src = num.zeros(  (nsources, nreceivers, ncomponents), dtype=num.float)
-        ref_misfits_by_src = num.zeros( (1, nreceivers, ncomponents), dtype=num.float)
-        ref_norms_by_src = num.zeros(  (1, nreceivers, ncomponents), dtype=num.float)
-        
-        if config.show_progress:
-            if len(self.sourceparams) == 1:
-                title = 'Grid search param: ' + ', '.join(self.sourceparams)
-            else:
-                title = 'Grid search params: ' + ', '.join(self.sourceparams)
-            widgets = [title, ' ',
-                    progressbar.Bar(marker='-',left='[',right=']'), ' ',
-                    progressbar.Percentage(), ' ',]
-            
-            pbar = progressbar.ProgressBar(widgets=widgets, maxval=len(self.sources)).start()
-        
-        failings = []
-        for isource, source in enumerate(self.sources):
-            try:
-                seis.make_misfits_for_source( source )
-          
-                for ireceiver, receiver in enumerate(seis.receivers):
-                    if receiver.enabled:
-                        for icomp, comp in enumerate(receiver.components):
-                            misfits_by_src[isource, ireceiver, icomp] = receiver.misfits[icomp]
-                            norms_by_src[isource, ireceiver, icomp] = receiver.misfit_norm_factors[icomp]
-                        
-            except seismosizer.SeismosizersReturnedErrors:
-                failings.append(isource)
-            
-            if config.show_progress: pbar.update(isource+1)
-                        
-        if config.show_progress: pbar.finish()
+        # results, gathered by (source,receiver,component)
+        misfits_by_src, norms_by_src, failings = make_misfits_for_sources(seis,
+                                                                          self.sources,
+                                                                          show_progress=config.show_progress,
+                                                                          progress_title=progress_title)
               
-        # reference misfits
-        seis.make_misfits_for_source( self.ref_source )
-        for ireceiver, receiver in enumerate(seis.receivers):
-             for icomp, comp in enumerate(receiver.components):
-                 ref_misfits_by_src[0, ireceiver, icomp] = receiver.misfits[icomp]
-                 ref_norms_by_src[0, ireceiver, icomp] = receiver.misfit_norm_factors[icomp]
-                 
-                 
+        # results for reference source, gathered by (source,receiver,component)
+        ref_misfits_by_src, ref_norms_by_src, failings = make_misfits_for_sources(seis, [self.sources])
+        
         self.misfits_by_src = misfits_by_src
         self.norms_by_src = norms_by_src
         self.ref_misfits_by_src = ref_misfits_by_src
@@ -1022,7 +1167,7 @@ class MisfitGrid:
         return mean_misfits_by_r
         
     def _best_source(self, return_misfits_by_r=False, **outer_misfit_config):
-        misfits_by_s, misfits_by_sr = self._make_global_misfits( **outer_misfit_config)
+        misfits_by_s, misfits_by_sr = make_global_misfits( self.misfits_by_src, self.norms_by_src, **outer_misfit_config)
         ibest = num.argmin(misfits_by_s)
         if not return_misfits_by_r:
             return self.sources[ibest], misfits_by_s
@@ -1032,7 +1177,7 @@ class MisfitGrid:
             return self.sources[ibest], misfits_by_s, misfits_by_sr[ibest,:], misfits_varia_by_r
         
     def _ref_misfits_by_r(self, **outer_misfit_config):
-        misfits_by_s, misfits_by_sr = self._make_global_misfits(process_ref_source=True, **outer_misfit_config)
+        misfits_by_s, misfits_by_sr = make_global_misfits(self.ref_misfits_by_src, self.ref_norms_by_src, **outer_misfit_config)
         return misfits_by_sr[0,:]
         
     def _bootstrap(self, bootstrap_iterations=1000, **outer_misfit_config):
@@ -1076,73 +1221,7 @@ class MisfitGrid:
             
         return results
         
-    def _make_global_misfits(self, process_ref_source=False, receiver_weights=1., outer_norm='l2norm', anarchy=False, bootstrap=False, **kwargs):
-        
-        if process_ref_source:
-            misfits_by_src = self.ref_misfits_by_src
-            norms_by_src = self.ref_norms_by_src
-        else:
-            misfits_by_src = self.misfits_by_src
-            norms_by_src = self.norms_by_src
-        
-        if isinstance(receiver_weights, float):
-            rweights = receiver_weights
-        else:
-            rweights = receiver_weights[num.newaxis,:].copy()
-        
-        if bootstrap:
-            bweights = num.zeros(self.nreceivers, dtype=num.float)
-            bweights_x = num.bincount(num.random.randint(0,self.nreceivers,self.nreceivers))
-            bweights[:len(bweights_x)] = bweights_x[:]
-        
-        if outer_norm == 'l1norm':
-            misfits_by_sr = num.sum(misfits_by_src,2)
-            norms_by_sr   = num.sum(norms_by_src,2)
-            
-            if anarchy:
-                xrweights = num.zeros(norms_by_sr.shape, dtype=float)
-                xrweights[:,:] = rweights
-                xrweights /= num.where( norms_by_sr != 0., norms_by_sr, -1.)
-                rweights = num.maximum(xrweights, 0.)
-            
-            if bootstrap:
-                rweights *= bweights
-            
-            misfits_by_sr *= rweights
-            norms_by_sr *= rweights
-            
-            ms = num.sum( misfits_by_sr, 1 )
-            ns = num.sum( norms_by_sr, 1 )
-            
-            misfits_by_s  = num.where(ns > 0., ms/ns, -1.)
-            maxm = num.amax(misfits_by_s)
-            misfits_by_s = num.where(misfits_by_s<0, maxm, misfits_by_s)
-            
-        elif outer_norm == 'l2norm':
-            misfits_by_sr = num.sqrt(num.sum(misfits_by_src**2,2))
-            norms_by_sr   = num.sqrt(num.sum(norms_by_src**2,2))
-            
-            if anarchy:
-                rweights /= num.where( norms_by_sr != 0., norms_by_sr, -1.)
-                rweights = num.maximum(rweights, 0.)
-                
-            if bootstrap:
-                rweights *= num.sqrt(bweights)
-            
-            misfits_by_sr *= rweights
-            norms_by_sr *= rweights
-            
-            ms = num.sum( (misfits_by_sr)**2, 1 )
-            ns = num.sum( (norms_by_sr)**2, 1 )
-            
-            misfits_by_s  = num.where(ns > 0., num.sqrt(ms/ns), -1.)
-            maxm = num.amax(misfits_by_s)
-            misfits_by_s = num.where(misfits_by_s<0, maxm, misfits_by_s)
-        
-        else:
-            raise Exception('unknown norm method: %s' % outer_norm)
-        
-        return misfits_by_s, misfits_by_sr
+
         
     def plot(self, dirname, nsets):
         
