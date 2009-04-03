@@ -19,6 +19,8 @@ def kiwi_aux_dir():
         sys.exit('directory not found: "%s"' % d)
     return d
 
+def kiwi_aux_file(*p):
+    return pjoin(kiwi_aux_dir(), *p)
 
 def gform( number, significant_digits=3 ):
     '''Pretty print floating point numbers.

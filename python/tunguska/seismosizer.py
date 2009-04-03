@@ -15,7 +15,7 @@ import copy
 import config
 import phase
 
-runners_sleep = 0.01
+runners_sleep = 0.001
 pollers_sleep = 0.001
 
 
@@ -147,7 +147,7 @@ class SeismosizerBase:
         # distribute command to each process
         runners = []
         for p in processes:
-            logging.debug('do (%i): %s' % (p.tid, strcommand))
+            logging.debug('Do (%i): %s' % (p.tid, strcommand))
             p.push( strcommand )
             runners.append(p)
             
@@ -160,7 +160,7 @@ class SeismosizerBase:
             try:
                 answer = p.poll()
                 answers[p.tid] = answer
-                logging.debug('answer (%i): %s' % (p.tid, answer))
+                logging.debug('Answer (%i): %s' % (p.tid, answer))
                 
             except NonePending:
                 runners.append(p)
@@ -469,7 +469,7 @@ class Seismosizer(SeismosizerBase):
         
         tdir = pjoin(self.tempdir, 'get_receivers_copy')
         if os.path.isdir(tdir):
-            logging.warn('found stale traces output dir')
+            logging.warn('Found stale traces output dir')
             shutil.rmtree(tdir)
         os.mkdir(tdir)
         
@@ -536,7 +536,7 @@ class Seismosizer(SeismosizerBase):
         si_base = pjoin(self.tempdir, "source-info")
         self.do_output_source_model( si_base, where=0 )
         si_psm = si_base+'-psm.info'
-        sections = set(["center","outline","rupture","slip","eikonal-grid"])
+        sections = set(["center","outline","rupture","slip","eikonal-grid", "nucleation-point"])
         f = open(si_psm)
         atsec = ''
         points = []
@@ -618,7 +618,6 @@ class Seismosizer(SeismosizerBase):
             distances = [ r.distance_m for r in self.receivers ]
             distances_active = [ r.distance_m for r in self.receivers if r.enabled ]
             dist_range = [ min(distances_active), max(distances_active) ]
-            logging.info( "%g %g" % (dist_range[0], dist_range[1]) )
             dist_center = (dist_range[0]+dist_range[1])/2.
             dist_delta = (dist_range[1]-dist_range[0])/len(self)/2.
             

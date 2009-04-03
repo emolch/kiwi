@@ -4,10 +4,9 @@ import logging
 from util import gmt_color
 import gmtpy
 from os.path import join as pjoin
-
+from util import kiwi_aux_file
 
 earthradius = 6371.*1000.
-
 
 show_progress = True
 default_loglevel = logging.INFO
@@ -17,7 +16,7 @@ gfdb_info_prog = 'gfdb_info'
 gfdb_extract_prog = 'gfdb_extract'
 seismosizer_prog = 'minimizer'
 
-topo_dir = '/bonus/topo'
+topo_dir = '/data/topo'
 topo_img_file_1m = pjoin(topo_dir,'topo_11.1.img')
 topo_grd_file_5m = pjoin(topo_dir,'ETOPO1_Ice_g_gmt4_downsampled_5m.grd')
 topocpt_sealand = pjoin(topo_dir, 'light_topo_continuous.cpt')
@@ -88,45 +87,11 @@ misfit_plot_1d_config = dict(
     symbols_SGW = ['-S%s -G%s -W1p/black' % (m, gmt_color(c)) for (m,c) in zip(symbol_markers, symbol_colors) ],
     xautoscale = 'min-max',
     
-   # ylabel =  'Misfit',
+    ylabel =  'Misfit',
    # ylabelofs = 0.8,
    # leftmargin = 1.2,
    # rightmargin = 1.2
 )
-
-histogram_plot_1d_config = dict(
-    fit = True,
-    yexpand = 0.05,
-    width = 4.,
-    symbols_GW = ['-G%s -W1p/black' % gmt_color(c) for c in symbol_colors],
-    xautoscale = 'min-max',
-)
-
-misfit_plot_2d_config = dict(
-    fit = True,
-    width = 4.,
-    contour = True,
-    zapproxticks = 7,
-    autoscale = 'min-max',
-)
-
-histogram_plot_2d_config = dict(
-    fit = True,
-    width = 4.,
-    symbols_SGW = ['-Sc -W1p/black'],
-    autoscale = 'min-max',
-)
-
-misfogram_plot_2d_config = dict(
-    fit = True,
-    width = 4.,
-    height = 4.,
-    contour = True,
-    zapproxticks = 7,
-    autoscale = 'min-max',
-    symbols_SGW = [ symbol_best_result, '-Sc -W1p/black', ],
-)
-
 
 zebra = [ b or c for c in graph_colors for b in None, (0,0,0) ]
 seismogram_plot_config = dict(
@@ -155,26 +120,38 @@ spectrum_plot_config = dict(
     xautoscale = 'min-max',
 )
 
-
 # 
-# plot configurations using the old gmt module
+# plot configurations using the gmtpy module
 #
 
-station_plot_config = dict(
-    width = 6.,
-    height = 6.,
-    margins = (0.2,0.2,0.2,0.2),
+pw = 15.*gmtpy.cm
+mw = 2.5*gmtpy.cm
+misfogram_plot_2d_gmtpy_config = dict(
+    width = pw,
+    height = pw - 1.*gmtpy.cm - 2.*(mw-mw/gmtpy.golden_ratio),
+    margins = (mw,mw,mw/gmtpy.golden_ratio,mw/gmtpy.golden_ratio),    
+    zapproxticks = 7,
+    autoscale = 'min-max',
+    symbols_SGW = [ symbol_best_result, '-Sc -W1p/black', ],
+    zlabel = 'Misfit',
+    misfit_cpt = 'ocean',
 )
 
-# 
-# plot configurations using the new gmtpy module
-#
-mw = 2.5*gmtpy.cm
-
-location_map_config = dict(
-    width = 20.*gmtpy.cm,
-    height = 15.*gmtpy.cm,
+histogram_plot_1d_config = dict(
+    width=pw,
+    height = pw/gmtpy.golden_ratio,
     margins = (mw,mw,mw/gmtpy.golden_ratio,mw/gmtpy.golden_ratio),
+    yexpand = 0.05,
+    symbols_SGW = [ '-G%s -W1p/black' % gmt_color(symbol_colors[0]) ],
+    xautoscale = 'min-max',
+    ylabel = 'Probability of Result'
+)
+
+mw = 0.5*gmtpy.cm
+station_plot_config = dict(
+    width = pw,
+    height = pw,
+    margins = (mw,mw,mw,mw),
     topo_img_file_1m = topo_img_file_1m,
     topo_grd_file_5m = topo_grd_file_5m,
     topocpt_sealand = topocpt_sealand,
@@ -182,6 +159,28 @@ location_map_config = dict(
     topocpt_land = topocpt_land
 )
 
+mw = 2.5*gmtpy.cm
+location_map_config = dict(
+    width = pw,
+    height = pw,
+    margins = (mw,mw,mw,mw),
+    topo_img_file_1m = topo_img_file_1m,
+    topo_grd_file_5m = topo_grd_file_5m,
+    topocpt_sealand = topocpt_sealand,
+    topocpt_sea = topocpt_sea,
+    topocpt_land = topocpt_land
+)
+
+rupture_plot_config = dict(
+    width = pw,
+    height = pw/gmtpy.golden_ratio,
+    margins = (mw,mw,mw/gmtpy.golden_ratio,mw/gmtpy.golden_ratio),
+)
+
+rupture_vis_config = dict(
+    symbol_nucleation_point = symbol_best_result.split(),
+    rupture_cpt = kiwi_aux_file('cpt', 'rupture.cpt'),    
+)
 
 class Config:
     def __init__(self, *configs):

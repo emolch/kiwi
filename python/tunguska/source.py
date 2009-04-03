@@ -5,6 +5,8 @@ import re
 from subprocess import Popen, PIPE
 from util import gform
 import config
+import moment_tensor
+import math
 
 class Source:
     def __init__(self, sourcetype='bilateral', sourceparams=None, sourceparams_str=None):
@@ -69,12 +71,30 @@ class Source:
     def __str__(self):
         return self._sourcetype + ' ' + ' '.join( [ str(f) for f in self.values() ] )
     
-    def pretty_str(self):
+    def pretty_str(self, params=None, only_params=False):
+        if params is None:
+            params = self.keys()
+        else:
+            only_params = True
         si = source_infos(self._sourcetype)
-        kwid = max( [ len(k) for k in self.keys() ] )
-        uwid = max( [ len(si[k].unit) for k in self.keys() ] )
-        str_params = '\n'.join( [ '    %s [%s]: %s' % (k.ljust(kwid), si[k].unit.center(uwid), gform(v,3)) for k,v in self.items() ] )
+        kwid = max( [ len(k) for k in params ] )
+        uwid = max( [ len(si[k].unit) for k in params ] )
+        str_params = '\n'.join( [ '    %s [%s]: %s' % (k.ljust(kwid).title(), si[k].unit.center(uwid), gform(self._params[k],3)) for k in params ] )
+        if only_params:
+            return str_params
         return 'sourcetype: %s\n' % self._sourcetype + str_params
+    
+    def disambigue_sdr(self):
+        r2d = 180./math.pi
+        d2r = 1./r2d
+
+        sdr = 'strike', 'dip', 'slip-rake'
+        strike, dip, rake = [ self._params[k] for k in sdr ]
+        (alpha, beta, gamma) = (dip*d2r, strike*d2r, -rake*d2r)
+        (alpha, beta, gamma) = moment_tensor.unique_euler(alpha,beta,gamma)
+        self._params['dip']    = alpha*r2d
+        self._params['strike'] = beta*r2d
+        self._params['slip-rake']   = -gamma*r2d
     
     def update_from_list(self, values):
         for sparam, value in zip( self.keys(), values):
@@ -83,14 +103,15 @@ class Source:
     def grid( self, grid_definition, source_constraints=None):
         """Create a grid of sources, based on this source.
          
-        grid_definition: A list of tuples, each defining parameter name, minimum,
-            maximum and stepsize for each grid parameter as follows:
+        grid_definition: A list of tuples, each defining parameter name, and a list of the values
+        it may take:
         
-                  [(parameter, minimum, maximum, stepsize), ...]
+                  [ (parameter, [val0,val1,val2]), ...]
+                  
                   
             Example:
         
-             grid_definition = [ ('time', -10, 10, 2 ), ('dip', 0, 90, 30) ]
+             grid_definition = [ ('depth', [1000.,2000.,5000.,6000.]) ]
         
         source_constraints: Function callback, which may be used to turn off
             individual points of the grid. The function is called with the current 
@@ -108,11 +129,8 @@ class Source:
             sourceslist = []
             
         key = sourceparams[ irecurs ][0]
-        vmin, vmax, vstep = [ float(v) for v in sourceparams[ irecurs ][1:] ]
-        n = int(round((vmax-vmin)/vstep))+1
-        vstep = (vmax-vmin)/(n-1)
-        for i in xrange(n):
-            v = vmin + i * vstep
+        gvalues = [ float(v) for v in sourceparams[ irecurs ][1] ]
+        for v in gvalues:
             paramlist[irecurs] = v
             if irecurs < len(sourceparams)-1:
                 self._make_source_grid( sourceparams, irecurs+1, paramlist, sourceslist, source_constraints=source_constraints )
