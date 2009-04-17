@@ -1,7 +1,37 @@
 import util
-
+from bisect import bisect
 import sys, os
 
+class OutOfBounds(Exception):
+    pass
+
+class PLF:
+    '''Nestable piecewise linear function'''
+    
+    def __init__(self, xdata, ydata):
+        self.xdata = xdata
+        self.ydata = ydata
+        
+    def __call__(self, *args):
+        x = args[0]
+        y0, y1, frac = self.ip(x)
+        if isinstance(y0,PLF):
+            y0 = y0(*args[1:])
+        if isinstance(y1,PLF):
+            y1 = y1(*args[1:])
+        return y0 + frac*(y1-y0)
+        
+    def ip(self,x):
+        xdata = self.xdata
+        ydata = self.ydata
+        if x < xdata[0]: raise OutOfBounds()
+        if x > xdata[-1]: raise OutOfBounds()
+        i = bisect(xdata, x)
+        i = max(1, i)
+        i = min(len(xdata)-1, i)
+        frac = (x-xdata[i-1])/(xdata[i]-xdata[i-1])
+        return ydata[i-1], ydata[i], frac
+        
 class Phase:
     def __init__(self,name,filename=None):
     
@@ -12,17 +42,52 @@ class Phase:
         
         f = open(filename,'r')
         self.ref_points = []
+        dists = {}
+        distances, depths, times = [], [], []
+        have_seen = {}
+        have_depth = False
         for line in f:
-            distance, time = [float(x) for x in line.split()]
-            self.ref_points.append( (distance, time) )
+            toks = line.split()
+            dist = float(toks[0])
+            if len(toks) == 3:
+                depth = float(toks[1])
+                have_depth = True
+            else:
+                depth = 10000.
+            
+            if (dist,depth) not in have_seen:
+                times.append(float(toks[-1]))
+                distances.append(dist)
+                depths.append(depth)
+            
+            have_seen[(dist,depth)] = True
+            
         f.close()
-        
-    def __call__(self, distance):
+        if have_depth:
+            dists = {}
+            for di, de, ti in zip(distances, depths, times):
+                if not di in dists:
+                    dists[di] = ([], [])
+                dists[di][0].append(de)
+                dists[di][1].append(ti)
+            distances1 = []
+            depth_plfs = []
+            for (di, (des,tis)) in sorted(dists.items()):
+                distances1.append(di)
+                depth_plfs.append( PLF(des,tis) )
+            self.lookup = PLF(distances1, depth_plfs)
+        else:
+            self.lookup = PLF(distances, times)
+            
+        self.have_depth = have_depth
+                
+    def __call__(self, distance, depth=10000.):
         distance = float(distance)
-        for (low,high) in zip( self.ref_points[0:-1],self.ref_points[1:len(self.ref_points)]):
-            if low[0] <= distance <= high[0]:
-                return low[1] + (distance-low[0])/(high[0]-low[0])*(high[1]-low[1])
-        return None
+        depth = float(depth)
+        try:
+            return self.lookup(distance, depth)
+        except OutOfBounds:
+            return None
     
     def __repr__(self):
         s = "Phase(name='%s'" % self.name
