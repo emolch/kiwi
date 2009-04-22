@@ -741,22 +741,64 @@ module minimizer_engine
         
     end subroutine
     
+    pure subroutine intersection( a, b, c )
+    
+        real, dimension(2), intent(in) :: a, b
+        real, dimension(2), intent(out) :: c
+        
+        c(1) = max(a(1),b(1))
+        c(2) = min(a(2),b(2))
+        
+    end subroutine
+    
     subroutine scale_seismograms()
 
-      ! Put seismogram data into probes and apply moment
+      ! Put seismogram data into probes and apply moment and rise-time
 
-        integer :: icomp, irec
-
+        integer :: icomp, irec, ishift, nshifts
+        type(t_strip) :: tmp
+        real, dimension(2) :: rrise, rsamp, rover
+        real, dimension(:), allocatable :: weights, shifts
+        real :: dt, ts
+        
         call inform("scaling seismograms")
+        
+        dt = db%dt
+        
+      ! make weights and shifts for stf
+        if (psm%risetime > 0.0) then
+            rrise(1) = -psm%risetime/2.
+            rrise(2) = +psm%risetime/2.
+            nshifts = 1 + 2 * nint(0.5*psm%risetime/dt)
+            allocate( weights(nshifts))
+            allocate( shifts(nshifts))
+            do ishift=1,nshifts
+                ts = (ishift-1 - 0.5*(nshifts-1))*dt
+                rsamp(1) = ts-dt/2.
+                rsamp(2) = ts+dt/2.
+                call intersection(rrise, rsamp, rover)
+                weights(ishift) = max(0., rover(2)-rover(1))
+                shifts(ishift) = ts / dt
+            end do
+            weights = weights/sum(weights)
+        end if
+
         do irec=1,size(receivers)
             if (receivers(irec)%enabled) then
                 do icomp=1,receivers(irec)%ncomponents
-                    call probe_set_array( receivers(irec)%syn_probes(icomp), &
-                                        receivers(irec)%displacement(icomp), &
+                    call strip_copy(receivers(irec)%displacement(icomp), tmp)
+                    if (psm%risetime > 0.0) then
+                        call strip_fold( tmp, shifts, weights )
+                    end if
+                    call probe_set_array( receivers(irec)%syn_probes(icomp), tmp, &
                                         factor_=psm%moment )
                 end do
             end if
         end do
+
+        if (allocated(weights)) deallocate(weights)
+        if (allocated(shifts)) deallocate(shifts)
+        call strip_destroy(tmp)
 
     end subroutine
 
@@ -965,6 +1007,10 @@ module minimizer_engine
                 do icomp=1,ncomps
                     misfits_(1,imisfit) = receivers(ireceiver)%misfits(icomp)
                     misfits_(2,imisfit) = receivers(ireceiver)%misfits_norm_factors(icomp)
+                    if (isnan(misfits_(1,imisfit))) &
+                        call warn("Misfit is NaN at ireceiver="//ireceiver//", icomp="//icomp)
+                    if (isnan(misfits_(2,imisfit))) &
+                        call warn("Misfit norm factor is NaN at ireceiver="//ireceiver//", icomp="//icomp)
                     imisfit = imisfit + 1
                 end do
             end if

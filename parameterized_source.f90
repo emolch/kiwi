@@ -32,6 +32,7 @@ module parameterized_source
     public eikonal_grid_destroy
     
     public psm_destroy
+    public psm_reset_dependents
     public psm_set_default_constraints
     public psm_set_constraints    
     public psm_set_crustal_thickness_limit
@@ -68,6 +69,7 @@ module parameterized_source
         type(t_geo_coords)                :: origin             ! reference origin at surface
         
         real                              :: moment = 1.0       ! may be used to apply moment after seismogram generation
+        real                              :: risetime = 0.0     ! may be used to apply (constant) risetime after seismogram generation
         real, dimension(:),allocatable    :: params             ! the parameters of the source
         
         
@@ -112,6 +114,15 @@ module parameterized_source
         if (allocated(psm%constraints)) deallocate(psm%constraints)
         call eikonal_grid_destroy( psm%egrid )
         call eikonal_grid_destroy( psm%cgrid )
+        psm%sourcetype = 0
+        psm%moment = 1.0
+        psm%risetime = 0.0
+    end subroutine
+  
+    subroutine psm_reset_dependents( psm )
+        type(t_psm), intent(inout)      :: psm
+        psm%moment = 1.0
+        psm%risetime = 0.0
     end subroutine
   
     subroutine psm_set_default_constraints( self )

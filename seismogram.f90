@@ -272,20 +272,15 @@ module seismogram
             call strip_destroy( displacement_ar(1) )
             call strip_destroy( displacement_ar(2) )
         end if
-
+        do i=1,receiver%ncomponents
+            if (any(isnan(receiver%displacement(i)%data(:)))) &
+                call warn('NaN value in syntetic seismogram')
+            if (any(abs(receiver%displacement(i)%data(:)) >= huge(depth))) &
+                call warn('huge value in syntetic seismogram')
+        end do
         
-      ! fold with stf (if stf is constant on fault plane)
-        if (allocated(source%const_stf_shifts)) then
-            allocate(rshifts(size(source%const_stf_shifts)))
-            rshifts = source%const_stf_shifts/greensf%dt
-            do i=1,receiver%ncomponents
-                if (allocated(receiver%displacement(i)%data)) then
-                    call strip_fold( receiver%displacement(i), rshifts, source%const_stf_amplitudes )
-                end if
-            end do
-            deallocate( rshifts )
-        end if
-
+        
+                      
         call gfdb_housekeeping( greensf )
         
     end subroutine

@@ -388,8 +388,6 @@ module sparse_trace
         type(t_trace) :: t
         integer :: i
 
-        
-        
         dataspan = strip_dataspan( s )
        
         if (dataspan(2) < dataspan(1)) then

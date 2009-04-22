@@ -193,6 +193,7 @@ module source_eikonal
 
         real, dimension(size(params)) :: new_params
         logical :: must_reset_grid
+        integer :: ip
         
         must_reset_grid = .false.
         if (.not. allocated(psm%grid_size) .or. (psm%sourcetype .ne. psm_eikonal)) then
@@ -216,13 +217,19 @@ module source_eikonal
         else
             new_params = params 
         end if
-    
-        only_moment_changed = (count(new_params .ne. psm%params) .le. 1 .and. new_params(5) .ne. psm%params(5))
+        
+        only_moment_changed = .true.
+        do ip=1,size(psm%params)
+            if (ip .ne. 5 .and. ip .ne. 15 .and. psm%params(ip) .ne. new_params(ip)) then
+                only_moment_changed = .false.
+            end if
+        end do
 
         psm%params = new_params
         
         psm%moment = psm%params(5)
-
+        psm%risetime = psm%params(15)
+        
         call psm_update_dep_params_eikonal( psm )
         
     end subroutine
@@ -641,7 +648,7 @@ module source_eikonal
         real, intent(in)                  :: maxdt
         type(t_tdsm), intent(inout)       :: out
          
-        real :: risetime, origin_time
+        real :: origin_time
         
         real, dimension(:), allocatable   :: tweights, toffsets
         integer                           :: ix, iy
@@ -653,7 +660,6 @@ module source_eikonal
         real :: centertime
         
         origin_time = psm%params(1)
-        risetime = psm%params(15)
        
       ! determine needed size for the centroid table
         nd = 0
@@ -675,9 +681,6 @@ module source_eikonal
         trotmat = transpose(psm%rotmat_slip)
         m_rot = matmul( psm%rotmat_slip, matmul( m_unrot, trotmat ) )
         m_rot(:,:) = m_rot(:,:) 
-        
-        call discretize_subfault_time &
-                   ( 0., risetime, maxdt, out%const_stf_amplitudes, out%const_stf_shifts, nt )
 
       ! fill output arrays
         id = 1
@@ -773,8 +776,9 @@ module source_eikonal
         type(t_polygon) :: rupture_poly, rupture_poly_rc
         type(t_crust2x2_1d_profile) :: profile
         real    :: vp, vs, rho
-        real, dimension(3)    :: point_rc
-
+        real, dimension(3)    :: point_rc, initial_point_rc, initial_point
+        logical :: ok
+        
         north = psm%params(2)
         east = psm%params(3)
         depth = psm%params(4)        
@@ -784,7 +788,6 @@ module source_eikonal
         bord_radius = psm%params(11)
         
         call psm_borderline_eikonal( psm, bord_shift_x, bord_shift_y, bord_radius, rupture_poly, rupture_poly_rc )
-        
         
         call claim_unit( unit )
         open( unit=unit, file=char(fn), status='unknown' )
@@ -797,6 +800,12 @@ module source_eikonal
         write (unit,"(a)") "center"
         write (unit,*) north, east, depth
         write (unit,*)
+                
+        initial_point_rc = psm_initial_point_intolerant_rc( psm, rupture_poly, ok )
+        initial_point = psm_rc_to_ned( psm, initial_point_rc )
+        write (unit,"(a)") "nucleation-point"
+        write (unit,*) initial_point, initial_point_rc(1:2)
+        write (unit,*) 
         
         write (unit,"(a)") "outline"
         do i=1,size(rupture_poly%points,2)

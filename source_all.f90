@@ -212,7 +212,9 @@ module source_all
         
         normalized = .false.
         if (present(normalized_)) normalized = normalized_
-        
+        if (psm%sourcetype /= sourcetype) then
+            call psm_reset_dependents(psm)
+        end if
         select case(sourcetype)
             
             case (psm_bilat)
