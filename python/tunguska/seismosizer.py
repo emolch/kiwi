@@ -234,7 +234,7 @@ class SeismosizerProcess(threading.Thread):
             cmd = [ 'ssh', host, config.seismosizer_prog ]
         
         try:
-            p = subprocess.Popen( cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE )
+            p = subprocess.Popen( cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, close_fds=True )
             self.p = p
             self.to_p = p.stdin
             self.from_p = p.stdout
