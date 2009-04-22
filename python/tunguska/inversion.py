@@ -1,3 +1,4 @@
+
 import receiver
 import gfdb
 import seismosizer
@@ -97,7 +98,6 @@ def grid_defi( param, oldval, descr ):
         elif mode == 'add':
             mi += oldval
             ma += oldval
-            
         return param, mimainc_to_gvals(mi, ma, inc)
     
     
@@ -868,105 +868,6 @@ class ParamTuner(Step):
         
         return plot_files
     
-    
-        
-class PlaneTuner(Step):
-     
-    def __init__(self, workdir, name='planetuner'):
-        Step.__init__(self, workdir, name)
-        
-        self.required |= Step.outer_misfit_method_params | Step.inner_misfit_method_params \
-                        | set(('rise_time',)) \
-                        | set(('time', 'depth', 'moment', 'strike', 'dip', 'slip_rake')) \
-                        | set([param+'_range' for param in 'strike', 'dip', 'slip_rake', 'moment', 'rough_moment' ])
-        self.optional |= set(('north_shift', 'east_shift'))
-         
-    def work(self, search=True, forward=True, run_id='current'):
-        self.pre_work(search or forward)
-
-        seis = self.seismosizer
-        conf = self.in_config.get_config()
-        mm_conf = self.in_config.get_config(keys=Step.outer_misfit_method_params)
-        
-        sourcetype = 'eikonal'
-        base_source = source_model.Source( sourcetype, { 'bord-radius': 0. } )
-        
-        for param in 'time', 'north-shift', 'east-shift', 'depth', 'moment', 'strike', 'dip', 'slip-rake', 'rise-time':
-            if d2u(param) in conf:
-                base_source[param] = float(conf[d2u(param)])
-        
-        #
-        # Rough Moment:
-        #
-        for param in 'moment',:
-            oldval = base_source[param]
-            descr = conf['rough_'+d2u(param)+'_range']
-            grid_def = [ grid_defi(param,oldval,descr) ]
-            
-            if search or forward: self.setup_inner_misfit_method()
-            if search:
-                self.setup_inner_misfit_method()
-                finder = MisfitGrid( base_source, param_values=grid_def )
-                finder.compute(seis)
-            else:
-                finder = self.load('rough_'+param, run_id=run_id)
-                
-            finder.postprocess(**mm_conf)
-            self.dump(finder, 'rough_'+param)
-            
-            stats = finder.stats[param]
-            str_result = stats.str_mean_and_stddev()
-            logging.info(str_result)
-            base_source[param] = stats.mean
-        
-        
-        #
-        # Strike, Dip, Rake, Moment
-        #
-        sdrparams = ('strike', 'dip', 'slip-rake', 'moment')
-        
-        grid_def = []
-        for param in sdrparams:
-            oldval = base_source[param]
-            descr = conf[d2u(param)+'_range']            
-            grid_def.append(grid_defi(param,oldval,descr))
-            
-        if search or forward: self.setup_inner_misfit_method()
-        if search:
-            self.setup_inner_misfit_method()
-            sdrfinder = MisfitGrid( base_source, param_values=grid_def )
-            sdrfinder.compute(seis)
-        else:
-            sdrfinder = self.load(self.stepname, run_id=run_id)
-                    
-        sdrfinder.postprocess(**mm_conf)
-        self.dump(sdrfinder, self.stepname)
-        
-        stats = sdrfinder.stats
-        for param in sdrparams:
-            str_result = stats[param].str_best_and_confidence()
-            logging.info(str_result)
-            self.result(str_result, param )
-            base_source[param] = stats[param].best
-            self.out_config.__dict__[d2u(param)] = stats[param].best
-            self.out_config.__dict__[d2u(param)+'_stats'] = stats[param]
-        
-        if forward:
-            self.snapshot( base_source, 'best' )
-            
-        self.post_work(search or forward)
-        
-    def _plot( self, run_id='current' ):
-        #rundir = self.make_rundir_path(run_id)
-        #finder = self.load('rough_moment', run_id=run_id)
-        #finder.plot( pjoin(rundir, 'plots_rough_moment') )
-        conf = self.in_config.get_config()
-
-        plotdir = self.make_plotdir_path(run_id)
-        finder = self.load(self.stepname, run_id=run_id)
-        return finder.plot( plotdir, conf['nsets'] )
-    
-    
 class EnduringPointSource(Step):
     
     def __init__(self, workdir, name='extension'):
@@ -1158,11 +1059,10 @@ class Greeper(Step):
             if param+'_start_range' in conf:
                 oldval = base_source[u2d(param)]
                 descr = conf[param+'_start_range']
-                mi,ma,inc = grid_defi(u2d(param),oldval,descr)
-                starter_grid_def.append( (u2d(param), gdef_to_gvals(mi,ma,inc)) )
+                starter_grid_def.append( grid_defi(u2d(param),oldval,descr) )
         
         if starter_grid_def:
-            starter_sources = base_source.grid( param_values=starter_grid_def )
+            starter_sources = base_source.grid( starter_grid_def )
         else:
             starter_sources = [ base_source ]
         
@@ -1175,14 +1075,8 @@ class Greeper(Step):
         dparams = [ u2d(param) for param in self.params ]
         self.nminfunccalls = 0
 
-        # for each dimension in parameter space create a ladder with the grid coords
-        grid_coords = []
-        for param, mi, ma, inc in grid_def:
-            ncoords = int(round((ma-mi)/inc))+1
-            grid_coords.append((param, num.linspace(mi, ma, ncoords)))
-
-        norms = [ inc for (param, mi, ma, inc) in grid_def ]
-        bounds = [ (mi/norm,ma/norm) for  ((param, mi, ma, inc),norm) in zip(grid_def, norms) ]
+        norms = [ num.min(vals[1:]-vals[:-1]) for (param, vals) in grid_def ]
+        bounds = [ (num.min(vals)/norm,num.max(vals)/norm) for  ((param, vals),norm) in zip(grid_def, norms) ]
 
         if search or forward: self.setup_inner_misfit_method()
         
@@ -1217,15 +1111,18 @@ class Greeper(Step):
             self.setup_inner_misfit_method()
                         
             # fix depth range by trying out different depths
-            for iparam, (param, mi, ma, inc) in enumerate(grid_def):
+            for iparam, (param, vals) in enumerate(grid_def):
                 if param == 'depth':
-                    depth_sources = base_source.grid( [ (param,mi,ma,inc) ] )
+                    depth_sources = base_source.grid( [ (param,vals) ] )
                     dummy_source, dummy_misfit, failings = best_source(seis, depth_sources, return_failings=True, **mm_conf)
                     ok = []
                     for isource, source in enumerate(depth_sources):
                         if isource not in failings:
                             ok.append(source['depth'])
-                    bounds[iparam] = ((min(ok)+inc*0.3)/norms[iparam], (max(ok)-inc*0.3)/norms[iparam])
+                    miok = min(ok)
+                    maok = max(ok)
+                    bounds[iparam] = ((miok+step_at(ok,miok)*0.3)/norms[iparam],
+                                      (maok-step_at(ok,maok)*0.3)/norms[iparam])
             
             # grid search over gradient searches
             min_misfit = None
@@ -1278,7 +1175,7 @@ class Greeper(Step):
         very_best_source_normalform = copy.deepcopy(very_best_source)
         very_best_source_normalform.disambigue_sdr()
         
-        for param, coords in grid_coords:
+        for param, coords in grid_def:
             val = very_best_source[param]
             remark = ''
             if snap(val,coords)[0] in (0,len(coords)-1): remark = ' (?: at end of range)'
@@ -1345,7 +1242,7 @@ class MisfitGrid:
         else:
             self.param_values = []
             for param, mi, ma, inc in param_ranges:
-                self.param_values.append( (param, gdef_to_gvals(mi,ma,inc)) )
+                self.param_values.append( (param, mimainc_to_gvals(mi,ma,inc)) )
             
         self.sources = self.base_source.grid( self.param_values, 
                                               source_constraints=source_constraints)
@@ -1645,7 +1542,6 @@ def install(src, dst):
     shutil.copy(src, dst)
     
 def kiwi_main(steps):
-    
     from optparse import OptionParser
     parser = OptionParser()
     parser.add_option('--loglevel', action='store', dest='loglevel', type='choice', choices=('info', 'debug'), default='info')
@@ -1667,7 +1563,7 @@ def kiwi_main(steps):
     formatter = logging.Formatter(logformat, datefmt=dateformat)
     console.setFormatter(formatter)
     logging.getLogger('').addHandler(console)
-
+    
     if options.loglevel == 'debug': progress_off
    
     commands = 'work', 'replot', 'show-steps', 'show-in-config', 'show-out-config', 'show-active-config', 'report'
