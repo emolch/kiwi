@@ -65,7 +65,10 @@ program gfdb_info
             call gfdb_dump_contents( db, stdout )
         else if (command == 'missing') then
             call gfdb_dump_missing( db, stdout )
+        else if (command == 'stats') then
+            call gfdb_dump_stats( db, stdout )
         end if
+        
     else
     
         write (*,'(a)') char("dt="// db%dt)

@@ -613,6 +613,65 @@ module gfdb
     
     end subroutine
 
+    subroutine gfdb_dump_stats( db, iunit )
+
+        type(t_gfdb), intent(inout) :: db
+        integer, intent(in) :: iunit
+        integer :: ix, iz, ig
+        real :: x,z
+        type(t_trace), pointer   :: tracep
+        type(t_strip) :: strip
+        integer :: nflat
+        real, dimension(2) :: data_range
+        integer, dimension(2) :: span
+        
+        do ix = 1,db%nx/db%nipx
+            do iz=1,db%nz/db%nipz
+                call gfdb_get_position( db, ix, iz, x, z )
+                do ig=1,db%ng
+                    call gfdb_get_trace(db, ix, iz, ig, tracep)
+                    if (associated(tracep)) then
+                        call trace_unpack(tracep, strip)
+                        call stats(strip, data_range, nflat)
+                        span = strip_span(strip)
+                        write (iunit,*) x, z, ig, &
+                            span(1)*db%dt, span(2)*db%dt, &
+                            data_range(1), data_range(2), nflat*db%dt
+                    end if
+                    call gfdb_uncache_trace(db, ix, iz, ig)
+                end do
+            end do
+        end do
+
+    end subroutine
+
+    subroutine stats( strip, data_range, nflat )
+
+        type(t_strip), intent(in) :: strip
+        real, dimension(2), intent(out) :: data_range
+        integer, intent(out) :: nflat
+        
+        integer :: n, i
+        real, dimension(size(strip%data)) :: ddata
+        real, dimension(2) :: ddata_range
+        real, parameter :: flat_level = 0.01
+
+        data_range(1) = minval(strip%data)
+        data_range(2) = maxval(strip%data)
+
+        n = size(strip%data)
+        ddata(:n-1) = strip%data(:n-1)
+        ddata_range(1) = minval(ddata(:n-1))
+        ddata_range(2) = maxval(ddata(:n-1))
+        nflat = 0
+        do i=1,n-1
+            if (abs(ddata(i)) .gt. flat_level*(ddata_range(2)-ddata_range(1))) then
+                nflat = i-1
+                exit
+            end if
+        end do
+
+    end subroutine
 
     subroutine gfdb_destroy( db )
     
@@ -1181,7 +1240,6 @@ module gfdb
         if (any(e /= 0)) call die( "gfdb: failed to get size of attributes of dataset with" // &
                                    "ixc="//ixc // ", iz="//iz //" and ig="//ig )
        
-                                   
         if (.not. allocated(c%pofs)) &
             call resize( c%pofs, 1, nstrips )
        
@@ -1225,8 +1283,8 @@ module gfdb
         call h5dclose_f(dataset, e(5))
         if (any(e /= 0)) call die( "gfdb: failed to get dataset with" // &
                                    "ixc="//ixc // ", iz="//iz //" and ig="//ig )
-    
-      ! convert to sparse trace
+
+      ! convert to sparse trace  
         call trace_from_storable( tracep, c%packed(1:compactsize), &
                                   c%pofs(1:nstrips), c%ofs(1:nstrips) )
         
