@@ -1,13 +1,12 @@
 
 import os
 import subprocess
-import numpy as num
 import tempfile
-import scipy
-#import scipy.io
+
 import pickle
 import shutil
 import sys
+import numpy as num
 pjoin = os.path.join
 
 def kiwi_aux_dir():
@@ -54,7 +53,7 @@ def gmt_color( rgb ):
     return '%i/%i/%i' % rgb
 
 def autoplot( *args, **kwargs ):
-    
+
     outfile = args[-1]
     things = args[:-1]
     infiles = []
