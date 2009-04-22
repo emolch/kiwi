@@ -21,7 +21,7 @@ class Gfdb:
         gfdb_infos_str = {}
         cmd = [ config.gfdb_info_prog, gfdbpath ]
         
-        self.string = Popen( cmd, stdout=PIPE ).communicate()[0]
+        self.string = Popen( cmd, stdout=PIPE).communicate()[0]
         
         for line in self.string.splitlines():
             k,v = line.split('=')
@@ -31,15 +31,12 @@ class Gfdb:
             setattr(self, k, float( gfdb_infos_str[k] ))
             
         for k in [ 'nchunks', 'nx', 'nz', 'ng' ]:
-            setattr(self, k, int( gfdb_infos_str[k] ))
-            
-        
-    
+            setattr(self, k, int( gfdb_infos_str[k] ))    
     
     def get_traces_slow( self, x, z ):
         
         if not self.extractor:
-            self.extractor = Popen( [config.gfdb_extract_prog, self.path], stdin=PIPE, stdout=PIPE )
+            self.extractor = Popen( [config.gfdb_extract_prog, self.path], stdin=PIPE, stdout=PIPE, close_fds=True)
             self.tempdir = tempfile.mkdtemp("","gfdb_extract-")
             self.tempfilebase = pjoin( self.tempdir, 'trace' )
         
@@ -81,8 +78,8 @@ class Gfdb:
         
         
         return traces
-            
-    def __del__(self):
+    
+    def terminate(self):
         if self.extractor:
             self.extractor.stdin.close()
             self.extractor.stdout.close()
@@ -92,6 +89,9 @@ class Gfdb:
             shutil.rmtree(self.tempdir)
             self.tempdir = None
             self.tempfilebase = None
+    
+    def __del__(self):
+        self.terminate()
            
     def __str__(self):
         return '''
