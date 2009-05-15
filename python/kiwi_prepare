@@ -19,6 +19,7 @@
 # Quick and ugly hack to preprocess iris seed volumes.
 
 import ugly_minimizer as minimizer
+from tunguska.phase import Phase
 import subprocess
 import os
 import sys
@@ -225,8 +226,8 @@ def set_time_ranges(event, stations):
     m.set_receivers(lat, lon, comps)
     dist_deg, dist_m, azi = m.get_distazi()
     
-    pbeg = minimizer.Phase('begin')
-    pend = minimizer.Phase('end')
+    pbeg = Phase('begin')
+    pend = Phase('end')
     
     for i,s in enumerate(stations):
         s.set_event_relative_data( dist_deg[i], dist_m[i], azi[i], (pbeg(dist_m[i]), pend(dist_m[i])) )
