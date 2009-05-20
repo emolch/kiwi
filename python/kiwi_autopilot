@@ -51,7 +51,7 @@ def prepare_event(skeleton_dir, event_dir):
 def process_event(event_dir):
     oldcwd = os.getcwd()
     os.chdir(event_dir)
-    call('./kiwi_ampspec', 'work')
+    call('./kiwi_ampspec', 'work', '-', 'durationfinder2')
     call('./kiwi_ampspec', 'report')
     os.chdir(oldcwd)
 
