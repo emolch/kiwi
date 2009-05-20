@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from tunguska import wilber
 from os.path import join as pjoin
 from subprocess import call
@@ -69,8 +71,8 @@ if len(sys.argv) >= 2:
 else:
     event_dir = get_next_event('.')
 
-prepare_event(event_dir)
+skeleton_dir = 'skeleton'
+
+prepare_event(skeleton_dir, event_dir)
 process_event(event_dir)
 post_event(event_dir)
-
-
