@@ -30,9 +30,16 @@ class Event:
         )
 
 class Station:
-    def __init__(self, ):
-        pass
+    def __init__(self, station, network, dist, azimuth, channels, snr):
+        self.station = station
+        self.network = network
+        self.dist = dist
+        self.azimuth = azimuth
+        self.channels = channels
+        self.snr = snr
         
+    def __str__(self):
+        return '%s %s %3.0f %3.0f %s %g' % (self.network, self.station, self.dist, self.azimuth, self.channels, self.snr)
 
 def to_secs(date, time):
     toks = date.split('/')
@@ -65,8 +72,9 @@ class OrfeusWilber(Wilber):
     pass
 
 class IrisWilber(Wilber):
-    def __init__(self, username):
+    def __init__(self, username, email):
         self.username = username
+        self.email = email
         self.urlbeg = 'http://www.iris.edu'
         cgidir = '/cgi-bin'
         # cgidir = '/cgi-bin/wilberII'     # new url
@@ -81,13 +89,13 @@ class IrisWilber(Wilber):
         for str in r.findall(page):
             toks = str.replace("'",'').replace(',,',',').split(',')
             if toks[0] == 'name': continue
-            st = Station()
-            st.station = toks[0]
-            st.network = toks[1]
-            st.dist = float(toks[2])
-            st.azimuth = float(toks[3])
-            st.channels = toks[4:-1]
-            st.snr = float(toks[-1])
+            st = Station( station=toks[0],
+                          network=toks[1],
+                          dist=float(toks[2]),
+                          azimuth=float(toks[3]),
+                          channels=toks[4:-1],
+                          snr=float(toks[-1]) )
+            
             stations.append(st)
     
         return stations
@@ -200,7 +208,6 @@ class IrisWilber(Wilber):
         
     def get_events(self, time_range = None):
         
-        
         if time_range is None: # by default, get events in past 24 hours
             now = time.time()
             time_range = (now-24*60*60, now)
@@ -299,7 +306,7 @@ class IrisWilber(Wilber):
                 ('after', after),
                 ('username', self.username),
                 ('label', label),
-                ('email', ''),
+                ('email', self.email),
                 ('request', 'Process Request')
             ])
                         

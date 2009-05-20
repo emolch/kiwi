@@ -131,28 +131,28 @@ class TracesPlot(Qwt.QwtPlot):
             curve.setPen( Qt.QPen( Qt.QColor(*graph_colors[i] )) )
 
         yscaler = self.axisScaleEngine(Qwt.QwtPlot.yLeft)
-        yscaler.setAttribute(Qwt.QwtScaleEngine.Symmetric, True)
-        yscaler.setAttribute(Qwt.QwtScaleEngine.Floating, True)
+        #yscaler.setAttribute(Qwt.QwtScaleEngine.Symmetric, True)
+        #yscaler.setAttribute(Qwt.QwtScaleEngine.Floating, True)
         
         xscaler = self.axisScaleEngine(Qwt.QwtPlot.xBottom)
-        xscaler.setAttribute(Qwt.QwtScaleEngine.Floating, True)
+        #xscaler.setAttribute(Qwt.QwtScaleEngine.Floating, True)
 
         self.setCanvasBackground( Qt.QColor(*plot_background_color) )
         self.data_sync()
 
-        zoomer1 = Qwt.QwtPlotZoomer(
+        #zoomer1 = Qwt.QwtPlotZoomer(
+        #    Qwt.QwtPlot.xBottom,
+        #    Qwt.QwtPlot.yLeft,
+        #    Qwt.QwtPicker.DragSelection,
+        #    Qwt.QwtPicker.AlwaysOff,
+        #    self.canvas())
+        #zoomer1.setRubberBandPen(Qt.QPen(Qt.QColor(*config.tango_colors['scarletred2'])))
+        #zoomer1.setEnabled(True)
+        #zoomer1.zoom(0)
+        #
+        zoomer2 = Qwt.QwtPlotZoomer(
             Qwt.QwtPlot.xBottom,
             Qwt.QwtPlot.yLeft,
-            Qwt.QwtPicker.DragSelection,
-            Qwt.QwtPicker.AlwaysOff,
-            self.canvas())
-        zoomer1.setRubberBandPen(Qt.QPen(Qt.QColor(*config.tango_colors['scarletred2'])))
-        zoomer1.setEnabled(True)
-        zoomer1.zoom(0)
-
-        zoomer2 = Qwt.QwtPlotZoomer(
-            Qwt.QwtPlot.xTop,
-            Qwt.QwtPlot.yRight,
             Qwt.QwtPicker.PointSelection | Qwt.QwtPicker.DragSelection,
             Qwt.QwtPicker.AlwaysOff,
             self.canvas())
