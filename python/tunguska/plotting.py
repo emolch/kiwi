@@ -58,9 +58,6 @@ def nukl_hack(conf):
         subst(conf,param, 'bord-radius', 'Border Radius')
         subst(conf,param, 'rel-rupture-velocity', 'Rel. Rupture Velocity')
         
-        
-        
-        
 def pdfjoin(files, outfile):
     cmd = ['pdfjoin', '--outfile', outfile ]
     cmd.extend(files)
@@ -77,8 +74,6 @@ def misfit_plot_1d( data, filename, conf_overrides ):
     args = tuple(data) + (filename,)
     
     util.autoplot( *args, **conf )
-                    
-                    
                     
 def histogram_plot_1d( edges, hist, filename, conf_overrides ):
     
@@ -140,7 +135,7 @@ def seismogram_plot( data_by_component, filename, conf_overrides, are_spectra=Fa
         args = tuple(data) + (filename,)
         util.autoplot( *args, **conf )
         
-def multi_seismogram_plot( snapshots, plotdir ):
+def multi_seismogram_plot( snapshots, plotdir, summary=False):
     
     nrecs = len(snapshots[0])
     for snap in snapshots:
@@ -161,7 +156,7 @@ def multi_seismogram_plot( snapshots, plotdir ):
     allfilez = []
     for typ in 'seismogram', 'spectrum':
     
-        if config.show_progress:
+        if config.show_progress and not summary:
             widgets = ['Plotting %s' % plural[typ], ' ',
                     progressbar.Bar(marker='-',left='[',right=']'), ' ',
                     progressbar.Percentage(), ' ',]
@@ -212,16 +207,17 @@ def multi_seismogram_plot( snapshots, plotdir ):
             filename = pjoin(plotdir, '%s_%i.pdf' % (typ,irec+1))
             
             seismogram_plot(data_by_compo, filename, conf_overrides=conf, are_spectra = typ == 'spectrum')
-            if config.show_progress: pbar.update(irec+1)
+            if config.show_progress and not summary: pbar.update(irec+1)
             filez.append(filename)
         
         filename = pjoin(plotdir, '%s_all.pdf' % plural[typ])
         pdfjoin(filez, filename)
         allfilez.extend( filez )
         
-        if config.show_progress: pbar.finish()
+        if config.show_progress and not summary: pbar.finish()
         
     return allfilez
+    
         
 def station_plot( slat, slon, lat, lon, rnames, station_color, station_size, source,
                  maxdist, filename, conf_overrides, zexpand=1.0, nsets=1, symbols=('klflag','krflag')):
