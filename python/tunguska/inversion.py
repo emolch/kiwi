@@ -8,6 +8,7 @@ import util
 import plotting
 import moment_tensor
 import orthodrome
+import gridsearch
 from util import gform
 
 import shutil
@@ -16,8 +17,6 @@ import sys
 import re
 import datetime, time
 import numpy as num
-import scipy
-import scipy.stats
 from scipy.optimize import fmin_l_bfgs_b
 import progressbar
 import cPickle as pickle
@@ -25,9 +24,22 @@ import copy
 import logging
 from subprocess import call
 import subprocess
-from Cheetah.Template import Template
 
 from os.path import join as pjoin
+
+def unindent(s):
+    lines = s.splitlines()
+    if lines and not lines[0].strip(): lines.pop(0)
+    if lines and not lines[-1].strip(): lines.pop()
+    minindent = min([ len(line) - len(line.lstrip()) for line in lines if line.strip() ])
+    eat = ' '*minindent
+    outlines = []
+    for line in lines:
+        if line.startswith(eat):
+            outlines.append(line[minindent:])
+        else:
+            outlines.append(line)
+    return '\n'.join(outlines)
 
 def backticks(command):
     return subprocess.Popen(command, stdout=subprocess.PIPE).communicate()[0]
@@ -100,20 +112,9 @@ def grid_defi( param, oldval, descr ):
             ma += oldval
         return param, mimainc_to_gvals(mi, ma, inc)
     
-    
 
-def step_at(values, value):
-    if len(values) <= 1: return 1.
-    i = num.clip(num.searchsorted(values, value), 1, len(values)-1)
-    return values[i]-values[i-1]
 
-def values_to_bin_edges(values):
-    if len(values) == 0: return []
-    edges = num.zeros(len(values)+1, dtype=num.float)
-    edges[1:-1] = (values[1:]+values[:-1])/2.
-    edges[0] = values[0]-step_at(values, values[0])/2.
-    edges[-1] = values[-1]+step_at(values, values[-1])/2.
-    return edges
+
 
 def standard_setup( datadir,
                     gfdb_path,
@@ -125,6 +126,7 @@ def standard_setup( datadir,
                     constraining_planes = None,
                     shifts = None,
                     blacklist = None,
+                    xblacklist = None,
                     verbose = False,
     
                     local_interpolation = 'bilinear',
@@ -171,6 +173,8 @@ def standard_setup( datadir,
     seis.set_ref_seismograms( ref_seismogram_stem, ref_seismogram_format )
     if blacklist:
         seis.blacklist_receivers( blacklist )
+    if xblacklist:
+        seis.xblacklist_receivers( xblacklist )
     
     # apply reference seismograms shifts
     if shifts is not None:
@@ -182,7 +186,7 @@ standard_setup.required = set(('datadir', 'gfdb_path', 'components'))
 standard_setup.optional = set(('effective_dt', 'spacial_undersampling', 'hosts', 
                                'crustal_thickness_limit', 'constraining_planes', 'shifts', 'local_interpolation', 
                                'source_origin_file', 'receivers_file',
-                               'ref_seismogram_stem', 'ref_seismogram_format', 'blacklist', 'verbose'))
+                               'ref_seismogram_stem', 'ref_seismogram_format', 'blacklist', 'xblacklist', 'verbose'))
 
 def gen_dweights( seis, base_source, datadir,
                                  ref_seismogram_stem = 'reference',
@@ -200,7 +204,7 @@ def gen_dweights( seis, base_source, datadir,
     slip_rake_grid = ('slip-rake', -180., 150., 30.)
     
     base_source['moment'] = moment
-    sdr_grid = MisfitGrid( base_source, [strike_grid, dip_grid, slip_rake_grid])
+    sdr_grid = gridsearch.MisfitGrid( base_source, [strike_grid, dip_grid, slip_rake_grid])
     
     sdr_grid.compute( seis )
     
@@ -215,125 +219,6 @@ def gen_dweights( seis, base_source, datadir,
     
 gen_dweights.required = set(('datadir',))
 gen_dweights.optional = set(('ref_seismogram_stem', 'ref_seismogram_format'))
-
-def other_plane( strike, dip, rake ):
-    mt = moment_tensor.MomentTensor( strike=strike, dip=dip, rake=rake )
-    both_sdr = mt.both_strike_dip_rake()
-    w = [ sum( [ abs(x-y) for x,y in zip(both_sdr[i], (strike, dip, rake)) ] ) for i in (0,1) ]
-    if w[0]<w[1]:
-        return both_sdr[1]
-    else:
-        return both_sdr[0]
-
-
-def make_misfits_for_sources(seis, sources, show_progress=False, progress_title='grid search'):
-    nsources = len(sources)
-    nreceivers = len(seis.receivers)
-    ncomponents = max([ len(r.components) for r in seis.receivers ])
-    
-    # results gathered by (source,receiver,component)
-    misfits_by_src = num.zeros( (nsources, nreceivers, ncomponents), dtype=num.float)
-    norms_by_src = num.zeros(  (nsources, nreceivers, ncomponents), dtype=num.float)
-    
-    if show_progress:
-        widgets = [progress_title, ' ',
-                progressbar.Bar(marker='-',left='[',right=']'), ' ',
-                progressbar.Percentage(), ' ',]
-        
-        pbar = progressbar.ProgressBar(widgets=widgets, maxval=len(sources)).start()
-    
-    failings = []
-    for isource, source in enumerate(sources):
-        try:
-            seis.make_misfits_for_source( source )
-            for ireceiver, receiver in enumerate(seis.receivers):
-                if receiver.enabled:
-                    for icomp, comp in enumerate(receiver.components):
-                        misfits_by_src[isource, ireceiver, icomp] = receiver.misfits[icomp]
-                        norms_by_src[isource, ireceiver, icomp] = receiver.misfit_norm_factors[icomp]
-                    
-        except seismosizer.SeismosizersReturnedErrors:
-            failings.append(isource)
-        
-        if show_progress: pbar.update(isource+1)
-                    
-    if show_progress: pbar.finish()
-    
-    return misfits_by_src, norms_by_src, failings
-
-def make_global_misfits(misfits_by_src, norms_by_src, receiver_weights=1., outer_norm='l2norm', anarchy=False, bootstrap=False, **kwargs):
-    
-    nreceivers = misfits_by_src.shape[1]
-    
-    if isinstance(receiver_weights, float):
-        rweights = receiver_weights
-    else:
-        rweights = receiver_weights[num.newaxis,:].copy()
-    
-    if bootstrap:
-        bweights = num.zeros(nreceivers, dtype=num.float)
-        bweights_x = num.bincount(num.random.randint(0,nreceivers,nreceivers))
-        bweights[:len(bweights_x)] = bweights_x[:]
-    
-    if outer_norm == 'l1norm':
-        misfits_by_sr = num.sum(misfits_by_src,2)
-        norms_by_sr   = num.sum(norms_by_src,2)
-        
-        if anarchy:
-            xrweights = num.zeros(norms_by_sr.shape, dtype=float)
-            xrweights[:,:] = rweights
-            xrweights /= num.where( norms_by_sr != 0., norms_by_sr, -1.)
-            rweights = num.maximum(xrweights, 0.)
-        
-        if bootstrap:
-            rweights *= bweights
-        
-        misfits_by_sr *= rweights
-        norms_by_sr *= rweights
-        
-        ms = num.sum( misfits_by_sr, 1 )
-        ns = num.sum( norms_by_sr, 1 )
-        
-        misfits_by_s  = num.where(ns > 0., ms/ns, -1.)
-        misfits_by_s = num.where(misfits_by_s<0, num.NaN, misfits_by_s)
-        
-    elif outer_norm == 'l2norm':
-        misfits_by_sr = num.sqrt(num.sum(misfits_by_src**2,2))
-        norms_by_sr   = num.sqrt(num.sum(norms_by_src**2,2))
-        
-        if anarchy:
-            rweights /= num.where( norms_by_sr != 0., norms_by_sr, -1.)
-            rweights = num.maximum(rweights, 0.)
-            
-        if bootstrap:
-            rweights *= num.sqrt(bweights)
-        
-        misfits_by_sr *= rweights
-        norms_by_sr *= rweights
-        
-        ms = num.sum( (misfits_by_sr)**2, 1 )
-        ns = num.sum( (norms_by_sr)**2, 1 )
-        
-        misfits_by_s  = num.where(ns > 0., num.sqrt(ms/ns), -1.)
-        misfits_by_s = num.where(misfits_by_s<0, num.NaN, misfits_by_s)
-    
-    else:
-        raise Exception('unknown norm method: %s' % outer_norm)
-    
-    return misfits_by_s, misfits_by_sr
-
-class NoValidSources(Exception):
-    pass
-
-def best_source(seis, sources, return_failings=False, **outer_misfit_config):
-    misfits_by_src, norms_by_src, failings = make_misfits_for_sources(seis, sources)
-    misfits_by_s, misfits_by_sr = make_global_misfits( misfits_by_src, norms_by_src, **outer_misfit_config)
-    misfits_by_s = num.where( misfits_by_s > 0, misfits_by_s, num.NaN)
-    ibest = num.nanargmin(misfits_by_s)
-    if num.isnan(ibest) or num.isnan(misfits_by_s[ibest]): raise NoValidSources()
-    if return_failings:
-        return sources[ibest], misfits_by_s[ibest], failings
-    return sources[ibest], misfits_by_s[ibest]
 
 class Step:
     inner_misfit_method_params = set(('inner_norm', 'taper', 'filter', 'nsets'))
@@ -399,6 +284,7 @@ class Step:
         if start_seismosizer:
             sconf = self.in_config.get_config(keys=standard_setup.required|standard_setup.optional)
             self.seismosizer = standard_setup( **sconf )
+            self.out_config.source_location = self.seismosizer.source_location
 
     def setup_inner_misfit_method(self):
         conf = self.in_config.get_config(keys=Step.inner_misfit_method_params)
@@ -435,8 +321,18 @@ class Step:
             return
         
         self.seismosizer.set_source( source )
-        self.dump( self.seismosizer.get_receivers_snapshot(), 'snapshot_%s' % ident )
+        receivers = self.seismosizer.get_receivers_snapshot()
+        self.dump( receivers, 'snapshot_%s' % ident )
+        
         self.dump( self.seismosizer.get_psm_infos(), 'source_infos_%s' % ident )
+        rundir = self.make_rundir_path('incomplete')
+        tracesdir = pjoin(rundir, 'snapshot_%s' % ident)
+        if os.path.exists(tracesdir):
+            shutil.rmtree(tracesdir)
+        
+        os.mkdir(tracesdir)
+        for r in receivers:
+            r.save_traces_mseed(pjoin(tracesdir, '%(whichset)s_%(network)s_%(station)s_%(channel)s.mseed'))
         
     def get_snapshot(self, ident, run_id='current'):
         return self.load( ident='snapshot_%s' % ident, run_id=run_id )
@@ -507,6 +403,20 @@ class Step:
         except:
             c = None
         return c
+            
+    def ocf(self, fmt, mult=1.0, run_id='current'):
+        
+        c = self.oc(run_id)
+        
+        if mult != 1.0:
+            c = copy.deepcopy(c)
+            for k in c.keys():
+                v = c[k]
+                if isinstance(v,float) or isinstance(v,int) or isinstance(v,long):
+                    c[k] = mult*v
+                    
+        return fmt % c
+        
             
     def gx(self, arg):
         plotdir = self.make_plotdir_path( 'current' )
@@ -783,10 +693,11 @@ class Shifter(Step):
 
 class ParamTuner(Step):
      
-    def __init__(self, workdir, params=['time'], name=None):
+    def __init__(self, workdir, params=['time'], name=None, xblacklist_level=None):
         if name is None: name = '-'.join(params)+'-tuner'
         Step.__init__(self, workdir, name)
         self.params = params
+        self.xblacklist_level = xblacklist_level
         
         self.required |= Step.outer_misfit_method_params | Step.inner_misfit_method_params \
                         | set([param+'_range' for param in self.params]) \
@@ -809,7 +720,7 @@ class ParamTuner(Step):
                 
         if 'plane' in conf and conf['plane'] == 2: 
             strike, dip, slip_rake = float(conf['strike']), float(conf['dip']), float(conf['slip_rake'])
-            strike, dip, slip_rake = other_plane( strike, dip, slip_rake )
+            strike, dip, slip_rake = moment_tensor.other_plane( strike, dip, slip_rake )
             base_source['strike'] = strike
             base_source['dip'] = dip
             base_source['slip-rake'] = slip_rake
@@ -827,7 +738,7 @@ class ParamTuner(Step):
         if search or forward: self.setup_inner_misfit_method()
         if search:
             self.setup_inner_misfit_method()
-            finder = MisfitGrid( base_source, param_values=grid_def )
+            finder = gridsearch.MisfitGrid( base_source, param_values=grid_def )
             finder.compute(seis)
         else:
             finder = self.load(self.stepname, run_id=run_id)
@@ -845,7 +756,23 @@ class ParamTuner(Step):
             self.out_config.__dict__[param+'_stats'] = stats[u2d(param)]
         
         logging.info('Misfit = %f, Source = %s' % (finder.get_best_misfit(), str(base_source)))
-
+        
+        
+        misfit_median = num.median( finder.misfits_by_r )
+        
+        if self.xblacklist_level is not None:
+            ir = 0
+            xblacklist = []
+            for r, mm in zip(seis.receivers, finder.misfits_by_r):
+                if mm/misfit_median > self.xblacklist_level:
+                    xblacklist.append(ir) 
+                    logging.info('Blacklisting:  %i, %s, %g' % (ir+1, r.name, mm/misfit_median))
+                    
+                ir += 1
+            self.out_config.xblacklist = xblacklist
+            
+        
+        
         if forward:
             self.snapshot( base_source, 'best' )
             
@@ -904,7 +831,7 @@ class EnduringPointSource(Step):
         if search or forward: self.setup_inner_misfit_method()
         if search:
             self.setup_inner_misfit_method()
-            finder = MisfitGrid( base_source, param_values=grid_def )
+            finder = gridsearch.MisfitGrid( base_source, param_values=grid_def )
             finder.compute(seis)
         else:
             finder = self.load(self.stepname, run_id=run_id)
@@ -1044,7 +971,7 @@ class Greeper(Step):
                 
         if 'plane' in conf and conf['plane'] == 2: 
             strike, dip, slip_rake = float(conf['strike']), float(conf['dip']), float(conf['slip_rake'])
-            strike, dip, slip_rake = other_plane( strike, dip, slip_rake )
+            strike, dip, slip_rake = moment_tensor.other_plane( strike, dip, slip_rake )
             base_source['strike'] = strike
             base_source['dip'] = dip
             base_source['slip-rake'] = slip_rake
@@ -1098,7 +1025,7 @@ class Greeper(Step):
             source = x_to_source(x)
             try:
                 logging.debug('Evaluating source: %s', source.pretty_str(dparams) )
-                best, misfit = best_source(seis, [source], **mm_conf)
+                best, misfit = seis.best_source([source], **mm_conf)
                 logging.debug('Misfit: %g' % misfit)
             except NoValidSources:
                 logging.warn('Gradient search aborted at invalid source:' )
@@ -1114,15 +1041,15 @@ class Greeper(Step):
             for iparam, (param, vals) in enumerate(grid_def):
                 if param == 'depth':
                     depth_sources = base_source.grid( [ (param,vals) ] )
-                    dummy_source, dummy_misfit, failings = best_source(seis, depth_sources, return_failings=True, **mm_conf)
+                    dummy_source, dummy_misfit, failings = seis.best_source(depth_sources, return_failings=True, **mm_conf)
                     ok = []
                     for isource, source in enumerate(depth_sources):
                         if isource not in failings:
                             ok.append(source['depth'])
                     miok = min(ok)
                     maok = max(ok)
-                    bounds[iparam] = ((miok+step_at(ok,miok)*0.3)/norms[iparam],
-                                      (maok-step_at(ok,maok)*0.3)/norms[iparam])
+                    bounds[iparam] = ((miok+gridsearch.step_at(ok,miok)*0.3)/norms[iparam],
+                                      (maok-gridsearch.step_at(ok,maok)*0.3)/norms[iparam])
             
             # grid search over gradient searches
             min_misfit = None
@@ -1134,7 +1061,7 @@ class Greeper(Step):
                 # look if starting source is valid
                 current_base = copy.deepcopy(starter_source)
                 try:
-                    current_base, misfit = best_source(seis, [current_base], **mm_conf)
+                    current_base, misfit = seis.best_source([current_base], **mm_conf)
                 except NoValidSources:
                     logging.warn('Skipping invalid starting source:')
                     for str_param in current_base.pretty_str(dparams).splitlines():
@@ -1202,448 +1129,6 @@ class Greeper(Step):
             
         self.post_work(search or forward)
     
-class MisfitGridStats:
-    
-    def str_best_and_confidence(self, factor=1., unit =''):
-        lw = ''
-        uw = ''
-        if self.percentile16_warn: lw = ' (?)'
-        if self.percentile84_warn: uw = '(?) '
-           
-        return '%s = %.3g %s  (confidence interval 68%%) = [ %.3g%s, %.3g %s] %s' % \
-                (self.paramname.title(), self.best*factor, unit, self.percentile16*factor, lw, self.percentile84*factor, uw, unit)
-        
-    def str_best(self, factor=1., unit =''):
-        
-        return '%s = %.3g %s' % (self.paramname.title(), self.best*factor, unit)
-        
-    def str_mean_and_stddev(self):
-        return '%(paramname)s = %(mean)g +- %(std)g' % self.__dict__
-    
 
-    
-class MisfitGrid:
-    '''Brute force grid search minimizer with builtin bootstrapping.'''
-    
-    def __init__( self, base_source,
-                        param_ranges=None,
-                        param_values=None,
-                        source_constraints=None,
-                        ref_source=None):
-        
-        self.base_source = copy.deepcopy(base_source)
-        if ref_source:
-            self.ref_source = copy.deepcopy(ref_source)
-        else:
-            self.ref_source = copy.deepcopy(base_source)
-        
-        if param_values is not None:
-            self.param_values = param_values
-        else:
-            self.param_values = []
-            for param, mi, ma, inc in param_ranges:
-                self.param_values.append( (param, mimainc_to_gvals(mi,ma,inc)) )
-            
-        self.sources = self.base_source.grid( self.param_values, 
-                                              source_constraints=source_constraints)
 
-        self.sourceparams = [ x[0] for x in self.param_values ]
-
-        # will be set by compute()
-        self.misfits_by_src = None
-        self.norms_by_src = None
-        self.ref_misfits_by_src = None
-        self.ref_norms_by_src = None        
-        self.receivers = None
-        self.nreceivers = None
-        
-        # will be set by postprocess()
-        self.best_source = None
-        self.misfits_by_s = None
-        self.misfits_by_r = None
-        self.ref_misfits_by_r = None
-        self.variability_by_r = None
-        self.bootstrap_sources = None
-        self.stats = None
-        
-    def compute(self, seis):
-        '''Let seismosizer calculate the trace misfits.'''
-        
-        if len(self.sourceparams) == 1:
-            progress_title = 'Grid search param: ' + ', '.join(self.sourceparams)
-        else:
-            progress_title = 'Grid search params: ' + ', '.join(self.sourceparams)
-            
-        nreceivers = len(seis.receivers)
-        
-        # results, gathered by (source,receiver,component)
-        misfits_by_src, norms_by_src, failings = make_misfits_for_sources(seis,
-                                                                          self.sources,
-                                                                          show_progress=config.show_progress,
-                                                                          progress_title=progress_title)
-              
-        # results for reference source, gathered by (source,receiver,component)
-        ref_misfits_by_src, ref_norms_by_src, failings = make_misfits_for_sources(seis, [self.ref_source])
-        
-        self.misfits_by_src = misfits_by_src
-        self.norms_by_src = norms_by_src
-        self.ref_misfits_by_src = ref_misfits_by_src
-        self.ref_norms_by_src = ref_norms_by_src
-        
-        self.nreceivers = nreceivers
-        self.receivers = seis.receivers
-        self.source_location = seis.source_location
-        
-        self.best_source = None
-        self.misfits_by_s = None
-        self.misfits_by_r = None
-        self.ref_misfits_by_r = None
-        self.variability_by_r = None
-        self.bootstrap_sources = None
-        self.stats = None
-    
-    def postprocess(self, **outer_misfit_config):
-        '''Combine trace misfits to global misfits, find best source, make statistics.'''
-        
-        self.best_source, self.misfits_by_s, self.misfits_by_r, self.variability_by_r = self._best_source(return_misfits_by_r=True, **outer_misfit_config)
-        
-        self.ref_misfits_by_r = self._ref_misfits_by_r(**outer_misfit_config)
-        
-        self.bootstrap_sources = self._bootstrap(**outer_misfit_config)
-        self.stats = self._stats(self.param_values, self.best_source, self.bootstrap_sources)
-    
-    def get_mean_misfits_by_r(self):
-        '''Get mean raw misfits by receiver, e.g. to auto-create weights.''' 
-        mean_misfits_by_r = num.zeros( self.nreceivers, dtype=num.float )
-        for irec in range(self.nreceivers):
-            ncomps = len(self.receivers[irec].components)
-            if ncomps != 0:
-                x = num.sum(self.misfits_by_src[:,irec,:]) /( ncomps*len(self.sources))
-            else:
-                x = -1.0
-            mean_misfits_by_r[irec] = x
-        return mean_misfits_by_r
-        
-    def get_best_misfit(self):
-        return num.nanmin(self.misfits_by_s)
-        
-    def _best_source(self, return_misfits_by_r=False, **outer_misfit_config):
-        misfits_by_s, misfits_by_sr = make_global_misfits( self.misfits_by_src, self.norms_by_src, **outer_misfit_config)
-        ibest = num.nanargmin(misfits_by_s)
-        if not return_misfits_by_r:
-            return self.sources[ibest], misfits_by_s
-        else:
-            # misfit variability by receiver
-            misfits_varia_by_r = num.std(misfits_by_sr,0)
-            return self.sources[ibest], misfits_by_s, misfits_by_sr[ibest,:], misfits_varia_by_r
-        
-    def _ref_misfits_by_r(self, **outer_misfit_config):
-        misfits_by_s, misfits_by_sr = make_global_misfits(self.ref_misfits_by_src, self.ref_norms_by_src, **outer_misfit_config)
-        return misfits_by_sr[0,:]
-        
-    def _bootstrap(self, bootstrap_iterations=1000, **outer_misfit_config):
-        bootstrap_sources = []
-        if config.show_progress:
-            widgets = ['Bootstrapping', ' ',
-                    progressbar.Bar(marker='-',left='[',right=']'), ' ',
-                    progressbar.Percentage(), ' ',]
-            
-            pbar = progressbar.ProgressBar(widgets=widgets, maxval=bootstrap_iterations).start()
-            
-        for i in xrange(bootstrap_iterations):
-            bootstrap_sources.append( self._best_source(bootstrap=True, **outer_misfit_config)[0] )
-            if config.show_progress: pbar.update(i+1)
-            
-        if config.show_progress: pbar.finish()
-        
-        return bootstrap_sources
-        
-    def _stats(self, param_values, best_source, bootstrap_sources):
-        
-        results = {}
-        for param, gvalues in param_values:
-            mi = num.min(gvalues)
-            ma = num.max(gvalues)
-            param_results = num.zeros(len(bootstrap_sources), dtype=num.float)
-            for i, source in enumerate(bootstrap_sources):
-                param_results[i] = source[param]
-                
-            result = MisfitGridStats()
-            result.best = best_source[param]
-            if len(param_results) == 0: continue
-            result.paramname = param
-            result.mean = num.mean(param_results)
-            result.std = num.std(param_results)
-            result.median = num.median(param_results)
-            result.percentile16 = scipy.stats.scoreatpercentile(param_results, 16.)
-            result.percentile84 = scipy.stats.scoreatpercentile(param_results, 84.)
-            result.percentile16 -= step_at( gvalues, result.percentile16 )/2.
-            result.percentile84 += step_at( gvalues, result.percentile84 )/2.
-            result.percentile16_warn = result.percentile16 < mi
-            result.percentile84_warn = result.percentile84 > ma
-            result.distribution = param_results
-            results[param] = result
-            
-        return results
-        
-
-        
-    def plot(self, dirname, nsets, source_model_infos=None):
-        
-        best_source = self.best_source
-        bootstrap_sources = self.bootstrap_sources
-        
-        
-        plot_files = []
-        
-        for iparam, param in enumerate(self.sourceparams):
-            #
-            # 1D misfit cross section
-            #
-            xy = []
-            for s,m in zip(self.sources, self.misfits_by_s):
-                if not num.isnan(m):
-                    xy.append((s[param], m))
-            
-            xdata, ydata = num.array(xy,dtype=num.float).transpose()
-            
-            conf = dict( xlabel = param.title(),
-                         xunit = self.base_source.sourceinfo(param).unit )
-            
-            plotting.km_hack(conf)
-            fn = 'misfit-%s.pdf' % param
-            plotting.misfit_plot_1d( [(xdata,ydata)],
-                                     pjoin(dirname, fn),
-                                     conf )
-            plot_files.append(fn)
-           
-            #
-            # 1D histogram
-            #
-            gvalues = self.param_values[iparam][1]
-            gedges = values_to_bin_edges(gvalues)
-            hist, edges = num.histogram(self.stats[param].distribution,
-                                        bins=gedges,
-                                        new=True)
-            
-            hist = hist/float(len(bootstrap_sources))
-            
-            conf = dict( xlabel = param.title(),
-                         xunit = self.base_source.sourceinfo(param).unit)
-            
-            plotting.km_hack(conf)
-            fn = 'histogram-%s.pdf' % param
-            plotting.histogram_plot_1d( edges, hist, 
-                                        pjoin(dirname, fn),
-                                        conf )
-            
-            plot_files.append( fn )
-            
-        for ixparam, xparam in enumerate(self.sourceparams):
-            for iyparam, yparam in enumerate(self.sourceparams):
-                if ixparam == iyparam: continue
-                
-                #
-                # 2D misfogram plot
-                #
-                vmisfits = {}
-                maxmisfit = num.nanmax(self.misfits_by_s)
-                for (source, misfit) in zip(self.sources, self.misfits_by_s):
-                    if num.isnan(misfit): continue
-                    vx = source[xparam]
-                    vy = source[yparam]
-                    vmisfits[(vx,vy)] = min(vmisfits.get((vx,vy), maxmisfit), misfit)
-                    
-                vcounts = {}
-                for source in bootstrap_sources:
-                    vx = source[xparam]
-                    vy = source[yparam]
-                    vcounts[(vx,vy)] = vcounts.get((vx,vy), 0) + 1
-                
-                lx, ly, lz = [], [], []
-                for ((vx,vy),vmisfit) in vmisfits.iteritems():
-                    lx.append(vx)
-                    ly.append(vy)
-                    lz.append(vmisfit)
-                    
-                lxc, lyc, lc =  [], [], []
-                for ((vx,vy),vcount) in vcounts.iteritems():
-                    lxc.append(vx)
-                    lyc.append(vy)
-                    lc.append(vcount)
-                
-                ax = num.array(lx,dtype=num.float)
-                ay = num.array(ly,dtype=num.float)
-                az = num.array(lz,dtype=num.float)
-                
-                
-                axc = num.array(lxc,dtype=num.float)
-                ayc = num.array(lyc,dtype=num.float)
-                ac = num.array(lc,dtype=num.float)
-                ac = ac/len(bootstrap_sources)
-                
-                conf = dict( xlabel = xparam.title(),
-                             xunit = self.base_source.sourceinfo(xparam).unit,
-                             ylabel = yparam.title(),
-                             yunit = self.base_source.sourceinfo(yparam).unit,
-                         )
-                
-                best_loc = (num.array([ best_source[xparam]]), num.array([best_source[yparam]]))
-                plotting.km_hack(conf)
-                plotting.nukl_hack(conf)
-                
-                fn = 'misfogram-%s-%s.pdf' % (xparam, yparam)
-                plotting.misfogram_plot_2d_gmtpy( [(ax, ay, az), best_loc, (axc, ayc, ac)],
-                                        pjoin(dirname, fn),
-                                        conf )
-                plot_files.append(fn)
-        
-        #
-        # Station plot
-        #
-        lats = num.array( [ r.lat for r in self.receivers ], dtype='float' )
-        lons = num.array( [ r.lon for r in self.receivers ], dtype='float' )
-        dists = num.array( [ r.distance_deg for r in self.receivers ], dtype='float' )
-        rnames = [ re.sub(r'\..*$', '', r.name) for r in self.receivers ]
-        slat, slon = self.source_location[:2]
-        station_misfits = self.misfits_by_r-self.ref_misfits_by_r
-        #station_varia = self.variability_by_r / num.sum(self.variability_by_r) * len(self.receivers)
-        station_varia = self.misfits_by_r / num.sum(self.misfits_by_r) * len(self.receivers)
-        plotting.station_plot( slat, slon, lats, lons, rnames, station_misfits, station_varia, 
-                              best_source, num.amax(dists)*1.05, pjoin(dirname, 'stations.pdf'), {}, nsets=nsets)
-        plot_files.append('stations.pdf')
-        
-        if source_model_infos:
-            delta_lat = 1.5*max(best_source['bord-radius']*2.,50000)/(20000.*1000.)*180
-            plotting.location_map(pjoin(dirname, 'location.pdf'), slat, slon, delta_lat, {}, source=best_source,
-                                  source_model_infos=source_model_infos, receivers=(lats,lons,rnames))
-            plot_files.append('location.pdf')
-        
-        return plot_files
-    
-
-def progress_off(option, opt_str, value, parser):
-    config.show_progress = False
-
-def install(src, dst):
-    dirs = os.path.split(dst)
-    d,x = os.path.split(dst)
-    dirs = []
-    while d and not os.path.isdir(d):
-        dirs.append(d)
-        d,x = os.path.split(d)
-        
-    dirs.reverse()
-    
-    for d in dirs:
-        if not os.path.exists(d):
-            os.mkdir(d)
-    
-    shutil.copy(src, dst)
-    
-def kiwi_main(steps):
-    from optparse import OptionParser
-    parser = OptionParser()
-    parser.add_option('--loglevel', action='store', dest='loglevel', type='choice', choices=('info', 'debug'), default='info')
-    parser.add_option('--no-progress', action='callback', callback=progress_off)
-    parser.add_option('--no-search', action='store_false', dest='do_search', default=True)
-    parser.add_option('--no-forward', action='store_false', dest='do_forward', default=True)
-    parser.add_option('--run-id', action='store', dest='run_id', type='string', default='current')
-    
-    (options, args) = parser.parse_args()
-    
-    logformat =  '[%(asctime)s] %(levelname)-8s %(message)s'
-    dateformat = '%Y-%m-%d %H:%M:%S'
-    levels = { 'info' : logging.INFO, 'debug' : logging.DEBUG }
-    logging.basicConfig( level   = levels[options.loglevel],
-                         format  = logformat,
-                         datefmt = dateformat,
-                         filename='kiwi.log' )
-    console = logging.StreamHandler()
-    formatter = logging.Formatter(logformat, datefmt=dateformat)
-    console.setFormatter(formatter)
-    logging.getLogger('').addHandler(console)
-    
-    if options.loglevel == 'debug': progress_off
-   
-    commands = 'work', 'replot', 'show-steps', 'show-in-config', 'show-out-config', 'show-active-config', 'report'
-    try:
-        command = args.pop(0)
-        
-        assert(command in  commands)
-    except:
-        parser.error('available commands are: '+' '.join(commands))
-    
-    if command == 'show-steps':
-        for step in steps:
-            print step.stepname
-        sys.exit()
-    
-    stepnames_all = [ step.stepname for step in steps ]
-    
-    if command == 'report':
-        data = {}
-        for step in steps: 
-            data[step.stepname] = step
-        
-        t = Template(file='report.html', searchList=[ data ])
-        
-        page = str(t)
-        files = [ x[1] or x[3] for x in re.findall(r'("([^"]+\.(png|pdf))"|\'([^\']+\.(png|pdf))\')', page) ]
-        report_dir = 'report'
-        
-        for file in files:
-            install(file, pjoin(report_dir, file))
-            
-        f = open(pjoin(report_dir,'index.html'),'w')
-        f.write( page )
-        f.close()
-            
-        sys.exit()
-    
-    if args:
-        for arg in args:
-            if arg != '-' and arg not in stepnames_all:
-                parser.error('unknown stepname: %s\n' % arg + 'available stepnames are: '+' '.join(stepnames_all))
-                
-        stepnumber = dict([ (stepname,i) for i,stepname in enumerate(stepnames_all) ])
-        xargs = []
-        iarg = 0
-        if args[0] == '-': args.insert(0,stepnames_all[0])
-        if args[-1] == '-': args.append(stepnames_all[-1])
-        while iarg < len(args)-2:
-            if args[iarg+1] == '-':
-                xargs.extend(stepnames_all[stepnumber[args[iarg]]:stepnumber[args[iarg+2]]+1])
-                iarg += 3
-            else:
-                xargs.append(args[iarg])
-                iarg += 1
-        while iarg < len(args):
-            xargs.append(args[iarg])
-            iarg += 1
-        stepnames_to_do = xargs
-        
-    else:
-        stepnames_to_do = list(stepnames_all)
-    
-    for stepname in stepnames_to_do:
-        if stepname not in stepnames_all:
-            parser.error('unknown stepname: %s\n' % stepname + 'available stepnames are: '+' '.join(stepnames_all))
-    
-    for step in steps:
-        if step.stepname in stepnames_to_do:
-            if command == 'work':
-                step.work(search=options.do_search, forward=options.do_forward, run_id=options.run_id)
-                step.plot(run_id=options.run_id)
-                if step.stepname != stepnames_to_do[-1]: logging.info('---')
-            if command == 'replot':
-                step.plot(run_id=options.run_id)
-                if step.stepname != stepnames_to_do[-1]: logging.info('---')
-            if command == 'show-in-config':
-                step.show_in_config(run_id=options.run_id)
-            if command == 'show-out-config':
-                step.show_out_config(run_id=options.run_id)
-            if command == 'show-active-config':
-                step.show_active_config(run_id=options.run_id)
-    
     

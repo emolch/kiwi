@@ -1,4 +1,4 @@
-
+import pymseed
 
 class Receiver:
     
@@ -56,7 +56,35 @@ class Receiver:
         s = ' '.join( (str(self.lat), str(self.lon), self.components) )
         return s
     
-    
+    def save_traces_mseed(self, filename_tmpl='%{whichset}s_%(network)s_%(station)s_%(location)s_%(channel)s.mseed' ):
+        
+        toks = self.name.split('.')
+        if len(toks) == 2:
+            station = toks[0]
+            network = toks[1]
+        else:
+            station = toks[0]
+            network = ''
+            
+        location = ''
+        for icomp, comp in enumerate(self.components):
+            channel = comp
+            for (whichset, sgram) in zip(('synthetics', 'references'), 
+                             (self.ref_seismograms[icomp], self.syn_seismograms[icomp])):
+                if sgram and len(sgram[0]) > 1:
+                    starttime = sgram[0][0]
+                    endtime = sgram[0][-1]
+                    deltat = (endtime-starttime)/(len(sgram[0])-1)
+                    data = sgram[1]
+                    trace = (network, station, location, channel, starttime*pymseed.HPTMODULUS, endtime*pymseed.HPTMODULUS, 1.0/deltat, data)
+        
+                    fn = filename_tmpl % { 'whichset': whichset,
+                                           'network': network,
+                                           'station': station,
+                                           'location': location,
+                                           'channel': channel }
+                                           
+                    pymseed.store_traces([trace], fn)
 
 def load_table( filename, components=None ):
     receivers = []

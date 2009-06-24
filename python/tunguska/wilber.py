@@ -76,8 +76,8 @@ class IrisWilber(Wilber):
         self.username = username
         self.email = email
         self.urlbeg = 'http://www.iris.edu'
-        cgidir = '/cgi-bin'
-        # cgidir = '/cgi-bin/wilberII'     # new url
+        # cgidir = '/cgi-bin'            # old url
+        cgidir = '/cgi-bin/wilberII'     # new url
         self.urlend1 = cgidir + '/wilberII_page1.pl'
         self.urlend2 = cgidir + '/wilberII_page2.pl'
         self.urlend3 = cgidir + '/wilberII_page3.pl'

@@ -11,6 +11,7 @@ import shutil
 import logging
 import numpy as num
 import copy
+import progressbar
 
 import config
 import phase
@@ -27,7 +28,8 @@ def load_table(fn):
     x = v[::2].copy()
     y = v[1::2].copy()
     return (x,y)
-    
+
+
 class SeismosizerBase:
     '''Controls a group of seismosizer processes'''
     
@@ -325,6 +327,9 @@ class SeismosizerProcess(threading.Thread):
         except Queue.Empty:
             raise NonePending()
 
+class NoValidSources(Exception):
+    pass
+
 class Seismosizer(SeismosizerBase):
 
     # these commands are passed directly to all running processes
@@ -382,6 +387,13 @@ class Seismosizer(SeismosizerBase):
             sid, nid = r.name.split('.')
             if sid in blacklist:
                 self.switch_receiver(irec+1, 'off')
+    
+    def xblacklist_receivers(self, xblacklist):
+        '''This blacklist contains the numbers of the receivers to be disabled.
+           Yes, I know that this needs to be cleaned up. But I don't have time to
+           do that.'''
+        for irec in xblacklist:
+            self.switch_receiver(irec+1, 'off')
     
     def switch_receiver(self, irec, onoff, **kwargs):
         # irec counted from 1 !!!
@@ -465,7 +477,7 @@ class Seismosizer(SeismosizerBase):
     def get_receivers_snapshot( self,
                                 which_seismograms = ('syn','ref'), 
                                 which_spectra     = ('syn','ref'),
-                                which_processing  = 'filtered' ):
+                                which_processing  = 'filtered'):
         
         tdir = pjoin(self.tempdir, 'get_receivers_copy')
         if os.path.isdir(tdir):
@@ -477,12 +489,13 @@ class Seismosizer(SeismosizerBase):
         tempfnbase2 = pjoin(tdir, "syn_seismogram")
         tempfnbase3 = pjoin(tdir, "ref_spectrum")
         tempfnbase4 = pjoin(tdir, "syn_spectrum")
+        
         extension = 'table'
         if 'ref' in which_seismograms: self.do_output_seismograms(tempfnbase1, extension, "references", which_processing)
         if 'syn' in which_seismograms: self.do_output_seismograms(tempfnbase2, extension, "synthetics", which_processing)
         if 'ref' in which_spectra: self.do_output_seismogram_spectra(tempfnbase3, "references", which_processing)
         if 'syn' in which_spectra: self.do_output_seismogram_spectra(tempfnbase4, "synthetics", which_processing)
-        
+                
         receivers = copy.deepcopy(self.receivers)
         for irec, rec in enumerate(receivers):
             irec_fortran = irec+1
@@ -585,6 +598,54 @@ class Seismosizer(SeismosizerBase):
         for iproc in range(len(results)):
             assert(ipos[iproc] == len(values[iproc]), "if this is printed, there is a bug in make_misifits_for_source()") 
     
+    def make_misfits_for_sources(self, sources, show_progress=False, progress_title='grid search'):
+        '''Get misfits for many sources gathered by (source,receiver,component).'''
+        
+        nsources = len(sources)
+        nreceivers = len(self.receivers)
+        ncomponents = max([ len(r.components) for r in self.receivers ])
+        
+        # results gathered by (source,receiver,component)
+        misfits_by_src = num.zeros( (nsources, nreceivers, ncomponents), dtype=num.float)
+        norms_by_src = num.zeros(  (nsources, nreceivers, ncomponents), dtype=num.float)
+        
+        if show_progress:
+            widgets = [progress_title, ' ',
+                    progressbar.Bar(marker='-',left='[',right=']'), ' ',
+                    progressbar.Percentage(), ' ',]
+            
+            pbar = progressbar.ProgressBar(widgets=widgets, maxval=len(sources)).start()
+        
+        failings = []
+        for isource, source in enumerate(sources):
+            try:
+                self.make_misfits_for_source( source )
+                for ireceiver, receiver in enumerate(self.receivers):
+                    if receiver.enabled:
+                        for icomp, comp in enumerate(receiver.components):
+                            misfits_by_src[isource, ireceiver, icomp] = receiver.misfits[icomp]
+                            norms_by_src[isource, ireceiver, icomp] = receiver.misfit_norm_factors[icomp]
+                        
+            except SeismosizersReturnedErrors:
+                failings.append(isource)
+            
+            if show_progress: pbar.update(isource+1)
+                        
+        if show_progress: pbar.finish()
+        
+        return misfits_by_src, norms_by_src, failings
+    
+    
+    def best_source(self, sources, return_failings=False, **outer_misfit_config):
+        misfits_by_src, norms_by_src, failings = self.make_misfits_for_sources(sources)
+        misfits_by_s, misfits_by_sr = make_global_misfits( misfits_by_src, norms_by_src, **outer_misfit_config)
+        misfits_by_s = num.where( misfits_by_s > 0, misfits_by_s, num.NaN)
+        ibest = num.nanargmin(misfits_by_s)
+        if num.isnan(ibest) or num.isnan(misfits_by_s[ibest]): raise NoValidSources()
+        if return_failings:
+            return sources[ibest], misfits_by_s[ibest], failings
+        return sources[ibest], misfits_by_s[ibest]
+    
     def get_peak_amplitudes_for_source( self, source ):
         """Calculate peak amplitudes at receivers for given source."""
         
@@ -654,8 +715,66 @@ class Seismosizer(SeismosizerBase):
         f.close()
         os.remove(fn)
 
-
-
+def make_global_misfits(misfits_by_src, norms_by_src, receiver_weights=1., outer_norm='l2norm', anarchy=False, bootstrap=False, **kwargs):
+    
+    nreceivers = misfits_by_src.shape[1]
+    
+    if isinstance(receiver_weights, float):
+        rweights = receiver_weights
+    else:
+        rweights = receiver_weights[num.newaxis,:].copy()
+    
+    if bootstrap:
+        bweights = num.zeros(nreceivers, dtype=num.float)
+        bweights_x = num.bincount(num.random.randint(0,nreceivers,nreceivers))
+        bweights[:len(bweights_x)] = bweights_x[:]
+    
+    if outer_norm == 'l1norm':
+        misfits_by_sr = num.sum(misfits_by_src,2)
+        norms_by_sr   = num.sum(norms_by_src,2)
+        
+        if anarchy:
+            xrweights = num.zeros(norms_by_sr.shape, dtype=float)
+            xrweights[:,:] = rweights
+            xrweights /= num.where( norms_by_sr != 0., norms_by_sr, -1.)
+            rweights = num.maximum(xrweights, 0.)
+        
+        if bootstrap:
+            rweights *= bweights
+        
+        misfits_by_sr *= rweights
+        norms_by_sr *= rweights
+        
+        ms = num.sum( misfits_by_sr, 1 )
+        ns = num.sum( norms_by_sr, 1 )
+        
+        misfits_by_s  = num.where(ns > 0., ms/ns, -1.)
+        misfits_by_s = num.where(misfits_by_s<0, num.NaN, misfits_by_s)
+        
+    elif outer_norm == 'l2norm':
+        misfits_by_sr = num.sqrt(num.sum(misfits_by_src**2,2))
+        norms_by_sr   = num.sqrt(num.sum(norms_by_src**2,2))
+        
+        if anarchy:
+            rweights /= num.where( norms_by_sr != 0., norms_by_sr, -1.)
+            rweights = num.maximum(rweights, 0.)
+            
+        if bootstrap:
+            rweights *= num.sqrt(bweights)
+        
+        misfits_by_sr *= rweights
+        norms_by_sr *= rweights
+        
+        ms = num.sum( (misfits_by_sr)**2, 1 )
+        ns = num.sum( (norms_by_sr)**2, 1 )
+        
+        misfits_by_s  = num.where(ns > 0., num.sqrt(ms/ns), -1.)
+        misfits_by_s = num.where(misfits_by_s<0, num.NaN, misfits_by_s)
+    
+    else:
+        raise Exception('unknown norm method: %s' % outer_norm)
+    
+    return misfits_by_s, misfits_by_sr
 
 for command in Seismosizer.plain_commands:
     method = gen_do_method(command)

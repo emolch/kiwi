@@ -1,0 +1,359 @@
+import config
+import plotting
+import seismosizer
+
+import re, copy
+import progressbar 
+import numpy as num
+import scipy.stats
+from os.path import join as pjoin
+
+def step_at(values, value):
+    if len(values) <= 1: return 1.
+    i = num.clip(num.searchsorted(values, value), 1, len(values)-1)
+    return values[i]-values[i-1]
+
+def values_to_bin_edges(values):
+    if len(values) == 0: return []
+    edges = num.zeros(len(values)+1, dtype=num.float)
+    edges[1:-1] = (values[1:]+values[:-1])/2.
+    edges[0] = values[0]-step_at(values, values[0])/2.
+    edges[-1] = values[-1]+step_at(values, values[-1])/2.
+    return edges
+
+class MisfitGridStats:
+    
+    def str_best_and_confidence(self, factor=1., unit =''):
+        lw = ''
+        uw = ''
+        if self.percentile16_warn: lw = ' (?)'
+        if self.percentile84_warn: uw = '(?) '
+           
+        return '%s = %.3g %s  (confidence interval 68%%) = [ %.3g%s, %.3g %s] %s' % \
+                (self.paramname.title(), self.best*factor, unit, self.percentile16*factor, lw, self.percentile84*factor, uw, unit)
+        
+    def str_best(self, factor=1., unit =''):
+        
+        return '%s = %.3g %s' % (self.paramname.title(), self.best*factor, unit)
+        
+    def str_mean_and_stddev(self):
+        return '%(paramname)s = %(mean)g +- %(std)g' % self.__dict__
+    
+    def as_xml(self):
+        tmpl = unindent('''
+        <parameter>
+            <name>%s</name>
+            <value>%e</value>
+            <confidenceInterval>
+                <interval>68</interval>
+                <low>%e</low>
+                <high>%e</high>
+                <low_unclear>%i</low_unclear>
+                <high_unclear>%i</high_unclear>
+            </confidenceInterval>
+        </parameter>
+        ''')
+        return tmpl % (self.paramname.title(), self.best, 
+                       self.percentile16, self.percentile84,
+                       self.percentile16_warn, self.percentile84_warn)
+
+
+class MisfitGrid:
+    '''Brute force grid search minimizer with builtin bootstrapping.'''
+    
+    def __init__( self, base_source,
+                        param_ranges=None,
+                        param_values=None,
+                        source_constraints=None,
+                        ref_source=None):
+        
+        self.base_source = copy.deepcopy(base_source)
+        if ref_source:
+            self.ref_source = copy.deepcopy(ref_source)
+        else:
+            self.ref_source = copy.deepcopy(base_source)
+        
+        if param_values is not None:
+            self.param_values = param_values
+        else:
+            self.param_values = []
+            for param, mi, ma, inc in param_ranges:
+                self.param_values.append( (param, mimainc_to_gvals(mi,ma,inc)) )
+            
+        self.sources = self.base_source.grid( self.param_values, 
+                                              source_constraints=source_constraints)
+
+        self.sourceparams = [ x[0] for x in self.param_values ]
+
+        # will be set by compute()
+        self.misfits_by_src = None
+        self.norms_by_src = None
+        self.ref_misfits_by_src = None
+        self.ref_norms_by_src = None        
+        self.receivers = None
+        self.nreceivers = None
+        
+        # will be set by postprocess()
+        self.best_source = None
+        self.misfits_by_s = None
+        self.misfits_by_r = None
+        self.ref_misfits_by_r = None
+        self.variability_by_r = None
+        self.bootstrap_sources = None
+        self.stats = None
+        
+    def compute(self, seis):
+        '''Let seismosizer calculate the trace misfits.'''
+        
+        if len(self.sourceparams) == 1:
+            progress_title = 'Grid search param: ' + ', '.join(self.sourceparams)
+        else:
+            progress_title = 'Grid search params: ' + ', '.join(self.sourceparams)
+            
+        nreceivers = len(seis.receivers)
+        
+        # results, gathered by (source,receiver,component)
+        misfits_by_src, norms_by_src, failings = seis.make_misfits_for_sources( 
+                                                    self.sources,
+                                                    show_progress=config.show_progress,
+                                                    progress_title=progress_title)
+              
+        # results for reference source, gathered by (source,receiver,component)
+        ref_misfits_by_src, ref_norms_by_src, failings = seis.make_misfits_for_sources([self.ref_source])
+        
+        self.misfits_by_src = misfits_by_src
+        self.norms_by_src = norms_by_src
+        self.ref_misfits_by_src = ref_misfits_by_src
+        self.ref_norms_by_src = ref_norms_by_src
+        
+        self.nreceivers = nreceivers
+        self.receivers = seis.receivers
+        self.source_location = seis.source_location
+        
+        self.best_source = None
+        self.misfits_by_s = None
+        self.misfits_by_r = None
+        self.ref_misfits_by_r = None
+        self.variability_by_r = None
+        self.bootstrap_sources = None
+        self.stats = None
+    
+    def postprocess(self, **outer_misfit_config):
+        '''Combine trace misfits to global misfits, find best source, make statistics.'''
+        
+        self.best_source, self.misfits_by_s, self.misfits_by_r, self.variability_by_r = self._best_source(return_misfits_by_r=True, **outer_misfit_config)
+        
+        self.ref_misfits_by_r = self._ref_misfits_by_r(**outer_misfit_config)
+        
+        self.bootstrap_sources = self._bootstrap(**outer_misfit_config)
+        self.stats = self._stats(self.param_values, self.best_source, self.bootstrap_sources)
+    
+    def get_mean_misfits_by_r(self):
+        '''Get mean raw misfits by receiver, e.g. to auto-create weights.''' 
+        mean_misfits_by_r = num.zeros( self.nreceivers, dtype=num.float )
+        for irec in range(self.nreceivers):
+            ncomps = len(self.receivers[irec].components)
+            if ncomps != 0:
+                x = num.sum(self.misfits_by_src[:,irec,:]) /( ncomps*len(self.sources))
+            else:
+                x = -1.0
+            mean_misfits_by_r[irec] = x
+        return mean_misfits_by_r
+        
+    def get_best_misfit(self):
+        return num.nanmin(self.misfits_by_s)
+        
+    def _best_source(self, return_misfits_by_r=False, **outer_misfit_config):
+        misfits_by_s, misfits_by_sr = seismosizer.make_global_misfits( self.misfits_by_src, self.norms_by_src, **outer_misfit_config)
+        ibest = num.nanargmin(misfits_by_s)
+        if not return_misfits_by_r:
+            return self.sources[ibest], misfits_by_s
+        else:
+            # misfit variability by receiver
+            misfits_varia_by_r = num.std(misfits_by_sr,0)
+            return self.sources[ibest], misfits_by_s, misfits_by_sr[ibest,:], misfits_varia_by_r
+        
+    def _ref_misfits_by_r(self, **outer_misfit_config):
+        misfits_by_s, misfits_by_sr = seismosizer.make_global_misfits(self.ref_misfits_by_src, self.ref_norms_by_src, **outer_misfit_config)
+        return misfits_by_sr[0,:]
+        
+    def _bootstrap(self, bootstrap_iterations=1000, **outer_misfit_config):
+        bootstrap_sources = []
+        if config.show_progress:
+            widgets = ['Bootstrapping', ' ',
+                    progressbar.Bar(marker='-',left='[',right=']'), ' ',
+                    progressbar.Percentage(), ' ',]
+            
+            pbar = progressbar.ProgressBar(widgets=widgets, maxval=bootstrap_iterations).start()
+            
+        for i in xrange(bootstrap_iterations):
+            bootstrap_sources.append( self._best_source(bootstrap=True, **outer_misfit_config)[0] )
+            if config.show_progress: pbar.update(i+1)
+            
+        if config.show_progress: pbar.finish()
+        
+        return bootstrap_sources
+        
+    def _stats(self, param_values, best_source, bootstrap_sources):
+        
+        results = {}
+        for param, gvalues in param_values:
+            mi = num.min(gvalues)
+            ma = num.max(gvalues)
+            param_results = num.zeros(len(bootstrap_sources), dtype=num.float)
+            for i, source in enumerate(bootstrap_sources):
+                param_results[i] = source[param]
+                
+            result = MisfitGridStats()
+            result.best = best_source[param]
+            if len(param_results) == 0: continue
+            result.paramname = param
+            result.mean = num.mean(param_results)
+            result.std = num.std(param_results)
+            result.median = num.median(param_results)
+            result.percentile16 = scipy.stats.scoreatpercentile(param_results, 16.)
+            result.percentile84 = scipy.stats.scoreatpercentile(param_results, 84.)
+            result.percentile16 -= step_at( gvalues, result.percentile16 )/2.
+            result.percentile84 += step_at( gvalues, result.percentile84 )/2.
+            result.percentile16_warn = result.percentile16 < mi
+            result.percentile84_warn = result.percentile84 > ma
+            result.distribution = param_results
+            results[param] = result
+            
+        return results
+        
+
+        
+    def plot(self, dirname, nsets, source_model_infos=None):
+        
+        best_source = self.best_source
+        bootstrap_sources = self.bootstrap_sources
+        
+        
+        plot_files = []
+        
+        for iparam, param in enumerate(self.sourceparams):
+            #
+            # 1D misfit cross section
+            #
+            xy = []
+            for s,m in zip(self.sources, self.misfits_by_s):
+                if not num.isnan(m):
+                    xy.append((s[param], m))
+            
+            xdata, ydata = num.array(xy,dtype=num.float).transpose()
+            
+            conf = dict( xlabel = param.title(),
+                         xunit = self.base_source.sourceinfo(param).unit )
+            
+            plotting.km_hack(conf)
+            fn = 'misfit-%s.pdf' % param
+            plotting.misfit_plot_1d( [(xdata,ydata)],
+                                     pjoin(dirname, fn),
+                                     conf )
+            plot_files.append(fn)
+           
+            #
+            # 1D histogram
+            #
+            gvalues = self.param_values[iparam][1]
+            gedges = values_to_bin_edges(gvalues)
+            hist, edges = num.histogram(self.stats[param].distribution,
+                                        bins=gedges,
+                                        new=True)
+            
+            hist = hist/float(len(bootstrap_sources))
+            
+            conf = dict( xlabel = param.title(),
+                         xunit = self.base_source.sourceinfo(param).unit)
+            
+            plotting.km_hack(conf)
+            fn = 'histogram-%s.pdf' % param
+            plotting.histogram_plot_1d( edges, hist, 
+                                        pjoin(dirname, fn),
+                                        conf )
+            
+            plot_files.append( fn )
+            
+        for ixparam, xparam in enumerate(self.sourceparams):
+            for iyparam, yparam in enumerate(self.sourceparams):
+                if ixparam == iyparam: continue
+                
+                #
+                # 2D misfogram plot
+                #
+                vmisfits = {}
+                maxmisfit = num.nanmax(self.misfits_by_s)
+                for (source, misfit) in zip(self.sources, self.misfits_by_s):
+                    if num.isnan(misfit): continue
+                    vx = source[xparam]
+                    vy = source[yparam]
+                    vmisfits[(vx,vy)] = min(vmisfits.get((vx,vy), maxmisfit), misfit)
+                    
+                vcounts = {}
+                for source in bootstrap_sources:
+                    vx = source[xparam]
+                    vy = source[yparam]
+                    vcounts[(vx,vy)] = vcounts.get((vx,vy), 0) + 1
+                
+                lx, ly, lz = [], [], []
+                for ((vx,vy),vmisfit) in vmisfits.iteritems():
+                    lx.append(vx)
+                    ly.append(vy)
+                    lz.append(vmisfit)
+                    
+                lxc, lyc, lc =  [], [], []
+                for ((vx,vy),vcount) in vcounts.iteritems():
+                    lxc.append(vx)
+                    lyc.append(vy)
+                    lc.append(vcount)
+                
+                ax = num.array(lx,dtype=num.float)
+                ay = num.array(ly,dtype=num.float)
+                az = num.array(lz,dtype=num.float)
+                
+                
+                axc = num.array(lxc,dtype=num.float)
+                ayc = num.array(lyc,dtype=num.float)
+                ac = num.array(lc,dtype=num.float)
+                ac = ac/len(bootstrap_sources)
+                
+                conf = dict( xlabel = xparam.title(),
+                             xunit = self.base_source.sourceinfo(xparam).unit,
+                             ylabel = yparam.title(),
+                             yunit = self.base_source.sourceinfo(yparam).unit,
+                         )
+                
+                best_loc = (num.array([ best_source[xparam]]), num.array([best_source[yparam]]))
+                plotting.km_hack(conf)
+                plotting.nukl_hack(conf)
+                
+                fn = 'misfogram-%s-%s.pdf' % (xparam, yparam)
+                plotting.misfogram_plot_2d_gmtpy( [(ax, ay, az), best_loc, (axc, ayc, ac)],
+                                        pjoin(dirname, fn),
+                                        conf )
+                plot_files.append(fn)
+        
+        #
+        # Station plot
+        #
+        lats = num.array( [ r.lat for r in self.receivers ], dtype='float' )
+        lons = num.array( [ r.lon for r in self.receivers ], dtype='float' )
+        dists = num.array( [ r.distance_deg for r in self.receivers ], dtype='float' )
+        rnames = [ re.sub(r'\..*$', '', r.name) for r in self.receivers ]
+        slat, slon = self.source_location[:2]
+        station_misfits = self.misfits_by_r-self.ref_misfits_by_r
+        #station_varia = self.variability_by_r / num.sum(self.variability_by_r) * len(self.receivers)
+        station_varia = self.misfits_by_r / num.sum(self.misfits_by_r) * len(self.receivers)
+        plotting.station_plot( slat, slon, lats, lons, rnames, station_misfits, station_varia, 
+                              best_source, num.amax(dists)*1.05, pjoin(dirname, 'stations.pdf'), {}, nsets=nsets)
+        plot_files.append('stations.pdf')
+        
+        if source_model_infos:
+            delta_lat = 1.5*max(best_source['bord-radius']*2.,50000)/(20000.*1000.)*180
+            plotting.location_map(pjoin(dirname, 'location.pdf'), slat, slon, delta_lat, {}, source=best_source,
+                                  source_model_infos=source_model_infos, receivers=(lats,lons,rnames))
+            plot_files.append('location.pdf')
+        
+        return plot_files
+    
