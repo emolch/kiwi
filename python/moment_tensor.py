@@ -4,6 +4,12 @@ import random
 import math
 import numpy as num
 
+def moment_to_magnitude( moment ):
+    return math.log10(moment*1.0e7)/1.5 - 10.7
+
+def magnitude_to_moment( magnitude ):
+    return 10.0**(1.5*(magnitude+10.7))*1.0e-7
+    
 def euler_to_matrix( alpha, beta, gamma ):
     '''Given the euler angles alpha,beta,gamma, create rotation matrix
         
@@ -201,7 +207,7 @@ class MomentTensor:
     
     def moment_magnitude(self):
         '''Get moment magnitude of moment tensor.'''
-        return math.log10(self.scalar_moment())/1.5 - 6.06333333;
+        return moment_to_magnitude(self.scalar_moment())
         
     def scalar_moment(self):
         '''Get the scalar moment of the moment tensor.'''
@@ -226,9 +232,26 @@ class MomentTensor:
             
         return s
 
+def other_plane( strike, dip, rake ):
+    mt = MomentTensor( strike=strike, dip=dip, rake=rake )
+    both_sdr = mt.both_strike_dip_rake()
+    w = [ sum( [ abs(x-y) for x,y in zip(both_sdr[i], (strike, dip, rake)) ] ) for i in (0,1) ]
+    if w[0]<w[1]:
+        return both_sdr[1]
+    else:
+        return both_sdr[0]
+
+
+
 import unittest
 class MomentTensorTestCase( unittest.TestCase ):
-
+    
+    def testMagnitudeMoment(self):
+        for i in range(1,10):
+            mag = float(i)
+            assert abs(mag - moment_to_magnitude(magnitude_to_moment(mag))) < 1e-6, \
+                'Magnitude to moment to magnitude test failed.'
+            
     def testAnyAngles(self):
         '''Check some arbitrary angles.'''
         for i in range(100):
