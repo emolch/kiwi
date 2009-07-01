@@ -1121,14 +1121,8 @@ def get_gfdb_infos( gfdbpath ):
 def table_to_bin(ifn, ofn):
     """make binary file which vtk can understand from tabular output from seismosizer"""
     
-    try:
-        i = open(ifn)
-    except:
-        sys.exit("failed to open file "+ifn)
-    try:
-        o = open(ofn,"w")
-    except:
-        sys.exit("failed to open file "+ofn)
+    i = open(ifn)
+    o = open(ofn,"w")
     
     for line in i:
         vals = line.split()
@@ -1136,7 +1130,7 @@ def table_to_bin(ifn, ofn):
         val = vals[-1]
         for ival in range(nvals,4):
             vals.append(val)
-        data = pack("ffff", *([float(x) for x in vals]))
+        data = pack("ffff", *([float(x) for x in vals[:4]]))
         o.write(data)
     
 def psm_info_to_vtk(infofilename, outfilenamebase):

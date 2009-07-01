@@ -433,11 +433,15 @@ def select( traces, sid, nid, component ):
     return None
 
 
-def make_rotated_horizontals( traces ):
+def make_rotated_horizontals( event, xstations, traces ):
+    
     
     rotated_traces = []
     stations = set([ (t.sid, t.nid) for t in traces ])
     for sid, nid in stations:
+        
+        s = xstations[(trace.sid,trace.nid)]
+        
         tnorth = select( traces, sid, nid, 'BHN' )
         teast = select( traces, sid, nid, 'BHE' )
         
@@ -466,6 +470,8 @@ def make_rotated_horizontals( traces ):
         com += 'synchronize round on\n'
 
         com += 'cutim o %g %g\n' % (beg+delta/2., end-delta/2.)
+        com += 'chnhdr evla %g evlo %g\n' % (event.lat, event.lon)
+        com += 'chnhdr stla %g stlo %g\n' % (s.lat, s.lon)
 
         com += 'chnhdr file 1 cmpaz 0\n'     # in case components are not exactly north / east
         com += 'chnhdr file 2 cmpaz 90\n'
@@ -514,6 +520,7 @@ def select_traces( traces, event, stations, blacklist, wanted_components, gfdb, 
                          stations[(trace.sid,trace.nid)].timerange[1]+2./low_freq)
         
         trace_trange = (trace.begin - event.time, trace.end - event.time)
+        
         if (trace_trange[0] > needed_trange[0] or 
             trace_trange[1] < needed_trange[1]):
             print 'dropping (timespan incomplete):', trace.filename
@@ -649,7 +656,7 @@ if step == 'preprocess' or step == 'all':
         round(event.time/gfdb.dt)*gfdb.dt, c_low=frequency_range[0], 
         c_high=frequency_range[1], new_delta_t=gfdb.dt )
     
-    rotated = make_rotated_horizontals( processed_traces )
+    rotated = make_rotated_horizontals( event, stations, processed_traces )
     processed_traces.extend(rotated)
     
     

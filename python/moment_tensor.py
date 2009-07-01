@@ -215,7 +215,7 @@ class MomentTensor:
         s += '               Mne = %6.3f,  Mnd = %6.3f, Med = %6.3f    [ x %g ]\n'
         s = s % (self.scalar_moment(), self.moment_magnitude(), m[0,0],m[1,1],m[2,2],m[0,1],m[0,2],m[1,2], mexp)
         
-        s += str_fault_planes()
+        s += self.str_fault_planes()
         return s
     
     def str_fault_planes(self):

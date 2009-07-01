@@ -193,7 +193,7 @@ class MyWindow(QMainWindow):
         self.minimizer.do_set_local_interpolation( 'bilinear' )
                                         
         self.vis = False
-        defaultsource = "bilateral"
+        defaultsource = "moment_tensor"
         self.setSourceType( defaultsource )
         
         self.setCentralWidget( self.valpan )
@@ -223,8 +223,10 @@ class MyWindow(QMainWindow):
         if params != None:
             for iparam in range(min(len(params),len(para['default']))):
                 para['default'][iparam] = params[iparam]
-        self.valpan.setup( para['name'], para['soft_min'], para['soft_max'], para['default'] )
-        self.calculate( para['default'] )
+                
+        curs = [ -8.3, 0., 0., 60., 0., 0., 2.0e3, 0., -3.0e3, 0., 1.5 ]
+        self.valpan.setup( para['name'], para['soft_min'], para['soft_max'], curs )#para['default'] )
+        self.calculate( curs ) #para['default'] )
         
     def calculate(self,data):
         self.minimizer.do_set_source_params( self.sourcetype, *data )            

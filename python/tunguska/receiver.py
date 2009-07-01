@@ -65,19 +65,19 @@ class Receiver:
         else:
             station = toks[0]
             network = ''
-            
-        location = ''
+        
+        
         for icomp, comp in enumerate(self.components):
             channel = comp
-            for (whichset, sgram) in zip(('synthetics', 'references'), 
+            for (whichset, sgram) in zip(('references', 'synthetics'), 
                              (self.ref_seismograms[icomp], self.syn_seismograms[icomp])):
                 if sgram and len(sgram[0]) > 1:
                     starttime = sgram[0][0]
                     endtime = sgram[0][-1]
                     deltat = (endtime-starttime)/(len(sgram[0])-1)
                     data = sgram[1]
+                    location = whichset
                     trace = (network, station, location, channel, starttime*pymseed.HPTMODULUS, endtime*pymseed.HPTMODULUS, 1.0/deltat, data)
-        
                     fn = filename_tmpl % { 'whichset': whichset,
                                            'network': network,
                                            'station': station,

@@ -232,6 +232,8 @@ class MisfitGrid:
         
         plot_files = []
         
+        param_min_misfits = {} 
+        
         for iparam, param in enumerate(self.sourceparams):
             #
             # 1D misfit cross section
@@ -248,11 +250,13 @@ class MisfitGrid:
             
             plotting.km_hack(conf)
             fn = 'misfit-%s.pdf' % param
-            plotting.misfit_plot_1d( [(xdata,ydata)],
-                                     pjoin(dirname, fn),
-                                     conf )
-            plot_files.append(fn)
-           
+           # plotting.misfit_plot_1d( [(xdata,ydata)],
+           #                          pjoin(dirname, fn),
+           #                          conf )
+           # plot_files.append(fn)
+            
+            
+            
             #
             # 1D histogram
             #
@@ -275,6 +279,40 @@ class MisfitGrid:
             
             plot_files.append( fn )
             
+            #
+            #
+            # gather data for 1D projected misfit cross sections
+            indi = num.digitize(xdata, gedges) - 1
+            for_minmisfits = []
+            for ival in range(gvalues.size):
+                vydata = num.extract(indi == ival, ydata)
+                if vydata.size != 0:
+                    for_minmisfits.append((gvalues[ival], vydata.min()))
+                        
+            param_min_misfits[param] = num.array(for_minmisfits,dtype=num.float).transpose()
+        
+        # data range for projected misfit cross section
+        mi, ma = num.inf, -num.inf
+        for xdata,ydata in param_min_misfits.values():
+            mi = min(mi, ydata.min())
+            ma = max(ma, ydata.max())
+            
+        param_min_misfits_range = (mi,ma)
+        
+        # 1D projected misfit cross sections
+        for iparam, param in enumerate(self.sourceparams):
+            
+            conf = dict( xlabel = param.title(),
+                         xunit = self.base_source.sourceinfo(param).unit,
+                         ylimits = param_min_misfits_range )
+            
+            plotting.km_hack(conf)
+            fn = 'min-misfit-%s.pdf' % param
+            plotting.misfit_plot_1d( [param_min_misfits[param]],
+                                     pjoin(dirname, fn),
+                                     conf )
+            plot_files.append(fn)
+                        
         for ixparam, xparam in enumerate(self.sourceparams):
             for iyparam, yparam in enumerate(self.sourceparams):
                 if ixparam == iyparam: continue
@@ -350,7 +388,11 @@ class MisfitGrid:
         plot_files.append('stations.pdf')
         
         if source_model_infos:
-            delta_lat = 1.5*max(best_source['bord-radius']*2.,50000)/(20000.*1000.)*180
+            source_size = 0.
+            if 'bord-radius' in best_source.keys():
+                source_size = best_source['bord-radius']
+                
+            delta_lat = 1.5*max(source_size*2.,50000)/(20000.*1000.)*180
             plotting.location_map(pjoin(dirname, 'location.pdf'), slat, slon, delta_lat, {}, source=best_source,
                                   source_model_infos=source_model_infos, receivers=(lats,lons,rnames))
             plot_files.append('location.pdf')

@@ -38,7 +38,11 @@ class Phase:
         self.name = name
         self.filename = filename
         if filename is None:
-            filename = os.path.join(util.kiwi_aux_dir(), 'phases', name)
+            if os.path.isfile(name+'.phase'):
+                filename = name+'.phase'
+            else:
+                filename = os.path.join(util.kiwi_aux_dir(), 'phases', name)
+            
         
         f = open(filename,'r')
         self.ref_points = []

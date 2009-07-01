@@ -693,9 +693,10 @@ class Shifter(Step):
 
 class ParamTuner(Step):
      
-    def __init__(self, workdir, params=['time'], name=None, xblacklist_level=None):
+    def __init__(self, workdir, sourcetype='eikonal', params=['time'], name=None, xblacklist_level=None):
         if name is None: name = '-'.join(params)+'-tuner'
         Step.__init__(self, workdir, name)
+        self.sourcetype = sourcetype
         self.params = params
         self.xblacklist_level = xblacklist_level
         
@@ -703,7 +704,7 @@ class ParamTuner(Step):
                         | set([param+'_range' for param in self.params]) \
                         | set(self.params)
                         
-        self.optional |= set([d2u(p) for p in source_model.param_names('eikonal')])
+        self.optional |= set([d2u(p) for p in source_model.param_names(self.sourcetype)])
         
     def work(self, search=True, forward=True, run_id='current'):
         self.pre_work(search or forward)
@@ -711,7 +712,7 @@ class ParamTuner(Step):
         conf = self.in_config.get_config()
         mm_conf = self.in_config.get_config(keys=Step.outer_misfit_method_params)
         
-        sourcetype = 'eikonal'
+        sourcetype = self.sourcetype
         base_source = source_model.Source( sourcetype )
         
         for p in source_model.param_names(sourcetype):

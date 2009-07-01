@@ -64,16 +64,9 @@ def pdfjoin(files, outfile):
     subprocess.call(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
 def misfit_plot_1d( data, filename, conf_overrides ):
-    
     conf = dict(**config.misfit_plot_1d_config)
-    symbols = conf.pop('symbols_SGW')
-    
-    conf.update( conf_overrides )
-    conf['argopts'] = [ '%s symbol' % symbol for symbol in symbols[:len(data)] ]
-    
-    args = tuple(data) + (filename,)
-    
-    util.autoplot( *args, **conf )
+    conf.update( conf_overrides )        
+    autoplot_gmtpy( data, filename, **conf )
                     
 def histogram_plot_1d( edges, hist, filename, conf_overrides ):
     
@@ -240,16 +233,20 @@ def station_plot( slat, slon, lat, lon, rnames, station_color, station_size, sou
     aspect = gmtpy.aspect_for_projection( R='g', *widget.J() )
     widget.set_aspect(aspect)
     
-    draw_topo(gmt, JXY=widget.JXY(), region='g', resolution=2, coastline_resolution='l', rivers=[], conf=conf, no_clipping=True)
+    if maxdist > 5.:
+        draw_topo(gmt, JXY=widget.JXY(), region='g', resolution=2, coastline_resolution='l', rivers=[], conf=conf, no_clipping=True)
 
     #gmt.pscoast( R='g', B=True, D='c', A=10000, S=(114,159,207), G=(233,185,110), W='thinnest', *widget.JXY())
+    
+    # shift source location slightly, so that projection does not crash...
+    sdelta = maxdist*0.0001
+    
     gmt.psbasemap( R='g', B=True, *widget.JXY() )
-    if source:
-        # shift source location slightly, so that projection does not crash...
-        gmt.psmeca( in_rows=[[float(slon+0.01), float(slat+0.01), 1., source['strike'], source['dip'], source['slip-rake'], 6., 0.,0., '' ]],
+    if source and 'strike' in source.keys() and 'dip' in source.keys() and 'slip-rake' in source.keys():
+        gmt.psmeca( in_rows=[[float(slon+sdelta), float(slat+sdelta), 1., source['strike'], source['dip'], source['slip-rake'], 6., 0.,0., '' ]],
                         R='g', S='a0.3', *widget.JXY())
     else:
-        gmt.psxy( in_rows=[(float(slon+0.01), float(slat+0.01))], S='c20p', W='2p/0',  R='g', *widget.JXY())
+        gmt.psxy( in_rows=[(float(slon+sdelta), float(slat+sdelta))], S='c20p', W='2p/0',  R='g', *widget.JXY())
     
     mi = num.nanmin(station_color)
     ma = num.nanmax(station_color)
@@ -352,7 +349,48 @@ def draw_topo(gmt, JXY, region, resolution, coastline_resolution, rivers, conf, 
     gmt.pscoast( D=coastline_resolution, W='thinnest/black', A=10., *(rivers+JXY+R))
     return cptfile
     
-def location_map( filename, lat, lon, lat_delta, conf_overrides, source=None, source_model_infos=None, receivers=None, with_palette=False):
+def draw_shakemap( gmt, widget, scaler, axes, lat, lon, horizontal, vertical):
+    
+    zax = gmtpy.Ax(mode='0-max')
+    
+    zscaler = gmtpy.ScaleGuru([ (lat,lon,horizontal), (lat,lon,vertical) ],
+        axes=(axes[0],axes[1],zax), 
+        aspect=widget.height()/widget.width() )
+
+    grdfile = 'test.grd' # gmt.tempfilename()
+
+    R = scaler.R()
+    par = scaler.get_params()
+    inc_interpol = ((par['xmax']-par['xmin'])/math.sqrt(len(horizontal)),
+                    (par['ymax']-par['ymin'])/math.sqrt(len(horizontal)))
+    print inc_interpol
+    rxyj = R + widget.XYJ()
+        
+    colors = gmtpy.color(0), gmtpy.color(1)
+
+    zpar = zscaler.get_params()
+    clip = (zpar['zinc']/2., zpar['zmax'])
+
+    if len(horizontal) > 3:
+        for dataset, color in zip((horizontal, vertical), colors):
+        
+            gmt.xyz2grd( 
+                in_columns=(lon,lat,dataset), 
+                G=grdfile, 
+                I=inc_interpol, 
+                out_discard=True, 
+                *R )
+        
+            gmt.grdcontour( 
+                grdfile, 
+                C='%g' % zpar['zinc'], 
+                W='2p,%s' % color, 
+                G='d5c', 
+                L=clip,
+                *rxyj )
+            
+        
+def location_map( filename, lat, lon, lat_delta, conf_overrides, source=None, source_model_infos=None, receivers=None, with_palette=False, shakemap_data=None, show_topo=True):
 
     conf = dict(**config.location_map_config)
     conf.update( conf_overrides )
@@ -419,17 +457,25 @@ def location_map( filename, lat, lon, lat_delta, conf_overrides, source=None, so
     aspect = gmtpy.aspect_for_projection( *(widget.J() + scaler.R()) )
     widget.set_aspect(aspect)
     
-    cptfile = draw_topo(gmt, widget.JXY(), (west,east,south,north), resolution, coastline_resolution, rivers, conf)
+    if show_topo:
+        cptfile = draw_topo(gmt, widget.JXY(), (west,east,south,north), resolution, coastline_resolution, rivers, conf)
+    
+    if shakemap_data is not None:
+        draw_shakemap( gmt, widget, scaler, (xax,yax,zax), *shakemap_data)
     
     if source_model_infos and source:
-        draw_rupture(gmt, widget, source_model_infos, axes=(xax,yax,zax), view='from-top', source_loc=(slat,slon), outer_scaler=scaler, with_centroids=False)
+        try:
+            draw_rupture(gmt, widget, source_model_infos, axes=(xax,yax,zax), view='from-top', source_loc=(slat,slon), outer_scaler=scaler, with_centroids=False)
+        except NoOutlineFound:
+            gmt.psxy( in_rows=[[lon,lat]], S='c20p', W='2p,0/0/0',  *(widget.JXY()+scaler.R()))
+    
     else:
         if source:
             gmt.psmeca( in_rows=[[lon, lat, 1., source['strike'], source['dip'], source['slip-rake'], 6., 0.,0., '' ]],
                      S='a0.3', *(widget.JXY()+scaler.R()) )
         else:
             gmt.psxy( in_rows=[[lon,lat]], S='c20p', W='2p,0/0/0',  *(widget.JXY()+scaler.R()))
-
+    
     if receivers:
         rlats, rlons, rnames = receivers
         gmt.psxy( in_columns=(rlons, rlats), S='t12p', W='1p,black', G='red', *(widget.JXY()+scaler.R()))
@@ -449,9 +495,13 @@ def location_map( filename, lat, lon, lat_delta, conf_overrides, source=None, so
     gmt.psbasemap( B=('%(xinc)gg%(xinc)g:%(xlabel)s:/%(yinc)gg%(yinc)g:%(ylabel)s:' % scaler.get_params())+axes_layout,
                    L=('x%gp/%gp/%g/%g/%gk' % (widget.width()/2., widget.height()/7.,lon,lat,scale_km) ),
                    *(widget.JXY()+scaler.R()) )
-    if with_palette:
+                   
+    if with_palette and show_topo:
         gmtpy.nice_palette(gmt, palette_widget, scaler, cptfile, innerticks=False, zlabeloffset=1.5*gmtpy.cm)
     gmt.save(filename)
+    
+class NoOutlineFound(Exception):
+    pass
     
 def draw_rupture(gmt, widget, source_infos, axes, view='rupture-plane', source_loc=None, outer_scaler=None, with_centroids=True):
     
@@ -460,6 +510,8 @@ def draw_rupture(gmt, widget, source_infos, axes, view='rupture-plane', source_l
     symbol_nucleation_point = conf.pop('symbol_nucleation_point')
     rupture_cpt = conf.pop('rupture_cpt')
 
+    if 'outline' not in source_infos: raise NoOutlineFound()
+    
     sec_outline = source_infos['outline']
     if view == 'rupture-plane':
         outline = sec_outline[1][:,3], sec_outline[1][:,4]
@@ -552,16 +604,21 @@ def rupture_plot(filename, source_infos, conf_overrides=None):
     
     widget['J'] = '-JX%(width)gp/-%(height)gp'
     
-    scaler, cptfile = draw_rupture(gmt, widget, source_infos, axes=(xax,yax,zax))
-    gmt.psbasemap( *(widget.JXY() + scaler.RB(ax_projection=True)) )
-    gmtpy.nice_palette( gmt, palette_widget, scaler, cptfile )
+    try:
+        scaler, cptfile = draw_rupture(gmt, widget, source_infos, axes=(xax,yax,zax))
+        gmt.psbasemap( *(widget.JXY() + scaler.RB(ax_projection=True)) )
+        gmtpy.nice_palette( gmt, palette_widget, scaler, cptfile )
+    except NoOutlineFound:
+        scaler = gmtpy.ScaleGuru([([0],[0])], axes=(xax,yax))
+        gmt.pstext( in_rows=[(0,0,12,0,0,'MC','No rupture data!')],  *(scaler.R() + widget.XYJ()) )
     
     gmt.save(filename)
-
+    
 def gmtpy_ax_from_autoplot_conf(conf, axname):
     c = {}
     x = axname
     for x in ('', axname):
+        if x+'limits' in conf:      c['limits'] = conf[x+'limits']
         if x+'label' in conf:       c['label'] = conf[x+'label']
         if x+'unit' in conf:        c['unit'] = conf[x+'unit']
         if x+'funit' in conf:       c['scaled_unit'] = conf[x+'funit']

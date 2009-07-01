@@ -14,9 +14,10 @@ default_loglevel = logging.INFO
 source_info_prog = 'source_info'
 gfdb_info_prog = 'gfdb_info'
 gfdb_extract_prog = 'gfdb_extract'
-seismosizer_prog = 'minimizer'
+sys.stderr.write('warning: config.py:  /bonus/src/kiwi/minimizer')
+seismosizer_prog = '/bonus/src/kiwi/minimizer'
 
-topo_dir = '/data/topo'
+topo_dir = '/bonus/topo'
 topo_img_file_1m = pjoin(topo_dir,'topo_11.1.img')
 topo_grd_file_5m = pjoin(topo_dir,'ETOPO1_Ice_g_gmt4_downsampled_5m.grd')
 topocpt_sealand = pjoin(topo_dir, 'light_topo_continuous.cpt')
@@ -80,18 +81,6 @@ symbol_best_result = '-Sa20p  -G%s -W1p/%s' % (taco('scarletred1'), taco('scarle
 # Plot configurations using autoplot
 #
 
-misfit_plot_1d_config = dict(
-    fit = True,
-    yexpand = 0.05,
-    width = 4.,
-    symbols_SGW = ['-S%s -G%s -W1p/black' % (m, gmt_color(c)) for (m,c) in zip(symbol_markers, symbol_colors) ],
-    xautoscale = 'min-max',
-    
-    ylabel =  'Misfit',
-   # ylabelofs = 0.8,
-   # leftmargin = 1.2,
-   # rightmargin = 1.2
-)
 
 zebra = [ b or c for c in graph_colors for b in None, (0,0,0) ]
 seismogram_plot_config = dict(
@@ -131,6 +120,7 @@ misfogram_plot_2d_gmtpy_config = dict(
     height = pw - 1.*gmtpy.cm - 2.*(mw-mw/gmtpy.golden_ratio),
     margins = (mw,mw,mw/gmtpy.golden_ratio,mw/gmtpy.golden_ratio),    
     zapproxticks = 7,
+    zlimits = (0.,1.),
     autoscale = 'min-max',
     symbols_SGW = [ symbol_best_result, '-Sc -W1p/black', ],
     zlabel = 'Misfit',
@@ -145,6 +135,19 @@ histogram_plot_1d_config = dict(
     symbols_SGW = [ '-G%s -W1p/black' % gmt_color(symbol_colors[0]) ],
     xautoscale = 'min-max',
     ylabel = 'Probability of Result'
+)
+
+misfit_plot_1d_config = dict(
+    yexpand = 0.05,
+    width = pw,
+    height = pw/gmtpy.golden_ratio,
+    margins = (mw,mw,mw/gmtpy.golden_ratio,mw/gmtpy.golden_ratio),
+    
+    symbols_SGW = ['-S%s -G%s -W1p/black' % (m, gmt_color(c)) for (m,c) in zip(symbol_markers, symbol_colors) ],
+    approxticks = 5,
+    xautoscale = 'min-max',
+    expand = 0.05,
+    ylabel =  'Misfit',
 )
 
 mw = 0.5*gmtpy.cm
