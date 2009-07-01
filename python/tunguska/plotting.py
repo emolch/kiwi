@@ -704,6 +704,7 @@ def autoplot_gmtpy(data, filename, **conf ):
     gmt.psbasemap( *(widget.JXY() + scaler.RB(ax_projection=True)) )
     rxyj = scaler.R() + widget.JXY()
     for dat, sym in zip(data,symbols_SGW):
-        gmt.psxy( in_columns=dat, *(sym.split()+rxyj) )
+        bdata = num.ascontiguousarray(num.asarray( dat ).transpose(), dtype=num.float).tostring()
+        gmt.psxy( in_string=bdata, b='i%i' % len(dat), *(sym.split()+rxyj) )
         
     gmt.save(filename)
