@@ -27,6 +27,13 @@ def values_to_bin_edges(values):
     edges[-1] = values[-1]+step_at(values, values[-1])/2.
     return edges
 
+def mimainc_to_gvals(mi,ma,inc):
+    vmin, vmax, vinc = float(mi), float(ma), float(inc)
+    n = int(round((vmax-vmin)/vinc))+1
+    vinc = (vmax-vmin)/(n-1)
+    return num.array([ vmin+i*vinc for i in xrange(n) ], dtype=num.float)
+
+
 class MisfitGridStats:
     def __init__(self, paramname, best, distribution, tested_values=None):
         self.paramname = paramname
@@ -268,10 +275,10 @@ class MisfitGrid:
             
             plotting.km_hack(conf)
             fn = 'misfit-%s.pdf' % param
-           # plotting.misfit_plot_1d( [(xdata,ydata)],
-           #                          pjoin(dirname, fn),
-           #                          conf )
-           # plot_files.append(fn)
+            plotting.misfit_plot_1d( [(xdata,ydata)],
+                                     pjoin(dirname, fn),
+                                     conf )
+            plot_files.append(fn)
             
             
             

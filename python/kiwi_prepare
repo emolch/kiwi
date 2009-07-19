@@ -547,7 +547,6 @@ def ensure_dir(d):
             sys.exit(d+' exists and is not a directory')
         os.mkdir( d )
 
-
 def read_config(filename):
     #try:
         config = {}
@@ -752,6 +751,12 @@ if step == 'setup' or step == 'all':
     
     f = open(os.path.join(ieq_datadir, 'source-origin.table'), 'w')
     f.write( "%g %g %g\n" % (event.lat, event.lon, 0.0) )
+    f.close()
+    
+    format = '%Y/%m/%d %H:%M:%S'
+
+    f = open(os.path.join(ieq_datadir, 'reference-time.txt'), 'w')
+    f.write( "%i %s\n" % (event.time, time.strftime(format,time.gmtime(event.time))))
     f.close()
  
     

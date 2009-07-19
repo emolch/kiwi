@@ -1,5 +1,5 @@
 from optparse import OptionParser
-import logging, os, sys, shutil
+import logging, os, sys, shutil, re
 
 from Cheetah.Template import Template
 

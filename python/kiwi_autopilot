@@ -7,22 +7,31 @@ import calendar, time, os, logging, shutil, sys
 
 class GlobalDataRequest(wilber.IrisWilber):
     
+    def __init__(self, min_mag=6., max_depth=50., min_dist=3., **kwargs):
+        wilber.IrisWilber.__init__(self, **kwargs)
+        self.min_mag = min_mag
+        self.max_depth = max_depth
+        self.min_dist = min_dist
+    
     def station_filter(self, station):
-        return station.dist > 3.0
+        return station.dist > self.min_dist
         
     def event_filter(self, event):
-        return  event.depth < 50. and event.mag > 6.
+        return  event.depth < self.max_depth and event.mag > self.min_mag
 
 def event_dir_name(event):
     region = '-'.join(event.region.replace('.','').lower().split())
     date_time = time.strftime('%Y-%m-%d_%H-%M-%S', time.gmtime(event.timestamp))
     return '%s_%s' % (region, date_time)
 
-def get_next_event(events_dir):
+def get_next_event(events_dir, instant=None):
     request = GlobalDataRequest(username='sebastian', email='sebastian.heimann@zmaw.de')
-    now = time.time()
-    recently = now - 60*60*3
-    tr = ( calendar.timegm((2009,1,1,0,0,0)), recently )
+    if instant is None:
+        now = time.time()
+        recently = now - 60*60*3
+        instant = recently
+        
+    tr = ( instant-60*60*24*365, instant )
     
     events = request.get_events(time_range=tr)
     events.sort(lambda a,b: cmp(a.timestamp, b.timestamp))
@@ -45,34 +54,55 @@ def prepare_event(skeleton_dir, event_dir):
                     pjoin(event_dir,fn))
 
     os.chdir(event_dir)        
-    call('kiwi_prepare', 'kiwi_prepare.config')
+    call(['kiwi_prepare', 'kiwi_prepare.config'])
     os.chdir(oldcwd)
 
 def process_event(event_dir):
     oldcwd = os.getcwd()
     os.chdir(event_dir)
-    call('./kiwi_ampspec', 'work', '-', 'durationfinder2')
-    call('./kiwi_ampspec', 'report')
+    call(['./kiwi_ampspec', 'work', '-', 'durationfinder2'])
+    os.chdir(oldcwd)
+
+def report_event(event_dir):
+    oldcwd = os.getcwd()
+    os.chdir(event_dir)
+    call(['./kiwi_ampspec', 'report'])
     os.chdir(oldcwd)
 
 def post_event(event_dir):
+    
     report_dir = pjoin(event_dir, 'report')
     event_d = os.path.split(event_dir.rstrip('/'))[-1]
-    remote_dir = 'www/kinherd/reports'
-    host = 'emolchrsync'
+    remote_dir = '/kinherd/reports'
+    host = 'kinherdwsrsync'
     if os.path.isdir(report_dir):
-        subprocess.call(['rsync', '-d', event_dir, host+':'+remote_dir ])
-        subprocess.call(['rsync', '-a', report_dir+'/', host+':'+pjoin(remote_dir,event_d) ])
+        call(['rsync', '-d', event_dir.rstrip('/'), host+':'+remote_dir ])
+        call(['rsync', '-a', report_dir+'/', host+':'+pjoin(remote_dir,event_d) ])
 
 logging.basicConfig(level=logging.INFO,)
 
-if len(sys.argv) >= 2:
-    event_dir = sys.argv[1]
-else:
+abc = 'abcd'
+if len(sys.argv) == 3:
+    abc, event_dir = sys.argv[1:3]
+elif len(sys.argv) == 1:
     event_dir = get_next_event('.')
+elif len(sys.argv) >= 4:
+    tt = [None,None,1,0,0,0]
+    for i, x in enumerate(sys.argv[1:]):
+        tt[i] = int(x)
+    instant = calendar.timegm(tt)
+    event_dir = get_next_event('.', instant)
 
 skeleton_dir = 'skeleton'
 
-prepare_event(skeleton_dir, event_dir)
-process_event(event_dir)
-post_event(event_dir)
+if 'a' in abc:
+    prepare_event(skeleton_dir, event_dir)
+
+if 'b' in abc:
+    process_event(event_dir)
+
+if 'c' in abc:
+    report_event(event_dir)
+
+if 'd' in abc:
+    post_event(event_dir)
