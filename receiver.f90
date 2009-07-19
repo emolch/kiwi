@@ -105,7 +105,8 @@ module receiver
     public receiver_calculate_misfits
     public receiver_calculate_cross_correlations
     public receiver_output_cross_correlations
-    public receiver_get_maxabs
+    public receiver_get_maxabs_hor_ver
+    public receiver_get_maxabs_accel
 
     public character_to_id
     
@@ -420,7 +421,7 @@ module receiver
 
     end subroutine
 
-    subroutine receiver_get_maxabs( self, max_hor, max_ver )
+    subroutine receiver_get_maxabs_hor_ver( self, max_hor, max_ver )
     
         type(t_receiver), intent(inout) :: self
         real, intent(out) :: max_hor, max_ver
@@ -436,6 +437,22 @@ module receiver
             end if
             if (ihor1 /= 0 .and. ihor2 /= 0) then
                 max_hor = probes_norm( self%syn_probes(ihor1), self%syn_probes(ihor2), PEAK )
+            end if
+        end if
+    end subroutine
+
+    subroutine receiver_get_maxabs_accel( self, val )
+    
+        type(t_receiver), intent(inout) :: self
+        real, intent(out) :: val
+        
+        integer iver, ihor1, ihor2
+        
+        val = 0.
+        if (self%enabled) then 
+            call get_component_ids( self, iver, ihor1, ihor2 )
+            if (iver /= 0 .and. ihor1 /= 0 .and. ihor2 /= 0) then
+                val = probes_max_vecnorm_d2( self%syn_probes(iver), self%syn_probes(ihor1), self%syn_probes(ihor2) )
             end if
         end if
     end subroutine

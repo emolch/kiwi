@@ -215,7 +215,7 @@ module source_moment_tensor
         real, intent(in) :: shortest_doi
         logical, intent(out) :: ok
         
-        real :: maxdt, risetime, tbeg, dt, ta, tb
+        real :: maxdt, risetime, tbeg, dt, ta, tb, time
         integer :: it, nt
         real, dimension(3) :: point 
         real, dimension(6) :: m
@@ -226,6 +226,7 @@ module source_moment_tensor
         point(:) = psm%params(2:4)
         m(:) = psm%params(5:10)
         risetime = psm%params(11)
+        time = psm%params(1)
         
         maxdt = shortest_doi
         
@@ -260,7 +261,7 @@ module source_moment_tensor
             tdsm%centroids(it)%north = point(1)
             tdsm%centroids(it)%east = point(2)
             tdsm%centroids(it)%depth = point(3)
-            tdsm%centroids(it)%time = toff(it)
+            tdsm%centroids(it)%time = toff(it) + time
             tdsm%centroids(it)%m(:) = m(:)*wt(it)
         end do
         deallocate(wt,toff)

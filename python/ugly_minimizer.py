@@ -1035,7 +1035,6 @@ def get_source_infos():
         source_info = os.popen( ' '.join(cmd), 'r' )
         
         for line in source_info:
-            print line
             if re.match(r'\s*source types: ', line):
                 sourcetypes = re.sub(r'\s*source types: ','',line).split()
         
@@ -1055,10 +1054,8 @@ def get_source_infos():
                               'parameter defaults: ': 'default' }
                               
             params_flat = {}
-            print cmd 
             try:
               for line in source_info:
-                  print line
                   # string fields
                   for key in ['parameter names: ',
                               'parameter units: ']:
@@ -1078,7 +1075,6 @@ def get_source_infos():
                           pars = [ float(s) for s in re.sub(r'\s*'+key, '', line).split() ]
                           pkey = key_translate[key]
                           params_flat[pkey] = pars
-                  print 'xxx'
             except:
                 print 'uuuups'
             
@@ -1123,13 +1119,13 @@ def table_to_bin(ifn, ofn):
     
     i = open(ifn)
     o = open(ofn,"w")
-    
     for line in i:
         vals = line.split()
         nvals = len(vals)
         val = vals[-1]
         for ival in range(nvals,4):
             vals.append(val)
+            
         data = pack("ffff", *([float(x) for x in vals[:4]]))
         o.write(data)
     
@@ -1189,7 +1185,7 @@ DATASET STRUCTURED_GRID
         o.write(vtk_head)
         o.write("POINTS %i FLOAT\n" % (npoints*2))
         for p in points:
-            o.write(vecstr(p) + "\n")
+            o.write(vecstr(p[0:3]) + "\n")
         for p in points:
             o.write(vecstr(p[0:2]) + " 0\n")
         o.write("\nPOLYGONS 2 %i\n" % ((npoints+1)*2))
@@ -1231,9 +1227,13 @@ DATASET STRUCTURED_GRID
         o.write("\nPOINT_DATA %i\n" % (gridsize[0]*gridsize[1]))
         o.write("SCALARS rupturetime FLOAT 1\n")
         o.write("LOOKUP_TABLE default\n")
+        
+        itimecol = 3
+        if len(points[1]) > 4:
+            itimecol = 5
         for i in xrange(1,npoints):
-            o.write('%s\n' % points[i][3])
+            o.write('%s\n' % points[i][itimecol])
             
-            
+    o.close()
 
             

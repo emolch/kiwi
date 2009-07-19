@@ -78,16 +78,19 @@ module gfdb_redeploy_
         
         type(t_trace), pointer       :: tracep
         integer :: ix, iz, ig, iostat, ixo, izo, nargs
-        real :: x,z, tbeg, tend
+        real :: x,z, tbeg, tend, factor
         type(t_strip) :: strip
         type(t_trace) :: short_trace
         integer, dimension(2) :: span
         tracep => null()
         
+        factor = 1.0
         nargs = count_words( buffer )
         if (nargs == 2) then
             read (unit=buffer,fmt=*,iostat=iostat) x, z
-        else 
+        else if (nargs == 3) then
+            read (unit=buffer,fmt=*,iostat=iostat) x, z, factor 
+        else
             read (unit=buffer,fmt=*,iostat=iostat) x, z, tbeg, tend
             if (tbeg > tend) return
         end if
@@ -98,10 +101,14 @@ module gfdb_redeploy_
             do ig=1,in%ng
                 call gfdb_get_indices( in, x, z, ix, iz )
                 call gfdb_get_trace( in, ix, iz, ig, tracep )
+                if (factor /= 1.0) then
+                    call trace_scale( tracep, factor )
+                end if
+
                 if (associated(tracep)) then
                     if ( .not. trace_is_empty(tracep)) then
                         call gfdb_get_indices( out, x, z, ixo, izo )
-                        if (nargs == 2) then
+                        if (nargs /= 4) then
                             call gfdb_save_trace( out, ixo, izo, ig, tracep )
                             last_span = tracep%span
                         else 

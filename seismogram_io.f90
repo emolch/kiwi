@@ -92,9 +92,9 @@ module seismogram_io
             
             filename_cstr = filename//char(0)
             nlen = size(seismogram_copy)
-           ! call wsac1( filename_cstr, seismogram_copy, nlen, &
-           !             toffset, deltat, nerr )
-	     call die("sac output currently disabled, because there is no 64bit libsacio.")
+            call wsac1( filename_cstr, seismogram_copy, nlen, &
+                        toffset, deltat, nerr )
+	   !  call die("sac output currently disabled, because there is no 64bit libsacio.")
         end if
         
         if (fileformat_ == 'mseed') then
@@ -179,8 +179,8 @@ module seismogram_io
                 allocate( scratch(maxlen) )
                 
                 filename_cstr = filename//char(0)
-            !    call rsac1(filename_cstr, scratch, nlen, toffset, deltat, maxlen, nerr)
-                  call die("sac input currently disabled, because there is no 64bit libsacio")
+                call rsac1(filename_cstr, scratch, nlen, toffset, deltat, maxlen, nerr)
+          !        call die("sac input currently disabled, because there is no 64bit libsacio")
                 if (nerr > 0) then
                     call error( "rsac1 returned an error" )
                     if (allocated(scratch)) deallocate(scratch)

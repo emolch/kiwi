@@ -440,7 +440,7 @@ def make_rotated_horizontals( event, xstations, traces ):
     stations = set([ (t.sid, t.nid) for t in traces ])
     for sid, nid in stations:
         
-        s = xstations[(trace.sid,trace.nid)]
+        s = xstations[(sid,nid)]
         
         tnorth = select( traces, sid, nid, 'BHN' )
         teast = select( traces, sid, nid, 'BHE' )

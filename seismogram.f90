@@ -143,6 +143,7 @@ module seismogram
             call approx_differential_azidist( dnorth, deast, azi_orig, bazi_orig, dist_orig, &
                                               azi, bazi, dist )
             
+            
             call make_weights( real(azi), m, f )
             
             

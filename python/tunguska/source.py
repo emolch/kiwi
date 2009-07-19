@@ -7,6 +7,7 @@ from util import gform
 import config
 import moment_tensor
 import math
+import numpy as num
 
 class Source:
     def __init__(self, sourcetype='bilateral', sourceparams=None, sourceparams_str=None):
@@ -171,7 +172,24 @@ class Source:
         return sourceslist
 
 
-    
+    def moment_tensor( self ):
+        '''Return moment tensor representation.'''
+        
+        if self._sourcetype in ('eikonal', 'bilateral', 'circular'):
+            mt = moment_tensor.MomentTensor( strike=self._params['strike'],
+                                             dip=self._params['dip'],
+                                             rake=self._params['slip-rake'],
+                                             scalar_moment=self._params['moment'] )
+        elif self._sourcetype in 'moment_tensor':
+            mxx, myy, mzz, mxy, mxz, myz = [ self._params[mmm] for mmm in 'mxx myy mzz mxy mxz myz'.split() ]
+            m = num.mat([[mxx,mxy,mxz],[mxy,myy,myz],[mxz,myz,mzz]])
+            mt = moment_tensor.MomentTensor( m=m )
+       
+        else:
+            raise Exception( "Cannot get moment tensor representation of this source type." )
+        
+        return mt
+            
 
 class SourceInfo:
     info = None

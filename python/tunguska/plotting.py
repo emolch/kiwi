@@ -349,48 +349,61 @@ def draw_topo(gmt, JXY, region, resolution, coastline_resolution, rivers, conf, 
     gmt.pscoast( D=coastline_resolution, W='thinnest/black', A=10., *(rivers+JXY+R))
     return cptfile
     
-def draw_shakemap( gmt, widget, scaler, axes, lat, lon, horizontal, vertical):
+def draw_coastlines(gmt, JXY, region, coastline_resolution, rivers):
     
-    zax = gmtpy.Ax(mode='0-max')
+    if region != 'g':
+        R = [ '-R%g/%g/%g/%g' % region ]
+    else:
+        R = [ '-Rg' ]
     
-    zscaler = gmtpy.ScaleGuru([ (lat,lon,horizontal), (lat,lon,vertical) ],
+    gmt.pscoast( D=coastline_resolution, W='thinnest/black', A=10., *(rivers+JXY+R))
+
+def draw_shakemap( gmt, widget, scaler, axes, shakemap_range, lat, lon, *datasets):
+    
+    zax = gmtpy.Ax(mode='0-max', limits=shakemap_range, scaled_unit_factor=1000., scaled_unit='mm/s@+2@+', label='Peak Acceleration' )
+    
+    zscaler = gmtpy.ScaleGuru([ (lat,lon,dataset) for dataset in datasets ],
         axes=(axes[0],axes[1],zax), 
         aspect=widget.height()/widget.width() )
 
-    grdfile = 'test.grd' # gmt.tempfilename()
+    grdfile =  gmt.tempfilename()
 
     R = scaler.R()
     par = scaler.get_params()
-    inc_interpol = ((par['xmax']-par['xmin'])/math.sqrt(len(horizontal)),
-                    (par['ymax']-par['ymin'])/math.sqrt(len(horizontal)))
-    print inc_interpol
+    inc_interpol = (0.1*(par['xmax']-par['xmin'])/math.sqrt(len(datasets[0])),
+                    0.1*(par['ymax']-par['ymin'])/math.sqrt(len(datasets[0])))
     rxyj = R + widget.XYJ()
         
     colors = gmtpy.color(0), gmtpy.color(1)
 
     zpar = zscaler.get_params()
     clip = (zpar['zinc']/2., zpar['zmax'])
-
-    if len(horizontal) > 3:
-        for dataset, color in zip((horizontal, vertical), colors):
+    
+    fn_cpt = gmt.tempfilename()
+    gmt.makecpt( C='shakemap.cpt', out_filename=fn_cpt, *zscaler.T() )
+    
+    if len(datasets[0]) > 3:
+        for dataset, color in zip(datasets, colors):
         
-            gmt.xyz2grd( 
+            gmt.surface( 
                 in_columns=(lon,lat,dataset), 
+                T=1,
                 G=grdfile, 
                 I=inc_interpol, 
                 out_discard=True, 
                 *R )
         
-            gmt.grdcontour( 
-                grdfile, 
-                C='%g' % zpar['zinc'], 
-                W='2p,%s' % color, 
-                G='d5c', 
-                L=clip,
+            gmt.grdimage( 
+                grdfile,
+                C=fn_cpt,
+                #W='2p,%s' % color, 
+                #G='d5c', 
+                #L=clip,
                 *rxyj )
-            
+                
+    return fn_cpt, zscaler
         
-def location_map( filename, lat, lon, lat_delta, conf_overrides, source=None, source_model_infos=None, receivers=None, with_palette=False, shakemap_data=None, show_topo=True):
+def location_map( filename, lat, lon, lat_delta, conf_overrides, source=None, source_model_infos=None, receivers=None, with_palette=False, shakemap_data=None, shakemap_range=None, show_topo=True):
 
     conf = dict(**config.location_map_config)
     conf.update( conf_overrides )
@@ -460,8 +473,10 @@ def location_map( filename, lat, lon, lat_delta, conf_overrides, source=None, so
     if show_topo:
         cptfile = draw_topo(gmt, widget.JXY(), (west,east,south,north), resolution, coastline_resolution, rivers, conf)
     
+    zscaler = scaler
     if shakemap_data is not None:
-        draw_shakemap( gmt, widget, scaler, (xax,yax,zax), *shakemap_data)
+        cptfile, zscaler = draw_shakemap( gmt, widget, scaler, (xax,yax,zax), shakemap_range, *shakemap_data)
+        draw_coastlines(gmt, widget.JXY(), (west,east,south,north),  coastline_resolution, rivers)
     
     if source_model_infos and source:
         try:
@@ -496,8 +511,8 @@ def location_map( filename, lat, lon, lat_delta, conf_overrides, source=None, so
                    L=('x%gp/%gp/%g/%g/%gk' % (widget.width()/2., widget.height()/7.,lon,lat,scale_km) ),
                    *(widget.JXY()+scaler.R()) )
                    
-    if with_palette and show_topo:
-        gmtpy.nice_palette(gmt, palette_widget, scaler, cptfile, innerticks=False, zlabeloffset=1.5*gmtpy.cm)
+    if with_palette and (show_topo or shakemap_data is not None):
+        gmtpy.nice_palette(gmt, palette_widget, zscaler, cptfile, innerticks=False, zlabeloffset=1.5*gmtpy.cm)
     gmt.save(filename)
     
 class NoOutlineFound(Exception):
@@ -626,6 +641,7 @@ def gmtpy_ax_from_autoplot_conf(conf, axname):
         if x+'expand' in conf:      c['space'] = conf[x+'expand']
         if x+'autoscale' in conf:   c['mode'] = conf[x+'autoscale']
         if x+'approxticks' in conf: c['approx_ticks'] = conf[x+'approxticks']
+        if x+'snap' in conf:        c['snap'] = conf[x+'snap']
             
     return gmtpy.Ax( **c )
 

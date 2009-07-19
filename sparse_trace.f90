@@ -66,7 +66,7 @@ module sparse_trace
     public strip_nullify
     
     public trace_join, trace_pack, trace_unpack, trace_multiply_add, trace_multiply_add_nogrow
-    public trace_copy, trace_destroy, trace_is_empty
+    public trace_copy, trace_destroy, trace_is_empty, trace_scale
     public trace_from_storable, trace_to_storable
     public trace_create_simple, trace_create_simple_nodata
     public trace_size_bytes
@@ -578,6 +578,21 @@ module sparse_trace
             r(1) = lbound(trace%strips(istrip)%data,1)
             r(2) = ubound(trace%strips(istrip)%data,1)
             strip%data(r(1):r(2)) = trace%strips(istrip)%data(:)
+        end do
+        
+    end subroutine
+
+    pure subroutine trace_scale( trace, factor )
+
+      ! inplace scale the trace by given factor
+
+        type(t_trace), intent(inout)    :: trace
+        real, intent(in) :: factor
+
+        integer :: istrip
+
+        do istrip=1,trace%nstrips
+            trace%strips(istrip)%data(:) = trace%strips(istrip)%data(:) * factor
         end do
         
     end subroutine

@@ -16,8 +16,8 @@ import progressbar
 import config
 import phase
 
-runners_sleep = 0.001
-pollers_sleep = 0.001
+runners_sleep = 0.0001
+pollers_sleep = 0.0001
 
 
 def load_table(fn):
@@ -115,9 +115,9 @@ class SeismosizerBase:
                 assert(where == xwhere)
                 cmds.append(cmd)
                 
-            return self.do( where=xwhere, multi_cmd=cmds )
+            return self.do_batch( cmds=cmds, where=xwhere )
                 
-    def do(self, cmd, where=None, multi_cmd=None):
+    def do(self, cmd, where=None):
         '''Parallel execution of same command on selected processes.
         
            everywhere:            s.do( ['command','arg' ] )
@@ -126,12 +126,8 @@ class SeismosizerBase:
         '''
         
         if self.batchmode:
-            if multi_cmd:
-                for cmd in multi_cmd:
-                    self.batch.append((cmd,where))
-            else:
-                self.batch.append((cmd,where))
-            return
+            self.batch.append((cmd,where))
+            return 
         
         if where is None:
             processes = self.processes
@@ -141,10 +137,7 @@ class SeismosizerBase:
             else:
                 processes = [ self.processes[i] for i in where ]
         
-        if multi_cmd:
-            strcommand  = '\n'.join(  [ ' '.join( [str(arg) for arg in cmd ] ) for cmd in multi_cmd ] )
-        else:
-            strcommand  =  ' '.join( [str(arg) for arg in cmd ] )
+        strcommand  =  ' '.join( [str(arg) for arg in cmd ] )
         
         # distribute command to each process
         runners = []
@@ -152,7 +145,8 @@ class SeismosizerBase:
             logging.debug('Do (%i): %s' % (p.tid, strcommand))
             p.push( strcommand )
             runners.append(p)
-            
+        
+       
         # gather answers
         answers = {}
         errors = {}
@@ -178,14 +172,71 @@ class SeismosizerBase:
             
         if fatal:
             sys.exit('shit happens!')
-            
+       
         if errors:
-            raise SeismosizersReturnedErrors(errors);
-            #self.close()
-            #sys.exit('\n'.join([ error.args[0] for error in errors]) + '\n')
-            
-            
+            raise SeismosizersReturnedErrors(errors)
+        
         return [ answers[i] for i in sorted(answers.keys()) ]
+                    
+    def do_batch(self, cmds=None, where=None):
+        '''Parallel execution of same command on selected processes.
+        
+           everywhere:            s.do( ['command','arg' ] )
+           on single process:     s.do( ['command','arg' ], where=2 )
+           on group of processes: s.do( ['command','arg' ], where=range(1,4) )
+        '''
+        
+        if where is None:
+            processes = self.processes
+        else:
+            if isinstance(where, int):
+                processes = [ self.processes[where] ]
+            else:
+                processes = [ self.processes[i] for i in where ]
+        
+        strcommand  = '\n'.join(  [ ' '.join( [str(arg) for arg in cmd ] ) for cmd in cmds ] )
+        
+        # distribute command to each process
+        runners = []
+        for p in processes:
+            logging.debug('Do (%i): %s' % (p.tid, strcommand))
+            p.push( strcommand )
+            runners.append(p)
+        
+        for ianswer in xrange(len(cmds)):
+            # gather answers
+            answers = {}
+            errors = {}
+            fatal = False
+            
+            runners_current = copy.copy(runners)
+            
+            while runners_current:
+                p = runners_current.pop(0)
+                try:
+                    answer = p.poll()
+                    answers[p.tid] = answer
+                    logging.debug('Answer (%i): %s' % (p.tid, answer))
+                    
+                except NonePending:
+                    runners_current.append(p)
+                
+                except SeismosizerReturnedError, error:
+                    errors[p.tid] = error.args[1]
+                
+                except ThreadIsDead:
+                    logging.warn('Lost seismosizer process %s' % p.tid)
+                    fatal = True
+                    
+                time.sleep(pollers_sleep)
+                
+            if fatal:
+                sys.exit('shit happens!')
+            
+            if errors:
+                yield SeismosizersReturnedErrors(errors)
+            else:
+                yield [ answers[i] for i in sorted(answers.keys()) ]
 
 # add commands as methods
 def gen_do_method(command):
@@ -266,10 +317,9 @@ class SeismosizerProcess(threading.Thread):
                 try:
                     if self.the_end_has_come: break
                     cmd = self.commands.get_nowait()
-                    answer = self._do(cmd)
-                    self.answers.put(answer)
-                except SeismosizerReturnedError, inst:
-                    self.answers.put(inst)
+                    for answer in self._do(cmd):
+                        self.answers.put(answer)
+                
                 except Queue.Empty:
                     time.sleep(runners_sleep)
                 i += 1
@@ -288,29 +338,40 @@ class SeismosizerProcess(threading.Thread):
         answer = None
             
         lines = command.strip().splitlines()
-        for line in lines:
-            self.to_p.write(line+"\n")
-            
-        self.to_p.flush()
         
-        answer = ''
-        for line in lines:
-            retval = self.from_p.readline().rstrip()
+        iblock = 0
+        lblock = 10
+        while iblock*lblock < len(lines):
+            block = lines[iblock*lblock:(iblock+1)*lblock]
+        
+            for line in block:
+                self.to_p.write(line+"\n")
+                
+            self.to_p.flush()
             
-            if retval.endswith('nok'):
-                raise SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
-                            (config.seismosizer_prog, self.host, self.tid, command), '' )
-                            
-            if retval.endswith('nok >'):
-                error_str = self.from_p.readline().rstrip()
-                raise SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
-                            (config.seismosizer_prog, self.host, self.tid, command), error_str )
+            answer = ''
+            for line in block:
+                retval = self.from_p.readline().rstrip()
                 
-            if retval.endswith('ok >'):
-                answer += self.from_p.readline().rstrip()
                 
-        return answer
-
+                if retval.endswith('nok'):
+                    yield SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
+                                (config.seismosizer_prog, self.host, self.tid, command), '' )
+                                
+                if retval.endswith('nok >'):
+                    error_str = self.from_p.readline().rstrip()
+                    yield SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
+                                (config.seismosizer_prog, self.host, self.tid, command), error_str )
+                    
+                if retval.endswith('ok >'):
+                    answer = self.from_p.readline().rstrip()
+                    yield answer
+                
+                if retval.endswith('ok'):
+                    yield ''
+            
+            iblock += 1
+            
     def push(self, cmd):
         '''Enqueue command for seismosizer.'''
         self.commands.put(cmd)
@@ -352,7 +413,7 @@ class Seismosizer(SeismosizerBase):
                       'set_cached_traces_memory_limit',
                       'set_verbose']
                       
-    def __init__(self, hosts):
+    def __init__(self, hosts, balance_method='123321'):
         SeismosizerBase.__init__(self, hosts)
         self.database = None
         self.receivers = None
@@ -360,6 +421,7 @@ class Seismosizer(SeismosizerBase):
         self.source_location = None
         self.shifts = None
         self.local_interpolation = None
+        self.balance_method = balance_method
         
     def set_database(self, gfdb, **kwargs):
         self.database = gfdb
@@ -579,11 +641,8 @@ class Seismosizer(SeismosizerBase):
         f.close()
         return data
         
-    def make_misfits_for_source( self, source ):
-        """Calculate misfits for given source and fill these into the receivers datastructure."""
+    def _gather_misfits_into_receivers(self, results):
         
-        self.set_source(source)
-        results = self.do_get_misfits()
         values = [[ float(x) for x in result.split() ] for result in results ]
         ipos = [ 0 ] * len(results)
         for irec, rec in enumerate(self.receivers):
@@ -597,6 +656,13 @@ class Seismosizer(SeismosizerBase):
         
         for iproc in range(len(results)):
             assert(ipos[iproc] == len(values[iproc]), "if this is printed, there is a bug in make_misifits_for_source()") 
+        
+    def make_misfits_for_source( self, source ):
+        """Calculate misfits for given source and fill these into the receivers datastructure."""
+        
+        self.set_source(source)
+        results = self.do_get_misfits()
+        self._gather_misfits_into_receivers(results)
     
     def make_misfits_for_sources(self, sources, show_progress=False, progress_title='grid search'):
         '''Get misfits for many sources gathered by (source,receiver,component).'''
@@ -616,10 +682,22 @@ class Seismosizer(SeismosizerBase):
             
             pbar = progressbar.ProgressBar(widgets=widgets, maxval=len(sources)).start()
         
+        self.batch_record()
+        for isource, source in enumerate(sources):
+            self.set_source(source)
+            self.do_get_misfits()
+        
+        results_iterator = self.batch_execute()
         failings = []
         for isource, source in enumerate(sources):
             try:
-                self.make_misfits_for_source( source )
+                results_iterator.next() # skip output from set_source()
+                results = results_iterator.next()
+                
+                if isinstance(results, SeismosizersReturnedErrors):
+                    raise results
+                
+                self._gather_misfits_into_receivers(results)
                 for ireceiver, receiver in enumerate(self.receivers):
                     if receiver.enabled:
                         for icomp, comp in enumerate(receiver.components):
@@ -653,46 +731,63 @@ class Seismosizer(SeismosizerBase):
         results = self.do_get_peak_amplitudes()
         values = [[ float(x) for x in result.split() ] for result in results ]
         
-        maxabs_horizontal = [ 0.0 ] * len(self.receivers)
-        maxabs_vertical = [ 0.0 ] * len(self.receivers)
+        #maxabs_horizontal = [ 0.0 ] * len(self.receivers)
+        #maxabs_vertical = [ 0.0 ] * len(self.receivers)
+        maxabs_accel = [ 0.0 ] * len(self.receivers)
         
         ipos = [ 0 ] * len(results)
         for irec, rec in enumerate(self.receivers):
             iproc = rec.proc_id
-            maxabs_horizontal[irec] = values[iproc][ipos[iproc]]
-            ipos[iproc] += 1
-            maxabs_vertical[irec] = values[iproc][ipos[iproc]]
+            #maxabs_horizontal[irec] = values[iproc][ipos[iproc]]
+            #ipos[iproc] += 1
+            #maxabs_vertical[irec] = values[iproc][ipos[iproc]]
+            #ipos[iproc] += 1
+            maxabs_accel[irec] = values[iproc][ipos[iproc]]
             ipos[iproc] += 1
     
-        return maxabs_horizontal, maxabs_vertical
+        return maxabs_accel
     
     # "private" methods:
     
     def _locations_changed(self):
         if self.source_location is None or self.receivers is None: return
         self._fill_distazi()
-        self.balance()
+        self.balance(self.balance_method)
         
-    def balance(self):
-        assert(len(self.receivers) >= len(self))
-        if len(self) > 1:
-            distances = [ r.distance_m for r in self.receivers ]
-            distances_active = [ r.distance_m for r in self.receivers if r.enabled ]
-            dist_range = [ min(distances_active), max(distances_active) ]
-            dist_center = (dist_range[0]+dist_range[1])/2.
-            dist_delta = (dist_range[1]-dist_range[0])/len(self)/2.
-            
-            for irec, dist in enumerate( distances ):
-                if dist < dist_center:
-                    iproc = max(min(int((dist-dist_range[0])/dist_delta),len(self)-1),0)
-                else:
-                    iproc = max(min(int((dist_range[1]-dist)/dist_delta),len(self)-1),0)
-                
-                self._set_receiver_process(irec+1, iproc)
+    def balance(self, method='123321'):
         
-        else:
+        if method == 'serial':
             for irec in range(len(self.receivers)):
-                self._set_receiver_process(irec+1, 0)
+                self._set_receiver_process(irec+1, None)
+                
+        else:
+            assert(len(self.receivers) >= len(self))
+            if len(self) > 1:
+                distances = [ r.distance_m for r in self.receivers ]
+                distances_active = [ r.distance_m for r in self.receivers if r.enabled ]
+                dist_range = [ min(distances_active), max(distances_active) ]
+                dist_center = (dist_range[0]+dist_range[1])/2.
+                dist_delta = (dist_range[1]-dist_range[0])/len(self)
+                if method == '123123':
+                    for idist, irec in enumerate(num.argsort(distances)):
+                        print irec+1, idist % len(self)
+                        self._set_receiver_process(irec+1, idist % len(self))
+                        
+                else:
+                    for irec, dist in enumerate( distances ):
+                        if method == '123321':
+                            if dist < dist_center:
+                                iproc = max(min(int((dist-dist_range[0])/dist_delta/2.),len(self)-1),0)
+                            else:
+                                iproc = max(min(int((dist_range[1]-dist)/dist_delta/2.),len(self)-1),0)
+                        elif method == '112233':
+                            iproc = max(min(int((dist-dist_range[0])/dist_delta),len(self)-1),0)
+                        
+                        self._set_receiver_process(irec+1, iproc)
+                
+            else:
+                for irec in range(len(self.receivers)):
+                    self._set_receiver_process(irec+1, 0)
             
     def _set_receiver_process(self, irec, iproc):
         self.receivers[irec-1].proc_id = iproc

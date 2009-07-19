@@ -14,8 +14,7 @@ default_loglevel = logging.INFO
 source_info_prog = 'source_info'
 gfdb_info_prog = 'gfdb_info'
 gfdb_extract_prog = 'gfdb_extract'
-sys.stderr.write('warning: config.py:  /bonus/src/kiwi/minimizer')
-seismosizer_prog = '/bonus/src/kiwi/minimizer'
+seismosizer_prog = 'minimizer'
 
 topo_dir = '/bonus/topo'
 topo_img_file_1m = pjoin(topo_dir,'topo_11.1.img')
@@ -120,7 +119,6 @@ misfogram_plot_2d_gmtpy_config = dict(
     height = pw - 1.*gmtpy.cm - 2.*(mw-mw/gmtpy.golden_ratio),
     margins = (mw,mw,mw/gmtpy.golden_ratio,mw/gmtpy.golden_ratio),    
     zapproxticks = 7,
-    zlimits = (0.,1.),
     autoscale = 'min-max',
     symbols_SGW = [ symbol_best_result, '-Sc -W1p/black', ],
     zlabel = 'Misfit',

@@ -112,10 +112,22 @@ module minimizer_engine
         integer, intent(in)               :: nipx, nipz
         logical, intent(out)              :: ok
         
+        real :: olddt
+
         ok = .true.
-        
+
+        olddt = db%dt
+
         call gfdb_init(db, db_path, nipx=nipx, nipz=nipz ) ! dies program if not successful
         
+        if (database_inited) then
+            if (db%dt /= olddt) then
+                call warn("sampling rate of new database is different than that of the old database")
+                call warn("deinitializing receivers...")
+                call cleanup_receivers()
+            end if
+        end if
+
         database_inited = .true.
         call dirtyfy_database()
         
@@ -135,7 +147,7 @@ module minimizer_engine
 
         ok = .true.
         if (xunder < 1 .or. zunder < 1) then
-            call error( 'invalid undersampling value' )
+            call error( "invalid undersampling value" )
             ok = .false.
         end if
 
@@ -301,6 +313,11 @@ module minimizer_engine
         integer :: ireceiver, nreceivers
         type(varying_string) :: reffn
         
+        call update_database( ok )
+        if (.not. ok) then
+            call warn("have to set database prior to setting ref seismograms")
+            return
+        end if
         call update_receivers( ok )
         if (.not. ok) return
         
@@ -690,7 +707,7 @@ module minimizer_engine
         
       ! print not normalize subparams 
         call psm_get_subparams( psm, subparams_nn, normalized_=.false. )
-        write (stderr,*) subparams_nn
+      !  write (stderr,*) subparams_nn
         deallocate( subparams_nn )
         
         call update_misfits( ok )
@@ -852,7 +869,7 @@ module minimizer_engine
         do icentroid=1,size(tdsm%centroids)
             write (unit=ofile, fmt=*) &
                 tdsm%centroids(icentroid)%north, tdsm%centroids(icentroid)%east, &
-                tdsm%centroids(icentroid)%depth, tdsm%centroids(icentroid)%time
+                tdsm%centroids(icentroid)%depth, tdsm%centroids(icentroid)%time, tdsm%centroids(icentroid)%m
         end do
         close( ofile )
         call release_unit( ofile )
@@ -1024,7 +1041,8 @@ module minimizer_engine
         logical, intent(out)  :: ok
         
         integer :: imaxabs, nmaxabs, ireceiver, nreceivers
-        real :: max_hor, max_ver
+        !real :: max_hor, max_ver
+        real :: max_accel
         
         call update_syn_probes( ok )
         if (.not. ok) return
@@ -1039,14 +1057,17 @@ module minimizer_engine
         end do
 
         if ( allocated(maxabs_) ) deallocate(maxabs_)
-        allocate( maxabs_(2,nmaxabs) )
+        !allocate( maxabs_(2,nmaxabs) )
+        allocate( maxabs_(1,nmaxabs) )
         
         imaxabs = 1
         do ireceiver=1,nreceivers
             if (receivers(ireceiver)%enabled) then
-                call receiver_get_maxabs(receivers(ireceiver), max_hor, max_ver)
-                maxabs_(1,imaxabs) = max_hor
-                maxabs_(2,imaxabs) = max_ver
+                !call receiver_get_maxabs_hor_ver(receivers(ireceiver), max_hor, max_ver)
+                !maxabs_(1,imaxabs) = max_hor
+                !maxabs_(2,imaxabs) = max_ver
+                call receiver_get_maxabs_accel(receivers(ireceiver), max_accel)
+                maxabs_(1,imaxabs) = max_accel
                 imaxabs = imaxabs + 1
             end if
         end do
@@ -1143,20 +1164,6 @@ module minimizer_engine
     
   ! data flow update routines
   
-    subroutine update_receivers( ok )
-    
-        logical, intent(out) :: ok
-        
-        ok = .true.
-        if (.not. receivers_inited) then
-            call error("no receivers set")
-            ok = .false.
-            return
-        end if
-        
-        receivers_dirty = .false.
-    
-    end subroutine
     
     subroutine update_database( ok )
     
@@ -1173,6 +1180,21 @@ module minimizer_engine
     
     end subroutine
     
+    subroutine update_receivers( ok )
+    
+        logical, intent(out) :: ok
+        
+        ok = .true.
+        if (.not. receivers_inited) then
+            call error("no receivers set")
+            ok = .false.
+            return
+        end if
+        
+        receivers_dirty = .false.
+    
+    end subroutine
+
     subroutine update_source_location( ok )
         
         logical, intent(out) :: ok

@@ -8,6 +8,12 @@ import numpy as num
 import scipy.stats
 from os.path import join as pjoin
 
+def mimainc_to_gvals(mi,ma,inc):
+    vmin, vmax, vinc = float(mi), float(ma), float(inc)
+    n = int(round((vmax-vmin)/vinc))+1
+    vinc = (vmax-vmin)/(n-1)
+    return num.array([ vmin+i*vinc for i in xrange(n) ], dtype=num.float)
+
 def step_at(values, value):
     if len(values) <= 1: return 1.
     i = num.clip(num.searchsorted(values, value), 1, len(values)-1)
@@ -22,7 +28,26 @@ def values_to_bin_edges(values):
     return edges
 
 class MisfitGridStats:
-    
+    def __init__(self, paramname, best, distribution, tested_values=None):
+        self.paramname = paramname
+        self.best = best
+        self.distribution = distribution
+        self.tested_values = tested_values
+        self.mean = num.mean(distribution)
+        self.std = num.std(distribution)
+        self.median = num.median(distribution)
+        self.percentile16 = scipy.stats.scoreatpercentile(distribution, 16.)
+        self.percentile84 = scipy.stats.scoreatpercentile(distribution, 84.)
+        
+        if tested_values is not None:
+            self.percentile16 -= step_at( tested_values, self.percentile16 )/2.
+            self.percentile84 += step_at( tested_values, self.percentile84 )/2.
+            self.percentile16_warn = self.percentile16 < num.min(tested_values)
+            self.percentile84_warn = self.percentile84 > num.max(tested_values)
+        else:
+            self.percentile16_warn = False
+            self.percentile84_warn = False
+        
     def str_best_and_confidence(self, factor=1., unit =''):
         lw = ''
         uw = ''
@@ -56,6 +81,16 @@ class MisfitGridStats:
         return tmpl % (self.paramname.title(), self.best, 
                        self.percentile16, self.percentile84,
                        self.percentile16_warn, self.percentile84_warn)
+                       
+    def converted(self, paramname, function):
+        best = function(self.best)
+        distribution = function(self.distribution)
+        if self.tested_values is not None:
+            tested_values = function(self.tested_values)
+        else:
+            tested_values = None
+            
+        return MisfitGridStats(paramname, best, distribution, tested_values=tested_values)
 
 
 class MisfitGrid:
@@ -198,26 +233,9 @@ class MisfitGrid:
         
         results = {}
         for param, gvalues in param_values:
-            mi = num.min(gvalues)
-            ma = num.max(gvalues)
-            param_results = num.zeros(len(bootstrap_sources), dtype=num.float)
-            for i, source in enumerate(bootstrap_sources):
-                param_results[i] = source[param]
-                
-            result = MisfitGridStats()
-            result.best = best_source[param]
-            if len(param_results) == 0: continue
-            result.paramname = param
-            result.mean = num.mean(param_results)
-            result.std = num.std(param_results)
-            result.median = num.median(param_results)
-            result.percentile16 = scipy.stats.scoreatpercentile(param_results, 16.)
-            result.percentile84 = scipy.stats.scoreatpercentile(param_results, 84.)
-            result.percentile16 -= step_at( gvalues, result.percentile16 )/2.
-            result.percentile84 += step_at( gvalues, result.percentile84 )/2.
-            result.percentile16_warn = result.percentile16 < mi
-            result.percentile84_warn = result.percentile84 > ma
-            result.distribution = param_results
+
+            distribution = num.array([ source[param] for source in bootstrap_sources ], dtype=num.float)
+            result = MisfitGridStats( param, best_source[param], distribution, tested_values=gvalues )
             results[param] = result
             
         return results
@@ -301,10 +319,11 @@ class MisfitGrid:
         
         # 1D projected misfit cross sections
         for iparam, param in enumerate(self.sourceparams):
+            mini, maxi = param_min_misfits_range
             
             conf = dict( xlabel = param.title(),
                          xunit = self.base_source.sourceinfo(param).unit,
-                         ylimits = param_min_misfits_range )
+                         ylimits = (mini, min(maxi,1.)) )
             
             plotting.km_hack(conf)
             fn = 'min-misfit-%s.pdf' % param
@@ -312,6 +331,9 @@ class MisfitGrid:
                                      pjoin(dirname, fn),
                                      conf )
             plot_files.append(fn)
+            
+            fn_table = 'min-misfit-%s.table' % param
+            num.savetxt(pjoin(dirname, fn_table),  param_min_misfits[param].transpose())
                         
         for ixparam, xparam in enumerate(self.sourceparams):
             for iyparam, yparam in enumerate(self.sourceparams):
@@ -355,11 +377,17 @@ class MisfitGrid:
                 ayc = num.array(lyc,dtype=num.float)
                 ac = num.array(lc,dtype=num.float)
                 ac = ac/len(bootstrap_sources)
+                if len(bootstrap_sources) > 1:
+                    bootstrap_data = (axc, ayc, ac)
+                else:
+                    bootstrap_data = ([],[],[])
                 
                 conf = dict( xlabel = xparam.title(),
                              xunit = self.base_source.sourceinfo(xparam).unit,
                              ylabel = yparam.title(),
                              yunit = self.base_source.sourceinfo(yparam).unit,
+                             zlimits = (az.min(),1.),
+                             zsnap = True
                          )
                 
                 best_loc = (num.array([ best_source[xparam]]), num.array([best_source[yparam]]))
@@ -367,7 +395,7 @@ class MisfitGrid:
                 plotting.nukl_hack(conf)
                 
                 fn = 'misfogram-%s-%s.pdf' % (xparam, yparam)
-                plotting.misfogram_plot_2d_gmtpy( [(ax, ay, az), best_loc, (axc, ayc, ac)],
+                plotting.misfogram_plot_2d_gmtpy( [(ax, ay, az), best_loc, bootstrap_data],
                                         pjoin(dirname, fn),
                                         conf )
                 plot_files.append(fn)

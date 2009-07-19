@@ -5,7 +5,7 @@ import math
 import numpy as num
 
 def moment_to_magnitude( moment ):
-    return math.log10(moment*1.0e7)/1.5 - 10.7
+    return num.log10(moment*1.0e7)/1.5 - 10.7
 
 def magnitude_to_moment( magnitude ):
     return 10.0**(1.5*(magnitude+10.7))*1.0e-7

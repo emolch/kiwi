@@ -85,11 +85,6 @@ def u2d(s):
     if '-' in s: raise Exception('uuups, found dash in param name where not expected: %s' % s)
     return s.replace('_','-')
 
-def mimainc_to_gvals(mi,ma,inc):
-    vmin, vmax, vinc = float(mi), float(ma), float(inc)
-    n = int(round((vmax-vmin)/vinc))+1
-    vinc = (vmax-vmin)/(n-1)
-    return num.array([ vmin+i*vinc for i in xrange(n) ], dtype=num.float)
     
 def grid_defi( param, oldval, descr ):
     mi, ma, inc = [float(x) for x in descr[:3]]
@@ -102,6 +97,18 @@ def grid_defi( param, oldval, descr ):
             vals.append(x)
             x *= inc
         return param, num.array(vals)
+        
+    elif mode == 'symexpinc':
+        x = mi
+        cinc = mi
+        vals = [ 0. ]
+        while x <= ma:
+            vals.append(x)
+            vals.append(-x)
+            x += cinc
+            cinc *= inc
+        return param, num.array(sorted(vals))
+            
     else:    
         if mode == 'mult':
             mi *= oldval
@@ -110,7 +117,7 @@ def grid_defi( param, oldval, descr ):
         elif mode == 'add':
             mi += oldval
             ma += oldval
-        return param, mimainc_to_gvals(mi, ma, inc)
+        return param, gridsearch.mimainc_to_gvals(mi, ma, inc)
     
 
 
@@ -122,6 +129,7 @@ def standard_setup( datadir,
                     effective_dt=1,
                     spacial_undersampling = [ 1, 1 ],
                     hosts = ['localhost'],
+                    balance_method = '123321',
                     crustal_thickness_limit = None,
                     constraining_planes = None,
                     shifts = None,
@@ -144,7 +152,7 @@ def standard_setup( datadir,
 
     # setup database
     database = gfdb.Gfdb(gfdb_path)
-    seis = seismosizer.Seismosizer(hosts)
+    seis = seismosizer.Seismosizer(hosts, balance_method)
     if verbose: seis.set_verbose('T')
     seis.set_database(database)
     seis.set_effective_dt(effective_dt)
@@ -183,7 +191,7 @@ def standard_setup( datadir,
     return seis
     
 standard_setup.required = set(('datadir', 'gfdb_path', 'components')) 
-standard_setup.optional = set(('effective_dt', 'spacial_undersampling', 'hosts', 
+standard_setup.optional = set(('effective_dt', 'spacial_undersampling', 'hosts', 'balance_method',
                                'crustal_thickness_limit', 'constraining_planes', 'shifts', 'local_interpolation', 
                                'source_origin_file', 'receivers_file',
                                'ref_seismogram_stem', 'ref_seismogram_format', 'blacklist', 'xblacklist', 'verbose'))
@@ -321,7 +329,7 @@ class Step:
             return
         
         self.seismosizer.set_source( source )
-        receivers = self.seismosizer.get_receivers_snapshot()
+        receivers = self.seismosizer.get_receivers_snapshot(which_processing='filtered')
         self.dump( receivers, 'snapshot_%s' % ident )
         
         self.dump( self.seismosizer.get_psm_infos(), 'source_infos_%s' % ident )
@@ -756,8 +764,12 @@ class ParamTuner(Step):
             self.out_config.__dict__[param] = stats[u2d(param)].best
             self.out_config.__dict__[param+'_stats'] = stats[u2d(param)]
         
-        logging.info('Misfit = %f, Source = %s' % (finder.get_best_misfit(), str(base_source)))
         
+        logging.info('Misfit = %f, Source = %s' % (finder.get_best_misfit(), str(base_source)))
+        mt = base_source.moment_tensor()
+        logging.info(str(mt))
+        
+        self.result(str(mt), 'moment_tensor')
         
         misfit_median = num.median( finder.misfits_by_r )
         

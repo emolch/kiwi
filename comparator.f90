@@ -32,7 +32,7 @@ module comparator
     
     include 'fftw3.f'
     
-    integer, public, parameter :: n_comparator_norms = 5
+    integer, public, parameter :: n_comparator_norms = 6
     
     integer, public, parameter :: L2NORM = 1
     integer, public, parameter :: L1NORM = 2
@@ -102,7 +102,8 @@ module comparator
     public probes_norm
     public probe_norm
     public probes_windowed_cross_corr
-  
+    public probes_max_vecnorm_d2
+
     public cleanup_comparator
   
   contains
@@ -140,6 +141,7 @@ module comparator
             comparator_norm_names(3) = "ampspec_l2norm"
             comparator_norm_names(4) = "ampspec_l1norm"
             comparator_norm_names(5) = "scalar_product"
+            comparator_norm_names(6) = "peak"
         end if
     
     end subroutine
@@ -476,6 +478,50 @@ module comparator
                 
     end subroutine
 
+    subroutine probes_adjust_spans_3( a, b, c )
+    
+        type(t_probe), intent(inout) :: a, b, c
+        
+        integer, dimension(2) :: tempspan, newspan
+        integer :: minlength
+        
+        if (a%dt /= b%dt .or. b%dt /= c%dt) then
+            call die("probes_adjust_spans3(): all probes must have same dt")
+        end if
+        
+        call union( a%dataspan, b%dataspan, tempspan )
+        call union( tempspan, c%dataspan, newspan )
+        minlength = max( ceiling(slen(a%dataspan)*a%paddingfactor), &
+                         ceiling(slen(b%dataspan)*b%paddingfactor), &
+                         ceiling(slen(c%dataspan)*c%paddingfactor) )
+        
+        newspan = allowed_span( newspan, minlength )
+
+        if (all(a%span == b%span) .and. all(a%span == c%span) .and. slen(a%span) == slen(newspan) .and. &
+             containing(a%span, b%dataspan) .and. containing(b%span, a%dataspan) .and. &
+             containing(a%span, c%dataspan) .and. containing(c%span, a%dataspan) .and. &
+             containing(b%span, c%dataspan) .and. containing(c%span, b%dataspan) ) return
+        
+        call probe_extend_span( a, newspan )
+        call probe_extend_span( b, newspan )
+        call probe_extend_span( c, newspan )
+                
+    end subroutine
+
+
+    pure function max_vecnorm_d2( a, b, c, dt, fa, fb, fc ) result(amp)
+        real, dimension(:), intent(in) :: a, b, c
+        real, intent(in) :: dt, fa, fb, fc
+        real :: amp
+        integer :: n
+        
+        n = size(a)
+        amp = real(sqrt(maxval( fa**2*real(a(1:n-2) - 2.0*a(2:n-1) + a(3:n),8)**2 + &
+                                fb**2*real(b(1:n-2) - 2.0*b(2:n-1) + b(3:n),8)**2 + &
+                                fc**2*real(c(1:n-2) - 2.0*c(2:n-1) + c(3:n),8)**2 )) / dt)
+       
+    end function   
+
     pure function scalar_product_2( a, b, dt, fa, fb ) result(prod)
         real, dimension(:), intent(in) :: a,b
         real, intent(in) :: dt, fa, fb
@@ -548,6 +594,77 @@ module comparator
         maxabs = fa * maxval(abs(a))
     end function
     
+
+    function probes_norm_timedomain_3( a, b, c, normfunction ) result(norm)
+
+        interface
+            pure function normfunction( a, b, c, dt, fa, fb, fc ) result(norm)
+                real, dimension(:), intent(in) :: a, b, c
+                real, intent(in) :: dt, fa, fb, fc
+                real :: norm
+            end function
+        end interface
+
+        type(t_probe), intent(inout) :: a, b, c
+        real :: norm
+        
+        integer, dimension(2) :: span, a_temp_span, b_temp_span, c_temp_span, temp_span
+
+        call probes_adjust_spans_3( a, b, c )
+     
+      ! when tapers are specified, restrict application to taper span
+      ! otherwise, restrict to datarange
+        if (plf_defined( a%taper ) .and. plf_defined( b%taper ) .and. plf_defined( c%taper )) then
+            call intersection(discrete_plf_span(a%taper,a%dt), a%span, a_temp_span)
+            call intersection(discrete_plf_span(b%taper,b%dt), b%span, b_temp_span)
+            call intersection(discrete_plf_span(c%taper,c%dt), c%span, c_temp_span)
+            if (a_temp_span(1) > a_temp_span(2)) then
+                span = b_temp_span
+            else if (b_temp_span(1) > b_temp_span(2)) then
+                span = a_temp_span
+            else if (c_temp_span(1) > c_temp_span(2)) then
+                span = c_temp_span
+            else
+                call union( a_temp_span, b_temp_span, temp_span )
+                call union( temp_span, c_temp_span, span)
+            end if
+        else
+            call union( a%dataspan, b%dataspan, temp_span )
+            call union( temp_span, c%dataspan, span )
+        end if
+
+        if (span(1) > span(2)) then
+            call warn( 'comparator: applying timedomain norm to empty region.' )
+            norm = 0.
+            return
+        end if
+        
+        if (plf_defined( a%filter ) .and. plf_defined( b%filter ) .and. plf_defined( c%filter) ) then
+            call update_array_filtered( a )
+            call update_array_filtered( b )
+            call update_array_filtered( c )
+            norm = normfunction(a%array_filtered(span(1):span(2)), &
+                                b%array_filtered(span(1):span(2)), &
+                                c%array_filtered(span(1):span(2)), &
+                                 a%dt, a%factor, b%factor, c%factor)
+        else if (plf_defined( a%taper ) .and. plf_defined( b%taper ) .and.plf_defined( c%taper) ) then
+            call update_array_tapered( a )
+            call update_array_tapered( b )
+            call update_array_tapered( c )
+            norm = normfunction(a%array_tapered(span(1):span(2)), &
+                                b%array_tapered(span(1):span(2)), &
+                                c%array_tapered(span(1):span(2)), &
+                                a%dt, a%factor, b%factor, c%factor)
+        else
+            norm = normfunction(a%array(span(1):span(2)), &
+                                b%array(span(1):span(2)), &
+                                c%array(span(1):span(2)), &
+                                a%dt, a%factor, b%factor, c%factor)
+        end if
+
+    end function
+
+
     function probes_norm_timedomain( a, b, normfunction ) result(norm)
 
         interface
@@ -782,6 +899,12 @@ module comparator
         prod = probes_norm_timedomain( a, b, scalar_product_2 )
     end function
     
+    function probes_max_vecnorm_d2( a,b,c ) result(amp)
+        type(t_probe), intent(inout) :: a, b, c
+        real :: amp
+        amp = probes_norm_timedomain_3( a, b, c, max_vecnorm_d2 )
+    end function
+
     subroutine probes_windowed_cross_corr( a, b, shiftrange, cross_corr )
 
         type(t_probe), intent(inout) :: a, b

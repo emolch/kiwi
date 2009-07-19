@@ -725,7 +725,7 @@ module minimizer_wrappers
     
     subroutine do_set_misfit_method( line, answer, ok )
       
-     !! === {{{set_misfit_method ( l2norm | l1norm | ampspec_l2norm | ampspec_l1norm )}}} ===
+     !! === {{{set_misfit_method ( l2norm | l1norm | ampspec_l2norm | ampspec_l1norm | scalar_product | peak )}}} ===
       !
       ! Set the misfit calculation method.
       !
@@ -735,6 +735,7 @@ module minimizer_wrappers
       !  * {{{ampspec_l2norm}}}: L2 norm is done on difference of amplitude spectra
       !  * {{{ampspec_l1norm}}}: L2 norm is done on difference of amplitude spectra
       !  * {{{scalar_product}}}: instead of a norm, the scalar product is calculated
+      !  * {{{peak}}}: instead of a norm, the peak amplitudes are returned
       
         type(varying_string), intent(in)  :: line
         type(varying_string), intent(out) :: answer
