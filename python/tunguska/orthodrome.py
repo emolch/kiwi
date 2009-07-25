@@ -12,7 +12,6 @@ def clip(x, mi, ma):
 def wrap(x, mi, ma):
     return x - num.floor((x-mi)/(ma-mi)) * (ma-mi)
 
-
 def ne_to_latlon( lat0, lon0, north_m, east_m ):
     
     '''Transform local carthesian coordinates to latitude and longitude.
@@ -79,6 +78,7 @@ def ne_to_latlon_alternative_method( lat0, lon0, north_m, east_m ):
     lat = r2d * (math.pi/2. - c)
     lon = wrap(lon0 + r2d*alpha*alphasign,-180.,180.)
     return lat, lon
+
 
 if __name__ == '__main__':
     import sys

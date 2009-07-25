@@ -778,7 +778,7 @@ module minimizer_engine
         real, dimension(:), allocatable :: weights, shifts
         real :: dt, ts
         
-        call inform("scaling seismograms")
+        call inform("scaling seismograms " // psm%moment)
         
         dt = db%dt
         
