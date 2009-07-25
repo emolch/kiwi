@@ -500,22 +500,16 @@ module receiver
         do icomponent=1, self%ncomponents
             outfn = filenamebase // "-" // component_names(self%components(icomponent)) // "." // fileformat
             
-            if (which_probe == SYNTHETICS .and. which_processing == PLAIN) then ! shortcut avoiding some copying
-                span = strip_span(self%displacement(icomponent))
-                call writeseismogram( char(outfn), "*", &
-                                      self%displacement(icomponent)%data, &
-                                      (span(1)-1)*dt, dt, nerr )
+            if (which_probe == SYNTHETICS) then
+                call probe_get( self%syn_probes(icomponent), strip, which_processing )
             else 
-                if (which_probe == SYNTHETICS) then
-                    call probe_get( self%syn_probes(icomponent), strip, which_processing )
-                else 
-                    call probe_get( self%ref_probes(icomponent), strip, which_processing )
-                end if
-                span = strip_span( strip )
-                call writeseismogram( char(outfn), "*", &
-                            strip%data, &
-                            (span(1)-1)*dt, dt, nerr )
+                call probe_get( self%ref_probes(icomponent), strip, which_processing )
             end if
+            span = strip_span( strip )
+            call writeseismogram( char(outfn), "*", &
+                        strip%data, &
+                        (span(1)-1)*dt, dt, nerr )
+            
             if (nerr /= 0) then
                 ok = .false.
                 call error( "failed to write output file: " // outfn )
