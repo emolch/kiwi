@@ -48,10 +48,17 @@ def get_next_event(events_dir, instant=None):
 
 def prepare_event(skeleton_dir, event_dir):
     oldcwd = os.getcwd()
-    files_to_copy = [ 'kiwi_prepare.config', 'kiwi_ampspec', 'report.html' ]
+    files_to_copy = [ 'kiwi_prepare.config', 'kiwi_ampspec' ]
     for fn in files_to_copy:
-        shutil.copy(pjoin(skeleton_dir,fn),
-                    pjoin(event_dir,fn))
+        if not os.path.exists(pjoin(event_dir,fn)):
+            shutil.copy(pjoin(skeleton_dir,fn),
+                        pjoin(event_dir,fn))
+
+    dirs_to_copy = [ 'report_templates' ]
+    for dn in dirs_to_copy:
+        if not os.path.exists(pjoin(event_dir,dn)):
+            shutil.copytree(pjoin(skeleton_dir, dn),
+                            pjoin(event_dir,dn))
 
     os.chdir(event_dir)        
     call(['kiwi_prepare', 'kiwi_prepare.config'])
