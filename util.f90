@@ -135,7 +135,7 @@ contains
     
     subroutine warn_c( c )
         character(len=*), intent(in) :: c
-        write (stderr,fmt="(a,a,a)") char(g_pn), ": ", c
+        write (stderr,fmt="(a,a,a)") char(g_pn), "(warn): ", c
     end subroutine
     
     subroutine warn_void()
@@ -144,7 +144,7 @@ contains
     
     subroutine inform_vs( str )
         type(varying_string),intent(in) :: str
-        call warn_c( char(str) )
+        call inform_c( char(str) )
     end subroutine
     
     subroutine inform_c( c )
