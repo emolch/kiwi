@@ -346,10 +346,12 @@ class SeismosizerProcess(threading.Thread):
         
             for line in block:
                 self.to_p.write(line+"\n")
+
             self.to_p.flush()
             
             answer = ''
             for line in block:
+                                
                 retval = self.from_p.readline().rstrip()
                 
                 if retval.endswith('nok'):
@@ -691,8 +693,10 @@ class Seismosizer(SeismosizerBase):
             try:
                 results_set_source = results_iterator.next() # skip output from set_source()
                 results = results_iterator.next()
+                
                 if isinstance(results_set_source, SeismosizersReturnedErrors):
                     raise results_set_source
+                
                 if isinstance(results, SeismosizersReturnedErrors):
                     raise results
                 
@@ -775,9 +779,9 @@ class Seismosizer(SeismosizerBase):
                     for irec, dist in enumerate( distances ):
                         if method == '123321':
                             if dist < dist_center:
-                                iproc = max(min(int((dist-dist_range[0])/dist_delta/2.),len(self)-1),0)
+                                iproc = max(min(int((dist-dist_range[0])/(dist_delta/2.)),len(self)-1),0)
                             else:
-                                iproc = max(min(int((dist_range[1]-dist)/dist_delta/2.),len(self)-1),0)
+                                iproc = max(min(int((dist_range[1]-dist)/(dist_delta/2.)),len(self)-1),0)
                         elif method == '112233':
                             iproc = max(min(int((dist-dist_range[0])/dist_delta),len(self)-1),0)
                         
