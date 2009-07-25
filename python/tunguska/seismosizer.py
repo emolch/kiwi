@@ -317,6 +317,7 @@ class SeismosizerProcess(threading.Thread):
                 try:
                     if self.the_end_has_come: break
                     cmd = self.commands.get_nowait()
+                    
                     for answer in self._do(cmd):
                         self.answers.put(answer)
                 
@@ -336,7 +337,6 @@ class SeismosizerProcess(threading.Thread):
         '''Put command to minimizer and return the results'''
                
         answer = None
-            
         lines = command.strip().splitlines()
         
         iblock = 0
@@ -346,28 +346,26 @@ class SeismosizerProcess(threading.Thread):
         
             for line in block:
                 self.to_p.write(line+"\n")
-                
             self.to_p.flush()
             
             answer = ''
             for line in block:
                 retval = self.from_p.readline().rstrip()
                 
-                
                 if retval.endswith('nok'):
                     yield SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
                                 (config.seismosizer_prog, self.host, self.tid, command), '' )
                                 
-                if retval.endswith('nok >'):
+                elif retval.endswith('nok >'):
                     error_str = self.from_p.readline().rstrip()
                     yield SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
                                 (config.seismosizer_prog, self.host, self.tid, command), error_str )
                     
-                if retval.endswith('ok >'):
+                elif retval.endswith('ok >'):
                     answer = self.from_p.readline().rstrip()
                     yield answer
                 
-                if retval.endswith('ok'):
+                elif retval.endswith('ok'):
                     yield ''
             
             iblock += 1
@@ -691,9 +689,10 @@ class Seismosizer(SeismosizerBase):
         failings = []
         for isource, source in enumerate(sources):
             try:
-                results_iterator.next() # skip output from set_source()
+                results_set_source = results_iterator.next() # skip output from set_source()
                 results = results_iterator.next()
-                
+                if isinstance(results_set_source, SeismosizersReturnedErrors):
+                    raise results_set_source
                 if isinstance(results, SeismosizersReturnedErrors):
                     raise results
                 
@@ -770,7 +769,6 @@ class Seismosizer(SeismosizerBase):
                 dist_delta = (dist_range[1]-dist_range[0])/len(self)
                 if method == '123123':
                     for idist, irec in enumerate(num.argsort(distances)):
-                        print irec+1, idist % len(self)
                         self._set_receiver_process(irec+1, idist % len(self))
                         
                 else:
