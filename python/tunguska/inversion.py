@@ -15,6 +15,7 @@ import shutil
 import os
 import sys
 import re
+import math
 import datetime, time
 import numpy as num
 from scipy.optimize import fmin_l_bfgs_b
@@ -26,20 +27,6 @@ from subprocess import call
 import subprocess
 
 from os.path import join as pjoin
-
-def unindent(s):
-    lines = s.splitlines()
-    if lines and not lines[0].strip(): lines.pop(0)
-    if lines and not lines[-1].strip(): lines.pop()
-    minindent = min([ len(line) - len(line.lstrip()) for line in lines if line.strip() ])
-    eat = ' '*minindent
-    outlines = []
-    for line in lines:
-        if line.startswith(eat):
-            outlines.append(line[minindent:])
-        else:
-            outlines.append(line)
-    return '\n'.join(outlines)
 
 def backticks(command):
     return subprocess.Popen(command, stdout=subprocess.PIPE).communicate()[0]
@@ -307,6 +294,9 @@ class Step:
         seis.set_misfit_method(conf['inner_norm'])
         
     def post_work(self, stop_seismosizer=True):
+        
+        self.make_alternative_stats()
+
         if stop_seismosizer:
             self.seismosizer.close()
         
@@ -321,6 +311,24 @@ class Step:
         
         logging.info('Done with work on step %s' % self.stepname)
         
+    def make_alternative_stats(self):
+        oc = self.out_config
+        c = self.out_config.__dict__
+        
+        if 'moment_stats' in c:
+            oc.magnitude_stats = oc.moment_stats.converted('magnitude', moment_tensor.moment_to_magnitude)
+            
+        if 'north_shift_stats' and 'east_shift_stats' in c:
+            
+            rlat, rlon, rtime = self.seismosizer.source_location
+            cnorth, ceast =  oc.north_shift_stats.best, oc.east_shift_stats.best
+            clat, clon = orthodrome.ne_to_latlon( rlat, rlon, cnorth, ceast )
+            
+            approx_lat = lambda north: clat + (north-cnorth) * 180. / (config.earthradius*math.pi)
+            approx_lon = lambda east: clon + (east-ceast) * 180. / (config.earthradius*math.pi*math.cos(clat*math.pi/180.))
+            
+            oc.latitude_stats = oc.north_shift_stats.converted( 'latitude', approx_lat )
+            oc.longitude_stats = oc.east_shift_stats.converted( 'longitude', approx_lon )
 
     def snapshot(self, source, ident):
         

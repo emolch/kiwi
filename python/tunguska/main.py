@@ -1,5 +1,5 @@
 from optparse import OptionParser
-import logging, os, sys, shutil, re
+import logging, os, sys, shutil, re, time
 
 from Cheetah.Template import Template
 
@@ -67,7 +67,8 @@ def kiwi_main(steps):
         data = {}
         for step in steps: 
             data[step.stepname] = step
-            
+        data['posted'] = time.time()
+        
         report_dir = 'report'
         templates_dir = 'report_templates'
         template_filenames = []

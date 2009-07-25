@@ -21,6 +21,21 @@ def kiwi_aux_dir():
 def kiwi_aux_file(*p):
     return pjoin(kiwi_aux_dir(), *p)
 
+def unindent(s):
+    lines = s.splitlines()
+    if lines and not lines[0].strip(): lines.pop(0)
+    if lines and not lines[-1].strip(): lines.pop()
+    minindent = min([ len(line) - len(line.lstrip()) for line in lines if line.strip() ])
+    eat = ' '*minindent
+    outlines = []
+    for line in lines:
+        if line.startswith(eat):
+            outlines.append(line[minindent:])
+        else:
+            outlines.append(line)
+    return '\n'.join(outlines)
+
+
 def gform( number, significant_digits=3 ):
     '''Pretty print floating point numbers.
     

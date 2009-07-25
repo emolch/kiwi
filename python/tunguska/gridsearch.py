@@ -1,6 +1,7 @@
 import config
 import plotting
 import seismosizer
+import util
 
 import re, copy
 import progressbar 
@@ -72,17 +73,17 @@ class MisfitGridStats:
         return '%(paramname)s = %(mean)g +- %(std)g' % self.__dict__
     
     def as_xml(self):
-        tmpl = unindent('''
+        tmpl = util.unindent('''
         <parameter>
             <name>%s</name>
             <value>%e</value>
-            <confidenceInterval>
+            <confidenceinterval>
                 <interval>68</interval>
                 <low>%e</low>
                 <high>%e</high>
                 <low_unclear>%i</low_unclear>
                 <high_unclear>%i</high_unclear>
-            </confidenceInterval>
+            </confidenceinterval>
         </parameter>
         ''')
         return tmpl % (self.paramname.title(), self.best, 
