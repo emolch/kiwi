@@ -16,7 +16,7 @@ gfdb_info_prog = 'gfdb_info'
 gfdb_extract_prog = 'gfdb_extract'
 seismosizer_prog = 'minimizer'
 
-topo_dir = '/data/topo'
+topo_dir = '/bonus/topo'
 topo_img_file_1m = pjoin(topo_dir,'topo_11.1.img')
 topo_grd_file_5m = pjoin(topo_dir,'ETOPO1_Ice_g_gmt4_downsampled_5m.grd')
 topocpt_sealand = pjoin(topo_dir, 'light_topo_continuous.cpt')
@@ -123,6 +123,7 @@ misfogram_plot_2d_gmtpy_config = dict(
     symbols_SGW = [ symbol_best_result, '-Sc -W1p/black', ],
     zlabel = 'Misfit',
     misfit_cpt = 'ocean',
+    zlabeloffset = 1.5*gmtpy.cm,
 )
 
 histogram_plot_1d_config = dict(
@@ -176,6 +177,21 @@ rupture_plot_config = dict(
     width = pw,
     height = pw/gmtpy.golden_ratio,
     margins = (mw,mw,mw/gmtpy.golden_ratio,mw/gmtpy.golden_ratio),
+    xlabel = 'Distance along Strike',
+    xfunit = 'km',
+    xexp = 3,
+    xexpand = 0.05,
+    xmode = 'min-max',
+    xapproxticks = 5,
+    ylabel = 'Distance down Dip',
+    yfunit = 'km',
+    yexp = 3,
+    yexpand = 0.05,
+    ymode = 'min-max',
+    yapproxticks = 5,
+    zsnap = True,
+    zlabel = 'Time',
+    zunit = 's',
 )
 
 rupture_vis_config = dict(

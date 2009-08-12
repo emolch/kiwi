@@ -34,9 +34,10 @@ class Source:
         if sourceparams is None:
             sourceparams = {}
             
-        
-        
         self.update( sourceparams )
+    
+    def clone(self):
+        return copy.deepcopy(self)
     
     def sourcetype(self):
         return self._sourcetype

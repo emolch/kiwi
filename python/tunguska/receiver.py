@@ -45,6 +45,7 @@ class Receiver:
         self.syn_seismograms        = [None]*len(self.components)
         self.ref_spectra            = [None]*len(self.components)
         self.syn_spectra            = [None]*len(self.components)
+        self.comp_ind = dict( [ (c,i) for (i,c) in enumerate(self.components) ] )
        
     def set_distazi(self, distance_deg, distance_m, azimuth):
         # should only be called by Seismosizer
@@ -85,6 +86,16 @@ class Receiver:
                                            'channel': channel }
                                            
                     pymseed.store_traces([trace], fn)
+
+    def get_misfit(self, component):
+        return self.misfits[self.comp_ind[component]]
+    
+    def get_misfit_norm_factor(self, component):
+        return self.misfit_norm_factors[self.comp_ind[component]]
+
+    def get_misfit_and_norm_factor(self, component):
+        i = self.comp_ind[component]
+        return self.misfits[i], self.misfit_norm_factors[i]
 
 def load_table( filename, components=None ):
     receivers = []

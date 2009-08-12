@@ -207,8 +207,9 @@ def gen_dweights( seis, base_source, datadir,
     means /= num.mean(means)
     dweights = num.where(means>0., 1./means, 0.)
     # reset reference seismograms
-    ref_seismogram_stem     = pjoin(datadir, ref_seismogram_stem)
-    seis.set_ref_seismograms( ref_seismogram_stem, ref_seismogram_format )
+    if ref_seismogram_stem is not None:
+        ref_seismogram_stem     = pjoin(datadir, ref_seismogram_stem)
+        seis.set_ref_seismograms( ref_seismogram_stem, ref_seismogram_format )
     
     return dweights
     

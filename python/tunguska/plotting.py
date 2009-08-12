@@ -8,6 +8,7 @@ import progressbar
 import math
 from os.path import join as pjoin
 import orthodrome
+from moment_tensor import moment_to_magnitude
 
 def ra(a):
     return a.min(), a.max()
@@ -63,12 +64,16 @@ def pdfjoin(files, outfile):
     cmd.extend(files)
     subprocess.call(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
-def misfit_plot_1d( data, filename, conf_overrides ):
+def misfit_plot_1d( data, filename, conf_overrides, apply_moment_to_magnitude_hack=False ):
     conf = dict(**config.misfit_plot_1d_config)
-    conf.update( conf_overrides )        
+    conf.update( conf_overrides )
+    data = list(data)
+    if apply_moment_to_magnitude_hack:
+        moment_to_magnitude_hack( conf, data, 'x')
+
     autoplot_gmtpy( data, filename, **conf )
                     
-def histogram_plot_1d( edges, hist, filename, conf_overrides ):
+def histogram_plot_1d( edges, hist, filename, conf_overrides, apply_moment_to_magnitude_hack=False ):
     
     conf = dict(**config.histogram_plot_1d_config)
     conf.update( conf_overrides )
@@ -83,8 +88,12 @@ def histogram_plot_1d( edges, hist, filename, conf_overrides ):
     ydata[1::4] = hist
     ydata[2::4] = hist
     ydata[3::4] = 0.
-    
-    autoplot_gmtpy( [(xdata,ydata)], filename, **conf )
+   
+    data = [(xdata,ydata)]
+    if apply_moment_to_magnitude_hack:
+        moment_to_magnitude_hack( conf, data, 'x')
+
+    autoplot_gmtpy( data, filename, **conf )
     
 def seismogram_plot( data_by_component, filename, conf_overrides, are_spectra=False ):
     
@@ -598,7 +607,7 @@ def draw_rupture(gmt, widget, source_infos, axes, view='rupture-plane', source_l
     gmt.psxy( in_rows=[nucleation_point], *(symbol_nucleation_point+rxyj))
     return scaler, cptfile
     
-def rupture_plot(filename, source_infos, conf_overrides=None):
+def rupture_plot(filename, source_infos, conf_overrides=None, gmtconfig=None):
     conf = dict(**config.rupture_plot_config)
     if conf_overrides is not None:
         conf.update( conf_overrides )
@@ -606,23 +615,26 @@ def rupture_plot(filename, source_infos, conf_overrides=None):
     h = conf.pop('height')
     margins = conf.pop('margins')
     
-    gmt = gmtpy.GMT( config={ 'LABEL_FONT_SIZE': '12p',
-                              'PAPER_MEDIA':'Custom_%ix%i' % (w,h), } ) 
+    if gmtconfig is None:
+        gmtconfig = {'LABEL_FONT_SIZE': '12p'}
+    
+    gmtconfig['PAPER_MEDIA'] = 'Custom_%ix%i' % (w,h)
+    
+    gmt = gmtpy.GMT( config=gmtconfig ) 
     
     layout = gmt.default_layout(with_palette=True)
+    layout.set_fixed_margins(*margins)
+
     widget = layout.get_widget().get_widget(0,0)
     palette_widget = layout.get_widget().get_widget(2,0)
     
-    xax = gmtpy.Ax(label='Distance along Strike', scaled_unit='km', scaled_unit_factor=0.001, space=0.05, mode='min-max')
-    yax = gmtpy.Ax(label='Distance down Dip', scaled_unit='km', scaled_unit_factor=0.001, space=0.05, mode='min-max')
-    zax = gmtpy.Ax(snap=True, label='Time', unit='s')
-    
+    xax, yax, zax = [ gmtpy_ax_from_autoplot_conf(conf,x) for x in ('x','y','z') ]    
     widget['J'] = '-JX%(width)gp/-%(height)gp'
     
     try:
         scaler, cptfile = draw_rupture(gmt, widget, source_infos, axes=(xax,yax,zax))
         gmt.psbasemap( *(widget.JXY() + scaler.RB(ax_projection=True)) )
-        gmtpy.nice_palette( gmt, palette_widget, scaler, cptfile )
+        gmtpy.nice_palette( gmt, palette_widget, scaler, cptfile, zlabeloffset=1.5*gmtpy.cm )
     except NoOutlineFound:
         scaler = gmtpy.ScaleGuru([([0],[0])], axes=(xax,yax))
         gmt.pstext( in_rows=[(0,0,12,0,0,'MC','No rupture data!')],  *(scaler.R() + widget.XYJ()) )
@@ -651,22 +663,50 @@ def to_01(x):
     if xs == 0.: xs = 1
     return (x-xo)/xs, xo, xs
     
-def misfogram_plot_2d_gmtpy(data, filename, conf_overrides ):
+def moment_to_magnitude_hack( conf, data, xy ):
+    icomp = {'x':0,'y':1}[xy]
+
+    if conf[xy+'label'].lower() == 'moment':
+        for i,dset in enumerate(data):
+            data[i] = list(dset)
+            data[i][icomp] = moment_to_magnitude(num.asarray(dset[icomp]))
+            
+        conf[xy+'label'] = 'Magnitude'
+        if xy+'unit' in conf: del conf[xy+'unit']
+        if xy+'inc' in conf:  del conf[xy+'inc']
+        if xy+'limits' in conf:
+            conf[xy+'limits'] = [ moment_to_magnitude(x) for x in conf[xy+'limits'] ]
+
+def misfogram_plot_2d_gmtpy(data, filename, conf_overrides, apply_moment_to_magnitude_hack=False):
     
     conf = dict(**config.misfogram_plot_2d_gmtpy_config)
     if conf_overrides is not None:
         conf.update( conf_overrides )
         
+    if apply_moment_to_magnitude_hack:
+        data = list(data)
+        moment_to_magnitude_hack( conf, data, 'x')
+        moment_to_magnitude_hack( conf, data, 'y')            
+                
     w = conf.pop('width')
     h = conf.pop('height')
     margins = conf.pop('margins')
     symbols_SGW = conf.pop('symbols_SGW')
     misfit_cpt = conf.pop('misfit_cpt')
+    zlabeloffset = conf.pop('zlabeloffset')
     
-    gmt = gmtpy.GMT( config={ 'LABEL_FONT_SIZE': '12p',
-                              'PAPER_MEDIA':'Custom_%ix%i' % (w,h), } ) 
+    gmtconfig = {}
+    for k in conf.keys():
+        if k.upper() == k:
+            gmtconfig[k] = conf[k]
+    
+    gmtconfig['PAPER_MEDIA'] = 'Custom_%ix%i' % (w,h)
+    
+    gmt = gmtpy.GMT( config=gmtconfig ) 
     
     layout = gmt.default_layout(with_palette=True)
+    layout.set_fixed_margins(*margins)
+
     widget = layout.get_widget().get_widget(0,0)
     palette_widget = layout.get_widget().get_widget(2,0)
     
@@ -684,7 +724,6 @@ def misfogram_plot_2d_gmtpy(data, filename, conf_overrides ):
     
     r = scaler.R()
     rxyj = scaler.R() + widget.JXY()
-    gmt.psbasemap( *(widget.JXY() + scaler.RB(ax_projection=True)) )
     x,y,z = data[0]
     x, xo, xs = to_01(x)
     y, yo, ys = to_01(y)
@@ -696,9 +735,11 @@ def misfogram_plot_2d_gmtpy(data, filename, conf_overrides ):
     gmt.makecpt( I=True, C=misfit_cpt, Z=True, out_filename=cptfile, *scaler.T())
     gmt.grdimage( grdfile, C=cptfile, *rxyj)
     gmt.grdcontour( grdfile, W='1p', C=cptfile, *rxyj )
-    gmtpy.nice_palette( gmt, palette_widget, scaler, cptfile )
+    gmtpy.nice_palette( gmt, palette_widget, scaler, cptfile, zlabeloffset=zlabeloffset)
     gmt.psxy( in_columns=data[2], *(symbols_SGW[1].split()+rxyj) )
     gmt.psxy( in_columns=data[1], *(symbols_SGW[0].split()+rxyj) )
+    gmt.psbasemap( *(widget.JXY() + scaler.RB(ax_projection=True)) )
+
     gmt.save(filename)
     
 def autoplot_gmtpy(data, filename, **conf ):
@@ -708,10 +749,18 @@ def autoplot_gmtpy(data, filename, **conf ):
     margins = conf.pop('margins')
     symbols_SGW = conf.pop('symbols_SGW')
     
-    gmt = gmtpy.GMT( config={ 'LABEL_FONT_SIZE': '12p',
-                              'PAPER_MEDIA':'Custom_%ix%i' % (w,h), } ) 
+    gmtconfig = {}
+    for k in conf.keys():
+        if k.upper() == k:
+            gmtconfig[k] = conf[k]
+    
+    gmtconfig['PAPER_MEDIA'] = 'Custom_%ix%i' % (w,h)
+    
+    gmt = gmtpy.GMT( config=gmtconfig ) 
     
     layout = gmt.default_layout()
+    layout.set_fixed_margins(*margins)
+
     widget = layout.get_widget()
     
     axes = [ gmtpy_ax_from_autoplot_conf(conf,x) for x in ('x','y') ]

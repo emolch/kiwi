@@ -117,7 +117,10 @@ class MisfitGrid:
             self.ref_source = copy.deepcopy(base_source)
         
         if param_values is not None:
-            self.param_values = param_values
+            self.param_values = []
+            for param, gvalues in param_values:
+                self.param_values.append((param, num.asarray(gvalues)))
+            
         else:
             self.param_values = []
             for param, mi, ma, inc in param_ranges:
@@ -250,7 +253,7 @@ class MisfitGrid:
         
 
         
-    def plot(self, dirname, nsets, source_model_infos=None):
+    def plot(self, dirname, nsets=1, source_model_infos=None, conf_overrides=None):
         
         best_source = self.best_source
         bootstrap_sources = self.bootstrap_sources
@@ -273,12 +276,14 @@ class MisfitGrid:
             
             conf = dict( xlabel = param.title(),
                          xunit = self.base_source.sourceinfo(param).unit )
+            if conf_overrides:
+                conf.update(conf_overrides)
             
             plotting.km_hack(conf)
             fn = 'misfit-%s.pdf' % param
             plotting.misfit_plot_1d( [(xdata,ydata)],
                                      pjoin(dirname, fn),
-                                     conf )
+                                     conf, apply_moment_to_magnitude_hack=True )
             plot_files.append(fn)
             
             
@@ -296,12 +301,14 @@ class MisfitGrid:
             
             conf = dict( xlabel = param.title(),
                          xunit = self.base_source.sourceinfo(param).unit)
+            if conf_overrides:
+                conf.update(conf_overrides)
             
             plotting.km_hack(conf)
             fn = 'histogram-%s.pdf' % param
             plotting.histogram_plot_1d( edges, hist, 
                                         pjoin(dirname, fn),
-                                        conf )
+                                        conf, apply_moment_to_magnitude_hack=True)
             
             plot_files.append( fn )
             
@@ -333,11 +340,15 @@ class MisfitGrid:
                          xunit = self.base_source.sourceinfo(param).unit,
                          ylimits = (mini, min(maxi,1.)) )
             
+            if conf_overrides:
+                conf.update(conf_overrides)
+
+            
             plotting.km_hack(conf)
             fn = 'min-misfit-%s.pdf' % param
             plotting.misfit_plot_1d( [param_min_misfits[param]],
                                      pjoin(dirname, fn),
-                                     conf )
+                                     conf,apply_moment_to_magnitude_hack=True )
             plot_files.append(fn)
             
             fn_table = 'min-misfit-%s.table' % param
@@ -398,6 +409,12 @@ class MisfitGrid:
                              zsnap = True
                          )
                 
+                if conf_overrides:
+                    for k in conf_overrides:
+                        if not k.endswith('snap'):
+                            conf[k] = conf_overrides[k]
+                    
+                
                 best_loc = (num.array([ best_source[xparam]]), num.array([best_source[yparam]]))
                 plotting.km_hack(conf)
                 plotting.nukl_hack(conf)
@@ -405,7 +422,7 @@ class MisfitGrid:
                 fn = 'misfogram-%s-%s.pdf' % (xparam, yparam)
                 plotting.misfogram_plot_2d_gmtpy( [(ax, ay, az), best_loc, bootstrap_data],
                                         pjoin(dirname, fn),
-                                        conf )
+                                        conf, apply_moment_to_magnitude_hack=True )
                 plot_files.append(fn)
         
         #
