@@ -559,13 +559,15 @@ def draw_rupture(gmt, widget, source_infos, axes, view='rupture-plane', source_l
     elif view == 'from-top':
         lats, lons = orthodrome.ne_to_latlon(source_loc[0],source_loc[1], eigrid_valid_d[0],eigrid_valid_d[1])
         rupdepth = (lons,lats,depth1)
-        
-    nucl = source_infos['nucleation-point'][1][0]
-    if view == 'rupture-plane':
-        nucleation_point = (nucl[3],nucl[4])
-    elif view == 'from-top':
-        lat, lon = orthodrome.ne_to_latlon(source_loc[0],source_loc[1], nucl[0],nucl[1])
-        nucleation_point = (lon,lat)
+    
+    nucleation_point = None
+    if 'nucleation-point' in source_infos:
+        nucl = source_infos['nucleation-point'][1][0]
+        if view == 'rupture-plane':
+            nucleation_point = (nucl[3],nucl[4])
+        elif view == 'from-top':
+            lat, lon = orthodrome.ne_to_latlon(source_loc[0],source_loc[1], nucl[0],nucl[1])
+            nucleation_point = (lon,lat)
         
     zax = gmtpy.Ax(snap=True, label='Time', unit='s')
 
@@ -604,7 +606,9 @@ def draw_rupture(gmt, widget, source_infos, axes, view='rupture-plane', source_l
         gmt.grdcontour( grdfile, W='1p,%s' % dark_color, G='d5c', A='%g+g%s+kwhite+us+o' % (scaler.get_params()['zinc'], dark_color), *rxyj )
         gmt.psclip( C=True, *widget.XY() )
         gmt.psxy( in_columns=outline,  L=True, W='1p,%s' % dark_color, *rxyj )
-    gmt.psxy( in_rows=[nucleation_point], *(symbol_nucleation_point+rxyj))
+        
+    if nucleation_point:
+        gmt.psxy( in_rows=[nucleation_point], *(symbol_nucleation_point+rxyj))
     return scaler, cptfile
     
 def rupture_plot(filename, source_infos, conf_overrides=None, gmtconfig=None):
