@@ -452,7 +452,11 @@ module receiver
         if (self%enabled) then 
             call get_component_ids( self, iver, ihor1, ihor2 )
             if (iver /= 0 .and. ihor1 /= 0 .and. ihor2 /= 0) then
-                val = probes_max_vecnorm_d2( self%syn_probes(iver), self%syn_probes(ihor1), self%syn_probes(ihor2) )
+                val = probes_max_vecnorm_d2_3( self%syn_probes(iver), self%syn_probes(ihor1), self%syn_probes(ihor2) )
+            else if (ihor1 /= 0 .and. ihor2 /= 0) then
+                val = probes_max_vecnorm_d2_2( self%syn_probes(ihor1), self%syn_probes(ihor2) )
+            else if (iver /= 0) then
+                val = probes_max_vecnorm_d2_1( self%syn_probes(iver) )
             end if
         end if
     end subroutine

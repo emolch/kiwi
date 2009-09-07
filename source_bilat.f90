@@ -469,7 +469,8 @@ module source_bilat
         integer :: unit, ix, iy
         real    :: north, east, depth, length, width, length_a, length_b
         real :: l1,l2,l3, w1,w2
-        
+        real, dimension(3)    :: point_rc
+
         north = psm%params(2)
         east = psm%params(3)
         depth = psm%params(4)
@@ -496,13 +497,13 @@ module source_bilat
         write (unit,*) north, east, depth
         write (unit,*)
         write (unit,"(a)") "outline"
-        write (unit,*) matmul(psm%rotmat_rup,(/l2,w1,0./))+(/north,east,depth/)
-        write (unit,*) matmul(psm%rotmat_rup,(/l2,w2,0./))+(/north,east,depth/)
-        write (unit,*) matmul(psm%rotmat_rup,(/l3,w2,0./))+(/north,east,depth/)
-        write (unit,*) matmul(psm%rotmat_rup,(/l3,w1,0./))+(/north,east,depth/)
-        write (unit,*) matmul(psm%rotmat_rup,(/l1,w1,0./))+(/north,east,depth/)
-        write (unit,*) matmul(psm%rotmat_rup,(/l1,w2,0./))+(/north,east,depth/)
-        write (unit,*) matmul(psm%rotmat_rup,(/l2,w2,0./))+(/north,east,depth/)
+        write (unit,*) matmul(psm%rotmat_rup,(/l2,w1,0./))+(/north,east,depth/), l2,w1
+        write (unit,*) matmul(psm%rotmat_rup,(/l2,w2,0./))+(/north,east,depth/), l2,w2
+        write (unit,*) matmul(psm%rotmat_rup,(/l3,w2,0./))+(/north,east,depth/), l3,w2
+        write (unit,*) matmul(psm%rotmat_rup,(/l3,w1,0./))+(/north,east,depth/), l3,w1
+        write (unit,*) matmul(psm%rotmat_rup,(/l1,w1,0./))+(/north,east,depth/), l1,w1
+        write (unit,*) matmul(psm%rotmat_rup,(/l1,w2,0./))+(/north,east,depth/), l1,w2
+        write (unit,*) matmul(psm%rotmat_rup,(/l2,w2,0./))+(/north,east,depth/), l2,w2
         
         write (unit,*)
         write (unit,"(a)") "rupture"
@@ -537,7 +538,8 @@ module source_bilat
         write (unit,*) psm%cgrid%ndims(:)
         do iy=1,size(psm%cgrid%times,2)
             do ix=1,size(psm%cgrid%times,1)
-                write (unit,*) psm%cgrid%points(:,ix,iy), psm%cgrid%times(ix,iy)
+                point_rc(:) = psm_ned_to_rc( psm, psm%cgrid%points(:,ix,iy) )
+                write (unit,*) psm%cgrid%points(:,ix,iy), point_rc(1:2), psm%cgrid%times(ix,iy)
             end do
         end do
         write (unit,*) 
@@ -548,6 +550,20 @@ module source_bilat
     
     end subroutine
     
+    pure function psm_ned_to_rc( psm, point ) result(point_rc)
+        type(t_psm), intent(in)         :: psm
+        real, dimension(3), intent(in)  :: point
+        real, dimension(3)              :: point_rc
+        point_rc = matmul(transpose(psm%rotmat_rup),point- psm%params(2:4) )
+    end function
+    
+    pure function psm_rc_to_ned( psm, point_rc ) result(point)
+        type(t_psm), intent(in)         :: psm
+        real, dimension(3), intent(in)  :: point_rc
+        real, dimension(3)              :: point
+        point = matmul(psm%rotmat_rup, point_rc) + psm%params(2:4)
+    end function
+
     function polar( xyz )
         real, dimension(3), intent(in)  :: xyz
         real, dimension(3) :: polar

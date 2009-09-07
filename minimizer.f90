@@ -1205,7 +1205,7 @@ module minimizer_wrappers
         end if
         
         do idist=1,size(distances)
-            write (unit,*) r2d(distances(idist)), distances(idist)*earthradius, r2d(azimuths(idist))
+            write (unit,*) r2d(distances(idist)/earthradius), distances(idist), r2d(azimuths(idist))
         end do
         
         close( unit ) 

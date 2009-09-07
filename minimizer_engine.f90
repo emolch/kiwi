@@ -1103,7 +1103,8 @@ module minimizer_engine
         call resize(azimuths,1,size(receivers))
         
         do ireceiver=1,size(receivers)
-            call azidist(psm%origin,receivers(ireceiver)%origin, azimuths(ireceiver), distances(ireceiver))
+            azimuths(ireceiver) = azimuth(psm%origin,receivers(ireceiver)%origin)
+            distances(ireceiver) = distance_accurate50m(psm%origin,receivers(ireceiver)%origin)
         end do
     
     end subroutine
