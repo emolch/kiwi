@@ -16,9 +16,9 @@ import progressbar
 import config
 import phase
 
-runners_sleep = 0.0001
+runners_sleep = 0.001
 pollers_sleep = 0.0001
-
+batch_block_size = 20
 
 def load_table(fn):
     f = open(fn, 'r')
@@ -29,6 +29,12 @@ def load_table(fn):
     y = v[1::2].copy()
     return (x,y)
 
+def getsigdict():
+    r = {}
+    for name in dir(signal):
+        if name.startswith("SIG"):
+           r[getattr(signal, name)] = name
+    return r
 
 class SeismosizerBase:
     '''Controls a group of seismosizer processes'''
@@ -90,11 +96,19 @@ class SeismosizerBase:
         shutil.rmtree(self.tempdir)
         
     def sighandler(self, *args):
+        logging.warn('Caught signal %s, license to kill' % getsigdict()[args[0]])
         self.close()
+        self.terminate()
+        
     
     def close(self):
         for p in self.processes:
             p.stop()
+            
+    def terminate(self):
+        logging.warn( 'I like terminate!' )
+        for p in self.processes:
+            p.terminate()
             
     def __len__(self):
         return len(self.processes)
@@ -160,18 +174,19 @@ class SeismosizerBase:
                 
             except NonePending:
                 runners.append(p)
+                time.sleep(pollers_sleep)
             
             except SeismosizerReturnedError, error:
                 errors[p.tid] = error.args[1]
             
             except ThreadIsDead:
                 logging.warn('Lost seismosizer process %s' % p.tid)
+                self.terminate()
                 fatal = True
                 
-            time.sleep(pollers_sleep)
-            
         if fatal:
-            sys.exit('shit happens!')
+            self.close()
+            sys.exit('Shit happens.')
        
         if errors:
             raise SeismosizersReturnedErrors(errors)
@@ -220,19 +235,20 @@ class SeismosizerBase:
                     
                 except NonePending:
                     runners_current.append(p)
+                    time.sleep(pollers_sleep)
                 
                 except SeismosizerReturnedError, error:
                     errors[p.tid] = error.args[1]
                 
                 except ThreadIsDead:
                     logging.warn('Lost seismosizer process %s' % p.tid)
+                    self.terminate()
                     fatal = True
                     
-                time.sleep(pollers_sleep)
                 
             if fatal:
-                sys.exit('shit happens!')
-            
+                raise SeismosizersDied()
+                
             if errors:
                 yield SeismosizersReturnedErrors(errors)
             else:
@@ -265,6 +281,12 @@ class NonePending(Exception):
 class ThreadIsDead(Exception):
     pass
 
+class SeismosizersDied(Exception):
+    pass
+
+class SeismosizerInsane(Exception):
+    pass
+
 class SeismosizerProcess(threading.Thread):
     '''Controls a single seismosizer process in a thread.'''
     
@@ -295,9 +317,11 @@ class SeismosizerProcess(threading.Thread):
             sys.exit("cannot start %s on %s" % (config.seismosizer_prog, self.host))
             
         self.commands = Queue.Queue()
-        self.answers = Queue.Queue()
+        self.answers = Queue.Queue(maxsize=batch_block_size*3)
         self.the_end_has_come = False
+        self.have_sent_term_signal = False
         self.start()
+        
   
     def __del__(self):
         self.stop()
@@ -305,9 +329,21 @@ class SeismosizerProcess(threading.Thread):
         shutil.rmtree(self.tempdir)
             
     def stop(self):
-        self.the_end_has_come = True
-            
+       self.the_end_has_come = True
+        
+        
+    def terminate(self):
+        self.stop()
+        if not self.have_sent_term_signal:
+            try:
+                os.kill(self.p.pid, signal.SIGTERM)
+                logging.warn( 'Sent SIGTERM to seismosizer %i, pid %i' % (self.tid, self.p.pid) )
+            except OSError, error:
+                logging.warn( error )
+            self.have_sent_term_signal = True
+        
     def run(self):
+        logging.debug('Starting seismosizer %i.' % self.tid)
         i = 0
         try:
             while True:
@@ -323,15 +359,18 @@ class SeismosizerProcess(threading.Thread):
                 
                 except Queue.Empty:
                     time.sleep(runners_sleep)
+                    
                 i += 1
                     
-        except SeismosizerDied, e:
+        except (IOError, SeismosizerDied, SeismosizerInsane), e:
             logging.warn( e )
+            self.the_end_has_come = True
         
         self.to_p.close()
         self.from_p.close()
         self.p.wait()
         
+        logging.debug('Seismosizer %i finished.' % self.tid)
                
     def _do(self, command):
         '''Put command to minimizer and return the results'''
@@ -340,7 +379,7 @@ class SeismosizerProcess(threading.Thread):
         lines = command.strip().splitlines()
         
         iblock = 0
-        lblock = 10
+        lblock = batch_block_size
         while iblock*lblock < len(lines):
             block = lines[iblock*lblock:(iblock+1)*lblock]
         
@@ -351,27 +390,43 @@ class SeismosizerProcess(threading.Thread):
             
             answer = ''
             for line in block:
-                                
                 retval = self.from_p.readline().rstrip()
+                self.check_end()
                 
                 if retval.endswith('nok'):
                     yield SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
-                                (config.seismosizer_prog, self.host, self.tid, command), '' )
+                                (config.seismosizer_prog, self.host, self.tid, line), '' )
                                 
                 elif retval.endswith('nok >'):
                     error_str = self.from_p.readline().rstrip()
+                    self.check_end()
                     yield SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
-                                (config.seismosizer_prog, self.host, self.tid, command), error_str )
+                                (config.seismosizer_prog, self.host, self.tid, line), error_str )
                     
                 elif retval.endswith('ok >'):
                     answer = self.from_p.readline().rstrip()
+                    self.check_end()
                     yield answer
                 
                 elif retval.endswith('ok'):
                     yield ''
-            
+                    
+                else:
+                    raise SeismosizerInsane('Seismosizer %i did not answer correctly.' % self.tid)
+                                
             iblock += 1
-            
+    
+    def check_end(self):
+        if self.the_end_has_come: 
+            mess = ["Do you smell that? I think it's time to leave.",
+                    "Damn, I'm so tired. I fuckin' hate to work.",
+                    "Yeah, let's give up.",
+                    "Your so right, let's blow this whole crap up and play something less boring.",
+                    "God, this stuff sucks so much... Let's go.",
+                    "Ah, aah, I'm hurt! I can no more." ]
+                    
+            raise SeismosizerInsane(mess[self.tid%len(mess)])
+        
     def push(self, cmd):
         '''Enqueue command for seismosizer.'''
         self.commands.put(cmd)
@@ -694,11 +749,8 @@ class Seismosizer(SeismosizerBase):
                 results_set_source = results_iterator.next() # skip output from set_source()
                 results = results_iterator.next()
                 
-                if isinstance(results_set_source, SeismosizersReturnedErrors):
-                    raise results_set_source
-                
-                if isinstance(results, SeismosizersReturnedErrors):
-                    raise results
+                if isinstance(results_set_source, Exception): raise results_set_source
+                if isinstance(results, Exception): raise results
                 
                 self._gather_misfits_into_receivers(results)
                 for ireceiver, receiver in enumerate(self.receivers):
@@ -709,6 +761,10 @@ class Seismosizer(SeismosizerBase):
                         
             except SeismosizersReturnedErrors:
                 failings.append(isource)
+                
+            except SeismosizersDied:
+                self.close()
+                sys.exit('Indeed - shit happens.')
             
             if show_progress: pbar.update(isource+1)
                         

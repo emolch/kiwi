@@ -405,7 +405,7 @@ class MisfitGrid:
                              xunit = self.base_source.sourceinfo(xparam).unit,
                              ylabel = yparam.title(),
                              yunit = self.base_source.sourceinfo(yparam).unit,
-                             zlimits = (az.min(),1.),
+                             zlimits = (az.min(),min(1.,az.max())),
                              zsnap = True
                          )
                 
