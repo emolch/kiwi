@@ -9,5 +9,10 @@ CFLAGS += $(CFAST)
 INCHDF = -I/bonus/hdf5-$(FORTRANC)/include
 LIBHDF = -L/bonus/hdf5-$(FORTRANC)/lib -lhdf5_fortran -lhdf5 -lz
 
+# Uncomment to disable SAC IO support to not depend on libsacio,
+# which currently is not available on 64 bit systems:
+#
+# LIBSAC = -Ldummy_sacio -lsacio
+
 # Installation prefix
 # prefix = .
