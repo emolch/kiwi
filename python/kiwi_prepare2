@@ -1,0 +1,152 @@
+#!/usr/bin/env python
+
+#
+#     Copyright 2007 Sebastian Heimann
+#  
+#     Licensed under the Apache License, Version 2.0 (the "License");
+#     you may not use this file except in compliance with the License.
+#     You may obtain a copy of the License at
+#  
+#         http://www.apache.org/licenses/LICENSE-2.0
+#  
+#     Unless required by applicable law or agreed to in writing, software
+#     distributed under the License is distributed on an "AS IS" BASIS,
+#     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#     See the License for the specific language governing permissions and
+#     limitations under the License.
+# 
+
+import sys, os, subprocess, shutil, logging, tempfile, time, math
+import numpy as num
+import pymseed
+from os.path import join as pjoin
+
+pymseed.config.show_progress = False
+
+class Programs:
+    rdseed   = 'rdseed4.8'
+    evalresp = 'evalresp3.3'
+
+def ensure_dir(d):
+    if not os.path.isdir(d):
+        if os.path.exists(d):
+            sys.exit(d+' exists and is not a directory')
+        os.mkdir( d )
+
+def clean_dir(d):
+    if os.path.isdir(d):
+        shutil.rmtree(d)
+    
+    os.mkdir( d )
+
+def nextpow2(i):
+    return 2**int(math.ceil(math.log(i)/math.log(2.)))
+
+class SeedVolumeAccess:
+
+    def __init__(self, seedvolume):
+        self.seedvolume = seedvolume
+        self.tempdir = tempfile.mkdtemp("","SeedVolumeAccess-")
+        self._pile = None
+        self._unpack()
+
+    def __del__(self):
+        import shutil
+        #shutil.rmtree(self.tempdir)
+
+    def get_raw_traces(self):
+        return self.get_pile().all()
+
+    def get_displacement_traces(self):
+        traces = self.get_raw_traces()
+        displacements = []
+        for trace in traces:
+            data = trace.ydata
+            ndata = trace.ydata.size
+            ntrans = nextpow2(ndata*1.5)
+            print ntrans
+
+            data_pad = num.zeros(ntrans, dtype=num.float)
+            data_pad[:ndata]  = data
+            
+            deltaf = 1./(trace.deltat*ndata)
+            nfreqs= ntrans/2 + 1
+
+            transfer = self._get_transfer_function(trace, min_freq=0.0, max_freq=(ntrans-1)*deltaf, nfreqs=nfreqs)
+            assert transfer.size == nfreqs
+
+            fdata = num.fft.rfft(data_pad)
+            fdata *= transfer / ntrans
+            ddata = num.fft.irfft(fdata)
+            displacement = trace.copy()
+            displacement.data = ddata[:ndata]
+            displacements.append(displacement)\
+
+        return displacements
+
+    def _unpack(self):
+        input_fn = self.seedvolume
+        output_dir = self.tempdir
+
+        # seismograms:
+        rdseed_proc = subprocess.Popen([Programs.rdseed, '-f', input_fn, '-d', '-z', '3', '-o', '4', '-p', '-R', '-q', output_dir], 
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (out,err) = rdseed_proc.communicate()
+        logging.warn( 'rdseed: '+err )
+        
+        # event data:
+        rdseed_proc = subprocess.Popen([Programs.rdseed, '-f', input_fn, '-e', '-q', output_dir], 
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (out,err) = rdseed_proc.communicate()
+        logging.warn( 'rdseed: '+err )
+        
+        # station summary information:
+        rdseed_proc = subprocess.Popen([Programs.rdseed, '-f', input_fn, '-S', '-q', output_dir], 
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (out,err) = rdseed_proc.communicate()
+        logging.warn( 'rdseed: '+err )
+        
+        # station headers:
+        rdseed_proc = subprocess.Popen([Programs.rdseed, '-f', input_fn, '-s', '-q', output_dir], 
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
+        (out,err) = rdseed_proc.communicate()
+        fout = open(os.path.join(output_dir,'station_header_infos'),'w')
+        fout.write( out )
+        fout.close()
+        logging.warn( 'rdseed: '+err )
+
+    def get_pile(self):
+        if self._pile is None:
+            self._pile = pymseed.MSeedPile([ pjoin(self.tempdir, 'mini.seed') ] )
+        return self._pile
+
+    def _get_transfer_function(self, trace, unit='dis', min_freq=0.0, max_freq=1., nfreqs=101):
+        
+        network, station, location, channel = trace.nslc_id
+        tt = time.gmtime(trace.tmin)
+        time_of_day = time.strftime('%H:%M:%S', tt)
+        cwd = os.getcwd()
+        os.chdir(self.tempdir)
+        respfile = pjoin(self.tempdir, 'RESP.%s.%s.%s.%s' % (network, station, location, channel))
+        subprocess.call([str(x) for x in 
+            [Programs.evalresp, station, channel, tt[0], tt[7], min_freq, max_freq, nfreqs,
+                        '-f', respfile, '-u', unit, '-t', time_of_day, 
+                        '-n', network, '-l', location, '-r', 'cs', '-s', 'lin']])
+        os.chdir(cwd)
+
+        spectrum_fn = pjoin(self.tempdir, 'SPECTRA.%s.%s.%s.%s' % (network, station, location, channel))
+        tab = num.loadtxt(spectrum_fn, dtype=num.float).transpose()
+        transfer = num.zeros(tab[0].size, dtype=num.complex)
+        transfer.real = tab[1]
+        transfer.imag = tab[2]
+
+        return transfer
+
+input_filename = 'data.seed'
+
+out_dir = 'out'
+clean_dir(out_dir)
+
+sva = SeedVolumeAccess( input_filename)
+pymseed.save(sva.get_displacement_traces(), pjoin(out_dir, '%(network)s.%(station)s.%(location)s.%(channel)s.mseed'))
