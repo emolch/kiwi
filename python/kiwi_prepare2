@@ -16,18 +16,16 @@
 #     limitations under the License.
 # 
 
-import sys, os, subprocess, shutil, logging, tempfile, time, math
+import sys, os, subprocess, shutil, logging, tempfile, time, math, calendar
 import numpy as num
 import scipy.interpolate
 import pymseed
-import evalresp
 from os.path import join as pjoin
 
 pymseed.config.show_progress = False
 
 class Programs:
     rdseed   = 'rdseed4.8'
-    evalresp = 'evalresp3.3'
 
 def ensure_dir(d):
     if not os.path.isdir(d):
@@ -41,26 +39,12 @@ def clean_dir(d):
     
     os.mkdir( d )
 
-def nextpow2(i):
-    return 2**int(math.ceil(math.log(i)/math.log(2.)))
+class Event:
+    def __init__(self, lat, lon, time):
+        self.lat = lat
+        self.lon = lon
+        self.time = time
 
-def loadtab(fn):
-    f = open(fn,'r')
-    l = [ float(x) for x in f.read().split() ]
-    return num.array(l,dtype=num.float).reshape((len(l)/3,3)).transpose()
-
-def costaper(a,b,c,d, nfreqs, deltaf):
-    
-    def hi(x):
-        return max(0,min(math.ceil(x/deltaf),nfreqs))
-    
-    tap = num.zeros(nfreqs)
-    tap[hi(a):hi(b)] = 0.5 - 0.5*num.cos((deltaf*num.arange(hi(a),hi(b))-a)/(b-a)*num.pi)
-    tap[hi(b):hi(c)] = 1.
-    tap[hi(c):hi(d)] = 0.5 + 0.5*num.cos((deltaf*num.arange(hi(c),hi(d))-c)/(d-c)*num.pi)
-    
-    return tap
-    
 class SeedVolumeAccess:
 
     def __init__(self, seedvolume):
@@ -68,48 +52,45 @@ class SeedVolumeAccess:
         self.tempdir = tempfile.mkdtemp("","SeedVolumeAccess-")
         self._pile = None
         self._unpack()
+        self._event = None
 
     def __del__(self):
         import shutil
-        #shutil.rmtree(self.tempdir)
+        shutil.rmtree(self.tempdir)
 
-    def get_raw_traces(self):
-        return self.get_pile().all()
+    def iter_raw_traces(self):
+        return self.get_pile().iter_all()
 
-    def get_displacement_traces(self, tpad, freqlimits=None):
-        traces = self.get_raw_traces()
-        displacements = []
-        for trace in traces:
-            data = trace.ydata
-            ndata = trace.ydata.size
-            ntrans = nextpow2(ndata*1.2)
-            
-            data_pad = num.zeros(ntrans, dtype=num.float)
-            data_pad[:ndata]  = data
-            
-            deltaf = 1./(trace.deltat*ndata)
-            nfreqs= ntrans/2 + 1
-            transfer = num.zeros(nfreqs, dtype=num.complex)
-            
-            def hi(x):
-                return max(0,min(math.ceil(x/deltaf),nfreqs))
-            
-            a,b,c,d = freqlimits
-            
-            transfer[hi(a),hi(d)] = self._get_transfer_function_new(trace,
-                min_freq=hi(a)*deltaf, delta_freq=deltaf, nfreqs=hi(d)-hi(a))
-            
-            invtransfer = costaper(a,b,c,d, nfreqs, deltaf)/transfer
-            
-            fdata = num.fft.rfft(data_pad)
-            fdata *= invtransfer / ntrans
-            ddata = num.fft.irfft(fdata)
-            displacement = trace.copy()
-            displacement.data = ddata[:ndata]
-            displacements.append(displacement)
+    def iter_displacement_traces(self, tfade, freqlimits, deltat=None):
+        for trace in self.iter_raw_traces():
+            try:
+                if deltat is not None:
+                    trace.downsample_to(deltat)
+                
+                respfile = pjoin(self.tempdir, 'RESP.%s.%s.%s.%s' % trace.nslc_id)
 
-        return displacements
-
+                displacement = trace.make_displacement(respfile, tfade, freqlimits)
+                displacement.shift( - self.get_event().time )
+                displacement.ydata *= 1.0e09
+                
+                yield displacement
+            
+            except pymseed.TraceTooShort:
+                logging.warn('trace too short: %s' % trace)
+            
+            except pymseed.UnavailableDecimation:
+                logging.warn('cannot downsample: %s' % trace)
+                
+    def get_pile(self):
+        if self._pile is None:
+            self._pile = pymseed.MSeedPile([ pjoin(self.tempdir, 'mini.seed') ] )
+        return self._pile
+        
+    def get_event(self):
+        if not self._event:
+            self._event = self._get_events_from_file()[0]
+        return self._event
+        
     def _unpack(self):
         input_fn = self.seedvolume
         output_dir = self.tempdir
@@ -118,19 +99,19 @@ class SeedVolumeAccess:
         rdseed_proc = subprocess.Popen([Programs.rdseed, '-f', input_fn, '-d', '-z', '3', '-o', '4', '-p', '-R', '-q', output_dir], 
                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         (out,err) = rdseed_proc.communicate()
-        logging.warn( 'rdseed: '+err )
+        logging.info( 'rdseed: '+err )
         
         # event data:
         rdseed_proc = subprocess.Popen([Programs.rdseed, '-f', input_fn, '-e', '-q', output_dir], 
                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         (out,err) = rdseed_proc.communicate()
-        logging.warn( 'rdseed: '+err )
+        logging.info( 'rdseed: '+err )
         
         # station summary information:
         rdseed_proc = subprocess.Popen([Programs.rdseed, '-f', input_fn, '-S', '-q', output_dir], 
                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         (out,err) = rdseed_proc.communicate()
-        logging.warn( 'rdseed: '+err )
+        logging.info( 'rdseed: '+err )
         
         # station headers:
         rdseed_proc = subprocess.Popen([Programs.rdseed, '-f', input_fn, '-s', '-q', output_dir], 
@@ -140,68 +121,31 @@ class SeedVolumeAccess:
         fout = open(os.path.join(output_dir,'station_header_infos'),'w')
         fout.write( out )
         fout.close()
-        logging.warn( 'rdseed: '+err )
-
-    def get_pile(self):
-        if self._pile is None:
-            self._pile = pymseed.MSeedPile([ pjoin(self.tempdir, 'mini.seed') ] )
-        return self._pile
-
-    def _get_transfer_function(self, trace, unit='dis', min_freq=0.0, delta_freq=0.01, nfreqs=101):
+        logging.info( 'rdseed: '+err )
         
-        network, station, location, channel = trace.nslc_id
-        tt = time.gmtime(trace.tmin)
-        time_of_day = time.strftime('%H:%M:%S', tt)
-        cwd = os.getcwd()
-        os.chdir(self.tempdir)
-        respfile = pjoin(self.tempdir, 'RESP.%s.%s.%s.%s' % (network, station, location, channel))
-        max_freq = min_freq + (nfreqs-1)*delta_freq
-        subprocess.call([str(x) for x in 
-            [Programs.evalresp, station, channel, tt[0], tt[7], min_freq, max_freq, nfreqs,
-                        '-f', respfile, '-u', unit, '-t', time_of_day, 
-                        '-n', network, '-l', location, '-r', 'cs', '-s', 'lin']])
-        os.chdir(cwd)
+    def _get_events_from_file( self ):
+        rdseed_event_file =  os.path.join(self.tempdir,'rdseed.events')
 
-        spectrum_fn = pjoin(self.tempdir, 'SPECTRA.%s.%s.%s.%s' % (network, station, location, channel))
-        #tab = num.loadtxt(spectrum_fn, dtype=num.float).transpose()
-        tab = loadtab(spectrum_fn)
-        transfer = num.zeros(tab[0].size, dtype=num.complex)
-        transfer.real = tab[1]
-        transfer.imag = tab[2]
+        f = open(rdseed_event_file, 'r')
+        events = []
+        for line in f:
+            toks = line.split(', ')
+            if len(toks) > 4:
+                datetime = toks[1].split('.')[0]
+                lat = toks[2]
+                lon = toks[3]
+                format = '%Y/%m/%d %H:%M:%S'
+                secs = calendar.timegm( time.strptime(datetime, format))
+                e = Event(
+                    lat = float(lat),
+                    lon = float(lon),
+                    time = secs
+                )
+                events.append(e)
+                
+        f.close()
+        return events
 
-        return transfer
-    
-    def _get_transfer_function_approx(self, trace, unit='dis', min_freq=0.0, delta_freq=0.01, nfreqs=101, eval_every=1):
-        
-        if eval_every > 1:
-            _nfreqs = nfreqs/eval_every+1
-        else:
-            _nfreqs = nfreqs
-        _delta_freq = delta_freq*eval_every
-        _transfer = self._get_transfer_function( trace, unit=unit, min_freq=min_freq, delta_freq=_delta_freq, nfreqs=_nfreqs)
-        freqs = min_freq + num.arange(nfreqs)*delta_freq
-        _freqs = freqs[::eval_every]
-        transfer = scipy.interpolate.interp1d(_freqs,_transfer)(freqs)
-        return transfer
-
-    def _get_transfer_function_new(self, trace, unit='dis', min_freq=0.0,
-                                   delta_freq=0.01, nfreqs=101):
-
-        network, station, location, channel = trace.nslc_id
-        respfile = pjoin(self.tempdir, 'RESP.%s.%s.%s.%s' % (network, station, location, channel))
-        freqs = num.arange(nfreqs, dtype=num.float)*delta_freq + min_freq
-        x = evalresp.evalresp(sta_list=station,
-                          cha_list=channel,
-                          net_code=network,
-                          locid=location,
-                          instant=trace.tmin,
-                          freqs=freqs,
-                          units=unit.upper(),
-                          file=respfile,
-                          rtype='CS')
-        
-        transfer = x[0][4]
-        return transfer
 
 input_filename = 'data.seed'
 
@@ -209,5 +153,13 @@ out_dir = 'out'
 clean_dir(out_dir)
 
 sva = SeedVolumeAccess( input_filename)
-pymseed.save(sva.get_displacement_traces('hallo', freqlimits=(0.005, 0.01, 1., 1.5)), 
+
+pymseed.save(sva.iter_displacement_traces(1./0.005, freqlimits=(0.005, 0.01, 1., 2.), deltat=0.5), 
     pjoin(out_dir, '%(network)s.%(station)s.%(location)s.%(channel)s.mseed'))
+    
+#pymseed.save(sva.iter_raw_traces(), 
+#    pjoin(out_dir, 'raw-%(network)s.%(station)s.%(location)s.%(channel)s.mseed'))
+    
+    
+    
+    
