@@ -310,11 +310,14 @@ def draw_topo(gmt, JXY, region, resolution, coastline_resolution, rivers, conf, 
     cptfile1 = conf.pop('topocpt_sea')
     cptfile2 = conf.pop('topocpt_land')    
 
-    if resolution == 1:
-        grdfile = gmt.tempfilename()
-        gmt.img2grd( topo_img_file_1m, T=1, S=1, m=1, D=True, G=grdfile, out_discard=True, suppress_defaults=True, *R)
+    if 'custom_grd_file' in dir(config) and region != 'g':
+        grdfile = config.custom_grd_file
     else:
-        grdfile = topo_grd_file_5m
+        if resolution == 1:
+            grdfile = gmt.tempfilename()
+            gmt.img2grd( topo_img_file_1m, T=1, S=1, m=1, D=True, G=grdfile, out_discard=True, suppress_defaults=True, *R)
+        else:
+            grdfile = topo_grd_file_5m
     
     # work around GMT bug... detect if region contains coastlines
     if region != 'g':
@@ -451,14 +454,23 @@ def location_map( filename, lat, lon, lat_delta, conf_overrides, source=None, so
     zax = gmtpy.Ax(mode='min-max', inc=1000., label='Height', scaled_unit='km', scaled_unit_factor=0.001)
     scaler = gmtpy.ScaleGuru( data_tuples=[(x,y,z)], axes=(xax,yax,zax))
     
-    degree_format = 'dddF'
-    if scaler.get_params()['xinc'] < 1. or scaler.get_params()['yinc'] < 1.:
-        degree_format = 'ddd:mmF'
+    curcfg = {'TICK_PEN': '1.25p',
+                                'TICK_LENGTH': '0.2c',
+                                'ANNOT_FONT_PRIMARY': '1',
+                                'ANNOT_FONT_SIZE_PRIMARY': '14p',
+                                'LABEL_FONT': '1',
+                                'LABEL_FONT_SIZE': '14p',
+                                'CHAR_ENCODING': 'ISOLatin1+',
+                                'D_FORMAT': '%.1f',
+                                'PLOT_DEGREE_FORMAT':'DF',
+                                'PAPER_MEDIA':'Custom_%ix%i' % (w,h),
+                                'GRID_PEN_PRIMARY': 'thinnest/0/0/0' }
+    
+    #degree_format = 'dddF'
+    #if scaler.get_params()['xinc'] < 1. or scaler.get_params()['yinc'] < 1.:
+    #    degree_format = 'ddd:mmF'
         
-    gmt = gmtpy.GMT( config={ 'LABEL_FONT_SIZE': '12p',
-                              'PLOT_DEGREE_FORMAT':degree_format,
-                              'PAPER_MEDIA':'Custom_%ix%i' % (w,h),
-                              'GRID_PEN_PRIMARY': 'thinnest/0/0/0' } )
+    gmt = gmtpy.GMT( config=curcfg )
     
     if with_palette:
         layout = gmt.default_layout(with_palette=True)
