@@ -72,11 +72,14 @@ if cut_mode:
     beg = Phase('begin')
     end = Phase('end')
 
+out_db = Gfdb( out_db_path )
+
 cmd = [str(x) for x in ['gfdb_redeploy', in_db_path, out_db_path ]]
 p = Popen( cmd, stdin=PIPE )
 
 for ix in xrange(in_db.nx):
     x = in_db.firstx + ix * in_db.dx
+    if not (out_db.firstx <= x and x <= out_db.firstx + (out_db.nx-1)*out_db.dx): continue
     if cut_mode:
         arrivals = get_arrivals( phases, x )
         (tbeg,tend) = get_arrivals((beg,end), x)
@@ -90,6 +93,7 @@ for ix in xrange(in_db.nx):
         
     for iz in xrange(in_db.nz):
         z = in_db.firstz + iz * in_db.dz
+        if not (out_db.firstz <= z and z <= out_db.firstz + (out_db.nz-1)*out_db.dz): continue
         if cut_mode:
             p.stdin.write( '%g %g %g %g\n' % ( x, z, twin_begin, twin_end ) )
         else:
