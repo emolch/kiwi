@@ -1,4 +1,4 @@
-CFLAGS = -std=c99 -Wall -I$(HOME)/sw/libmseed
+CFLAGS = -std=c99 -Wall
 CC = gcc
 
 mseed_simple.o : mseed_simple.c
