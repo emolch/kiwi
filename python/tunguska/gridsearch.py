@@ -401,11 +401,17 @@ class MisfitGrid:
                 else:
                     bootstrap_data = ([],[],[])
                 
+                zlimits = (az.min(),min(1.,az.max()))
+                if 'misfit_limits' in dir(config):
+                    zlimits = config.misfit_limits
+                
                 conf = dict( xlabel = xparam.title(),
                              xunit = self.base_source.sourceinfo(xparam).unit,
+                             xlimits = (ax.min(), ax.max()),
                              ylabel = yparam.title(),
                              yunit = self.base_source.sourceinfo(yparam).unit,
-                             zlimits = (az.min(),min(1.,az.max())),
+                             ylimits = (ay.min(), ay.max()),
+                             zlimits = zlimits,
                              zsnap = True
                          )
                 
