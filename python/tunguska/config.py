@@ -16,7 +16,7 @@ gfdb_info_prog = 'gfdb_info'
 gfdb_extract_prog = 'gfdb_extract'
 seismosizer_prog = 'minimizer'
 
-topo_dir = '/data/topo'
+topo_dir = '/bonus/topo'
 topo_img_file_1m = pjoin(topo_dir,'topo_11.1.img')
 topo_grd_file_5m = pjoin(topo_dir,'ETOPO1_Ice_g_gmt4_downsampled_5m.grd')
 topocpt_sealand = pjoin(topo_dir, 'light_topo_continuous.cpt')
