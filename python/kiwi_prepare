@@ -203,8 +203,8 @@ def get_stations_from_file(rdseed_station_file):
                 lat = float(cols[2]),
                 lon = float(cols[3]),
                 elevation = float(cols[4]),
-                name = cols[5],
-                components = set(cols[6].split())
+                name = cols[6],
+                components = set(cols[5].split())
             )
             stations[(s.sid,s.nid)] = s
             
