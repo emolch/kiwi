@@ -631,7 +631,7 @@ ensure_dir( datadir_raw )
 
 gfdb = minimizer.get_gfdb_infos(gfdb_path)
     
-rdseed_prog = 'rdseed'
+rdseed_prog = 'rdseed4.8'
 sac_prog = 'sac'
 
 
