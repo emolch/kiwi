@@ -1369,11 +1369,11 @@ module minimizer_wrappers
     ! > minimizer <<EOF
     ! set_database            /gfdb/gemini-prem/db
     ! set_effective_dt        0.5
+    ! set_local_interpolation bilinear
     ! set_receivers           izmit-receivers.table
     ! set_source_location     40.75 29.86 0
     ! set_source_params       bilateral 0 0 0 10000 2e20  91 87 164  0  40000 20000 18000  3500 2
-    ! calculate_seismograms
-    ! output_seismograms      izmit-seismogram  mseed
+    ! output_seismograms      izmit-seismogram  mseed synthetics plain
     ! EOF
     ! }}}
     !
