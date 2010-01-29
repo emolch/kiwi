@@ -17,15 +17,15 @@ class GlobalDataRequest(wilber.IrisWilber):
         return station.dist > self.min_dist
         
     def event_filter(self, event):
-        return  event.depth < self.max_depth and event.mag > self.min_mag
+        return  event.depth <= self.max_depth and event.mag >= self.min_mag
 
 def event_dir_name(event):
     region = '-'.join(event.region.replace('.','').lower().split())
     date_time = time.strftime('%Y-%m-%d_%H-%M-%S', time.gmtime(event.timestamp))
     return '%s_%s' % (region, date_time)
 
-def get_next_event(events_dir, instant=None):
-    request = GlobalDataRequest(username='sebastian', email='sebastian.heimann@zmaw.de')
+def get_next_event(events_dir, instant=None, **kwargs):
+    request = GlobalDataRequest(username='sebastian', email='sebastian.heimann@zmaw.de', **kwargs)
     if instant is None:
         now = time.time()
         recently = now - 60*60*3
@@ -45,6 +45,7 @@ def get_next_event(events_dir, instant=None):
             return dirname
         
     logging.info('Already have all data for given time range and event selection.')
+    sys.exit()
 
 def prepare_event(skeleton_dir, event_dir):
     oldcwd = os.getcwd()
@@ -67,7 +68,7 @@ def prepare_event(skeleton_dir, event_dir):
 def process_event(event_dir):
     oldcwd = os.getcwd()
     os.chdir(event_dir)
-    call(['./kiwi_ampspec', 'work', '-', 'durationfinder2'])
+    call(['./kiwi', 'work', '-', 'durationfinder2'])
     os.chdir(oldcwd)
 
 def report_event(event_dir):
@@ -92,13 +93,13 @@ abc = 'abcd'
 if len(sys.argv) == 3:
     abc, event_dir = sys.argv[1:3]
 elif len(sys.argv) == 1:
-    event_dir = get_next_event('.')
+    event_dir = get_next_event('.', max_depth=100.)
 elif len(sys.argv) >= 4:
     tt = [None,None,1,0,0,0]
     for i, x in enumerate(sys.argv[1:]):
         tt[i] = int(x)
     instant = calendar.timegm(tt)
-    event_dir = get_next_event('.', instant)
+    event_dir = get_next_event('.', instant, max_depth=100.)
 
 skeleton_dir = 'skeleton'
 
