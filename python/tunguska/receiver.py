@@ -53,21 +53,24 @@ class Receiver:
         self.distance_m   = distance_m
         self.azimuth      = azimuth
     
+    def get_station(self):
+        return self.name.split('.')[0]
+       
+    
+    def get_network(self):
+        toks = self.name.split('.')
+        if len(toks) > 1:
+            return toks[1]
+        else:
+            return ''
+        
     def __str__(self):
         s = ' '.join( (str(self.lat), str(self.lon), self.components) )
         return s
     
     def save_traces_mseed(self, filename_tmpl='%{whichset}s_%(network)s_%(station)s_%(location)s_%(channel)s.mseed' ):
         
-        toks = self.name.split('.')
-        if len(toks) == 2:
-            station = toks[0]
-            network = toks[1]
-        else:
-            station = toks[0]
-            network = ''
-        
-        
+        station, network = self.get_station(), self.get_network()
         for icomp, comp in enumerate(self.components):
             channel = comp
             for (whichset, sgram) in zip(('references', 'synthetics'), 

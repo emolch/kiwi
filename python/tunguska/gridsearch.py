@@ -446,15 +446,28 @@ class MisfitGrid:
                               best_source, num.amax(dists)*1.05, pjoin(dirname, 'stations.pdf'), {}, nsets=nsets)
         plot_files.append('stations.pdf')
         
+        indicate_plane = 0
         if source_model_infos:
             source_size = 0.
             if 'bord-radius' in best_source.keys():
                 source_size = best_source['bord-radius']
                 
             delta_lat = 1.5*max(source_size*2.,50000)/(20000.*1000.)*180
+            
+            si = None
+            if 'bord-radius' in best_source.keys() and best_source['bord-radius'] > 0.0:
+                si = source_model_infos
+                indicate_plane = 1
+            
             plotting.location_map(pjoin(dirname, 'location.pdf'), slat, slon, delta_lat, {}, source=best_source,
-                                  source_model_infos=source_model_infos, receivers=(lats,lons,rnames))
+                                  source_model_infos=si, receivers=(lats,lons,rnames))
+                                  
             plot_files.append('location.pdf')
+        
+        plotting.beachball(best_source, pjoin(dirname, 'beachball.pdf'), indicate_plane=indicate_plane)
+        plot_files.append('beachball.pdf')
+        
+        
         
         return plot_files
     

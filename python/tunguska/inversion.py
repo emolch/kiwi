@@ -16,7 +16,7 @@ import os
 import sys
 import re
 import math
-import datetime, time
+import datetime, time, calendar
 import numpy as num
 from scipy.optimize import fmin_l_bfgs_b
 import progressbar
@@ -277,11 +277,23 @@ class Step:
         
         self.work_started = time.time()
         
+        datadir = self.in_config.get_config()['datadir']
+        ref_time_filename = pjoin(datadir,'reference-time.txt')
+        self.set_ref_time(ref_time_filename)
+        
         if start_seismosizer:
             sconf = self.in_config.get_config(keys=standard_setup.required|standard_setup.optional)
             self.seismosizer = standard_setup( **sconf )
             self.out_config.source_location = self.seismosizer.source_location
-
+        
+    def set_ref_time(self, filename):
+        f = open(filename, 'r')
+        dtstr = f.read().strip().split(None,1)[1]
+        f.close()
+        format = '%Y/%m/%d %H:%M:%S'
+        self.ref_time = calendar.timegm(time.strptime(dtstr, format))
+        
+        
     def setup_inner_misfit_method(self):
         conf = self.in_config.get_config(keys=Step.inner_misfit_method_params)
         seis = self.seismosizer
@@ -297,6 +309,7 @@ class Step:
     def post_work(self, stop_seismosizer=True):
         
         self.make_alternative_stats()
+        self.make_locations()
 
         if stop_seismosizer:
             self.seismosizer.close()
@@ -319,7 +332,7 @@ class Step:
         if 'moment_stats' in c:
             oc.magnitude_stats = oc.moment_stats.converted('magnitude', moment_tensor.moment_to_magnitude)
             
-        if 'north_shift_stats' and 'east_shift_stats' in c:
+        if ('north_shift_stats' in c) and ('east_shift_stats' in c):
             
             rlat, rlon, rtime = self.seismosizer.source_location
             cnorth, ceast =  oc.north_shift_stats.best, oc.east_shift_stats.best
@@ -330,6 +343,43 @@ class Step:
             
             oc.latitude_stats = oc.north_shift_stats.converted( 'latitude', approx_lat )
             oc.longitude_stats = oc.east_shift_stats.converted( 'longitude', approx_lon )
+            
+    def make_locations(self):
+        oc = self.out_config
+        icd = self.in_config.get_config()
+        ocd = self.out_config.__dict__
+        
+        
+        if self.seismosizer:
+            rlat, rlon, rtime = self.seismosizer.source_location
+            if 'north_shift' in ocd:
+                cnorth = oc.north_shift
+            elif 'north_shift' in icd:
+                cnorth = icd['north_shift']
+            else:
+                cnorth = 0.
+                
+            if 'east_shift' in ocd:
+                ceast = oc.east_shift
+            elif 'east_shift' in icd:
+                ceast = icd['east_shift']
+            else:
+                ceast = 0.
+                
+            if 'time' in ocd:
+                ctime = oc.time
+            elif 'time' in icd:
+                ctime = icd['time']
+            else:
+                ctime = 0.
+                
+            clat, clon = orthodrome.ne_to_latlon( rlat, rlon, cnorth, ceast )
+    
+            oc.centroid_latitude = clat
+            oc.centroid_longitude = clon
+            oc.centroid_time = self.ref_time + ctime
+            oc.reference_time = self.ref_time
+        
 
     def snapshot(self, source, ident):
         
@@ -441,10 +491,10 @@ class Step:
         img_snippet = '<a href="%s"><img style="border:none;" src="%s" /></a>'
         return img_snippet % (location+'.pdf', location+'.png')
     
-    def gxi(self, arg):
+    def gxi(self, arg, format='png'):
         plotdir = self.make_plotdir_path( 'current' )
         location = pjoin(plotdir, arg)
-        return location+'.png'
+        return location+('.%s' % format)
 
     def show_in_config(self, run_id='current'):
         c = self.load('config-in', run_id=run_id)
@@ -954,7 +1004,7 @@ class TracePlotter(Step):
         for step, ident in self.snapshots:
             loaded_snapshots.append(self.get_snapshot("%s_%s" % (step.stepname, ident)))
         
-        allfilez = plotting.multi_seismogram_plot( loaded_snapshots, plotdir )
+        allfilez = plotting.multi_seismogram_plot2( loaded_snapshots, plotdir )
         
         return [ os.path.basename(fn) for fn in allfilez ]
 
@@ -1100,6 +1150,17 @@ class Greeper(Step):
                     continue
                 current = x_to_source(x)
                 if d['warnflag'] != 0: continue
+                
+                # restart gradient search at current minimum
+                
+                x0 = source_to_x(current)
+                try:
+                    x, misfit, d = fmin_l_bfgs_b(minfunc, x0, approx_grad=True, bounds=bounds, epsilon=0.05, factr=1e7)
+                except NoValidSources:
+                    continue
+                current = x_to_source(x)
+                if d['warnflag'] != 0: continue
+
                 
                 minkind = ''
                 if misfit < min_misfit:
