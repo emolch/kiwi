@@ -49,7 +49,7 @@ def get_next_event(events_dir, instant=None, **kwargs):
 
 def prepare_event(skeleton_dir, event_dir):
     oldcwd = os.getcwd()
-    files_to_copy = [ 'kiwi_prepare.config', 'kiwi_ampspec' ]
+    files_to_copy = [ 'kiwi_prepare.config', 'kiwi' ]
     for fn in files_to_copy:
         if not os.path.exists(pjoin(event_dir,fn)):
             shutil.copy(pjoin(skeleton_dir,fn),
@@ -74,14 +74,14 @@ def process_event(event_dir):
 def report_event(event_dir):
     oldcwd = os.getcwd()
     os.chdir(event_dir)
-    call(['./kiwi_ampspec', 'report'])
+    call(['./kiwi', 'report'])
     os.chdir(oldcwd)
 
 def post_event(event_dir):
     
     report_dir = pjoin(event_dir, 'report')
     event_d = os.path.split(event_dir.rstrip('/'))[-1]
-    remote_dir = '/kinherd/reports'
+    remote_dir = '/kinherd/reports-import'
     host = 'kinherdwsrsync'
     if os.path.isdir(report_dir):
         call(['rsync', '-d', event_dir.rstrip('/'), host+':'+remote_dir ])

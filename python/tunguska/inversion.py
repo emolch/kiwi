@@ -823,6 +823,9 @@ class ParamTuner(Step):
             self.out_config.__dict__[param] = stats[u2d(param)].best
             self.out_config.__dict__[param+'_stats'] = stats[u2d(param)]
         
+        self.out_config.min_misfit = finder.get_best_misfit()
+        self.out_config.nstations_total  = finder.nreceivers
+        self.out_config.nstations_used  = finder.nreceivers_enabled
         
         logging.info('Misfit = %f, Source = %s' % (finder.get_best_misfit(), str(base_source)))
         mt = base_source.moment_tensor()

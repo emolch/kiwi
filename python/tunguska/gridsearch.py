@@ -138,6 +138,7 @@ class MisfitGrid:
         self.ref_norms_by_src = None        
         self.receivers = None
         self.nreceivers = None
+        self.nreceivers_enabled = None
         
         # will be set by postprocess()
         self.best_source = None
@@ -157,6 +158,7 @@ class MisfitGrid:
             progress_title = 'Grid search params: ' + ', '.join(self.sourceparams)
             
         nreceivers = len(seis.receivers)
+        nreceivers_enabled = len( [ rec for rec in seis.receivers if rec.enabled ] )
         
         # results, gathered by (source,receiver,component)
         misfits_by_src, norms_by_src, failings = seis.make_misfits_for_sources( 
@@ -173,6 +175,7 @@ class MisfitGrid:
         self.ref_norms_by_src = ref_norms_by_src
         
         self.nreceivers = nreceivers
+        self.nreceivers_enabled = nreceivers_enabled
         self.receivers = seis.receivers
         self.source_location = seis.source_location
         
