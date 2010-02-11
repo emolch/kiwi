@@ -83,9 +83,12 @@ def post_event(event_dir):
     event_d = os.path.split(event_dir.rstrip('/'))[-1]
     remote_dir = '/kinherd/reports-import'
     host = 'kinherdwsrsync'
+    host_import = 'kinherdwsimport'
     if os.path.isdir(report_dir):
         call(['rsync', '-d', event_dir.rstrip('/'), host+':'+remote_dir ])
         call(['rsync', '-a', report_dir+'/', host+':'+pjoin(remote_dir,event_d) ])
+        # trigger host to import the new data
+        call(['ssh', host_import, '/home/kinherd/bin/import'])
 
 logging.basicConfig(level=logging.INFO,)
 
