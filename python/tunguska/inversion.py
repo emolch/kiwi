@@ -32,12 +32,12 @@ def backticks(command):
     return subprocess.Popen(command, stdout=subprocess.PIPE).communicate()[0]
 
 def convert_graph(in_filename, out_filename):
-    if backticks(['which', 'pdf2png']).strip():
-        inter_filename = out_filename.replace('.png','.oversized.png')
-        call(['pdf2png', in_filename, inter_filename, '1'])
-        call(['convert', inter_filename, '-resize', '66%', out_filename])
+    if backticks(['which', 'pdftoppm']).strip():
+        inter_filename = out_filename.replace('.png','.oversized')
+        call(['pdftoppm', in_filename, inter_filename])
+        call(['convert', inter_filename+'-1.ppm', '-resize', '50%', out_filename])
     else:
-        logging.info("Using convert; install pdf2png from libcairo for better quality PNG output.")
+        logging.info("Using convert; install pdftoppm from poppler for better quality PNG output.")
         call(['convert', in_filename, out_filename])
 
 def all(x):

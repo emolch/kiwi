@@ -237,31 +237,36 @@ def set_time_ranges(event, stations):
 def rdseed( input_fn, output_dir, output_dir_raw, verbose=True ):
     
     # seismograms:
-    rdseed_proc = subprocess.Popen([rdseed_prog, '-f', input_fn, '-d', '-z', '3', '-p', '-E', '-R', '-q', output_dir_raw], 
-                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    (out,err) = rdseed_proc.communicate()
-    if verbose: sys.stderr.write( 'rdseed: '+err )
-    
-    # event data:
-    rdseed_proc = subprocess.Popen([rdseed_prog, '-f', input_fn, '-e', '-q', output_dir], 
-                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    (out,err) = rdseed_proc.communicate()
-    if verbose: sys.stderr.write( 'rdseed: '+err )
-    
-    # station summary information:
-    rdseed_proc = subprocess.Popen([rdseed_prog, '-f', input_fn, '-S', '-q', output_dir], 
-                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    (out,err) = rdseed_proc.communicate()
-    if verbose: sys.stderr.write( 'rdseed: '+err )
-    
-    # station headers:
-    rdseed_proc = subprocess.Popen([rdseed_prog, '-f', input_fn, '-s', '-q', output_dir], 
-                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    (out,err) = rdseed_proc.communicate()
-    fout = open(os.path.join(output_dir,'station_header_infos'),'w')
-    fout.write( out )
-    fout.close()
-    if verbose: sys.stderr.write( 'rdseed: '+err )
+    try:
+        rdseed_proc = subprocess.Popen([rdseed_prog, '-f', input_fn, '-d', '-z', '3', '-p', '-E', '-R', '-q', output_dir_raw], 
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (out,err) = rdseed_proc.communicate()
+        if verbose: sys.stderr.write( 'rdseed: '+err )
+        
+        # event data:
+        rdseed_proc = subprocess.Popen([rdseed_prog, '-f', input_fn, '-e', '-q', output_dir], 
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (out,err) = rdseed_proc.communicate()
+        if verbose: sys.stderr.write( 'rdseed: '+err )
+        
+        # station summary information:
+        rdseed_proc = subprocess.Popen([rdseed_prog, '-f', input_fn, '-S', '-q', output_dir], 
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (out,err) = rdseed_proc.communicate()
+        if verbose: sys.stderr.write( 'rdseed: '+err )
+        
+        # station headers:
+        rdseed_proc = subprocess.Popen([rdseed_prog, '-f', input_fn, '-s', '-q', output_dir], 
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (out,err) = rdseed_proc.communicate()
+        fout = open(os.path.join(output_dir,'station_header_infos'),'w')
+        fout.write( out )
+        fout.close()
+        if verbose: sys.stderr.write( 'rdseed: '+err )
+    except OSError, e:
+        sys.stderr.write("could not run '%s'\n" % rdseed_prog)
+        sys.stderr.write(str(e)+"\n")
+        sys.exit(1)
 
 def indent( text, indentation='   ' ):
     outtext = ''

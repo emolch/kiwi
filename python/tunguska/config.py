@@ -18,7 +18,7 @@ seismosizer_prog = 'minimizer'
 
 topo_dir = pjoin(kiwi_aux_dir(),'topo')
 topo_img_file_1m = pjoin(topo_dir,'topo_11.1.img')
-topo_grd_file_5m = pjoin(topo_dir,'ETOPO1_Ice_g_gmt4_downsampled_5m.grd')
+topo_grd_file_5m = pjoin(topo_dir,'ETOPO1_Ice_g_gmt4_downsampled_5m_polefix.grd')
 topocpt_sealand = pjoin(topo_dir, 'light_topo_continuous.cpt')
 topocpt_sea = pjoin(topo_dir, 'light_topo_continuous_sea_only.cpt')
 topocpt_land = pjoin(topo_dir, 'light_topo_continuous_land_only.cpt')
