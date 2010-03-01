@@ -30,6 +30,7 @@ def kiwi_main(steps):
     parser.add_option('--no-progress', action='callback', callback=progress_off)
     parser.add_option('--no-search', action='store_false', dest='do_search', default=True)
     parser.add_option('--no-forward', action='store_false', dest='do_forward', default=True)
+    parser.add_option('--no-plot', action='store_false', dest='do_plot', default=True)
     parser.add_option('--run-id', action='store', dest='run_id', type='string', default='current')
     
     (options, args) = parser.parse_args()
@@ -122,7 +123,8 @@ def kiwi_main(steps):
         if step.stepname in stepnames_to_do:
             if command == 'work':
                 step.work(search=options.do_search, forward=options.do_forward, run_id=options.run_id)
-                step.plot(run_id=options.run_id)
+                if options.do_plot:
+                    step.plot(run_id=options.run_id)
                 if step.stepname != stepnames_to_do[-1]: logging.info('---')
             if command == 'replot':
                 step.plot(run_id=options.run_id)

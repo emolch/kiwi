@@ -204,7 +204,7 @@ def gen_dweights( seis, base_source, datadir,
     sdr_grid.compute( seis )
     
     means = sdr_grid.get_mean_misfits_by_r()
-    means /= num.mean(means)
+    means /= num.mean(means[means>0.])
     dweights = num.where(means>0., 1./means, 0.)
     # reset reference seismograms
     if ref_seismogram_stem is not None:
@@ -547,7 +547,10 @@ class Informer(Step):
         
 
         self.post_work(True)
-
+        
+        if nsta < 3:
+            sys.exit('too few stations')
+    
     def _plot(self, run_id='current'):
 
         saved = self.load('source_receivers', run_id=run_id)
@@ -833,8 +836,7 @@ class ParamTuner(Step):
         
         self.result(str(mt), 'moment_tensor')
         
-        misfit_median = num.median( finder.misfits_by_r )
-        
+        misfit_median = finder.get_median_of_misfits_by_r()
         if self.xblacklist_level is not None:
             ir = 0
             xblacklist = []
@@ -845,9 +847,7 @@ class ParamTuner(Step):
                     
                 ir += 1
             self.out_config.xblacklist = xblacklist
-            
-        
-        
+                    
         if forward:
             self.snapshot( base_source, 'best' )
             

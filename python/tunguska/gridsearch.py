@@ -2,6 +2,7 @@ import config
 import plotting
 import seismosizer
 import util
+import logging
 
 import re, copy
 import progressbar 
@@ -159,6 +160,7 @@ class MisfitGrid:
             
         nreceivers = len(seis.receivers)
         nreceivers_enabled = len( [ rec for rec in seis.receivers if rec.enabled ] )
+        receiver_mask = num.array( [ rec.enabled for rec in seis.receivers ], dtype=num.bool )
         
         # results, gathered by (source,receiver,component)
         misfits_by_src, norms_by_src, failings = seis.make_misfits_for_sources( 
@@ -176,6 +178,7 @@ class MisfitGrid:
         
         self.nreceivers = nreceivers
         self.nreceivers_enabled = nreceivers_enabled
+        self.receiver_mask = receiver_mask
         self.receivers = seis.receivers
         self.source_location = seis.source_location
         
@@ -201,29 +204,50 @@ class MisfitGrid:
         '''Get mean raw misfits by receiver, e.g. to auto-create weights.''' 
         mean_misfits_by_r = num.zeros( self.nreceivers, dtype=num.float )
         for irec in range(self.nreceivers):
-            ncomps = len(self.receivers[irec].components)
+            rec = self.receivers[irec]
+            ncomps = len(rec.components)
             if ncomps != 0:
-                x = num.sum(self.misfits_by_src[:,irec,:]) /( ncomps*len(self.sources))
+                x = num.sum(self.misfits_by_src[:,irec,:ncomps]) /( ncomps*len(self.sources))
             else:
                 x = -1.0
+            
             mean_misfits_by_r[irec] = x
         return mean_misfits_by_r
+        
+    def get_median_of_misfits_by_r(self):
+        '''Get the median of the misfits per station of best source.'''
+        misfits = []
+        for irec in range(self.nreceivers):
+            if self.receivers[irec].enabled:
+                misfits.append(self.misfits_by_r[irec])
+        
+        if len(misfits) == 0:
+            raise Exception('No receivers are enabled')
+        
+        return num.median(misfits)
         
     def get_best_misfit(self):
         return num.nanmin(self.misfits_by_s)
         
     def _best_source(self, return_misfits_by_r=False, **outer_misfit_config):
-        misfits_by_s, misfits_by_sr = seismosizer.make_global_misfits( self.misfits_by_src, self.norms_by_src, **outer_misfit_config)
+        misfits_by_s, misfits_by_sr = seismosizer.make_global_misfits( 
+            self.misfits_by_src, self.norms_by_src, 
+            receiver_mask=self.receiver_mask,
+            **outer_misfit_config )
+        
         ibest = num.nanargmin(misfits_by_s)
         if not return_misfits_by_r:
             return self.sources[ibest], misfits_by_s
+
         else:
             # misfit variability by receiver
             misfits_varia_by_r = num.std(misfits_by_sr,0)
             return self.sources[ibest], misfits_by_s, misfits_by_sr[ibest,:], misfits_varia_by_r
         
     def _ref_misfits_by_r(self, **outer_misfit_config):
-        misfits_by_s, misfits_by_sr = seismosizer.make_global_misfits(self.ref_misfits_by_src, self.ref_norms_by_src, **outer_misfit_config)
+        misfits_by_s, misfits_by_sr = seismosizer.make_global_misfits(
+            self.ref_misfits_by_src, self.ref_norms_by_src, 
+            receiver_mask=self.receiver_mask, **outer_misfit_config)
         return misfits_by_sr[0,:]
         
     def _bootstrap(self, bootstrap_iterations=1000, **outer_misfit_config):

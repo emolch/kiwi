@@ -126,7 +126,7 @@ class SeismosizerBase:
             xwhere = batch[0][1]
             cmds = []
             for (cmd, where) in batch:
-                assert(where == xwhere)
+                assert where == xwhere
                 cmds.append(cmd)
                 
             return self.do_batch( cmds=cmds, where=xwhere )
@@ -514,8 +514,8 @@ class Seismosizer(SeismosizerBase):
     
     def switch_receiver(self, irec, onoff, **kwargs):
         # irec counted from 1 !!!
-        assert( onoff in ('on', 'off'))
-        assert( 1 <= irec <= len(self.receivers) )
+        assert onoff in ('on', 'off')
+        assert 1 <= irec <= len(self.receivers) 
         if 'where' in kwargs: raise Exception("Can't use kwarg 'where' in switch_receiver")
         kwargs['where'] = self.receivers[irec-1].proc_id
         args = (onoff,)
@@ -710,7 +710,7 @@ class Seismosizer(SeismosizerBase):
                     ipos[iproc] += 1
         
         for iproc in range(len(results)):
-            assert(ipos[iproc] == len(values[iproc]), "if this is printed, there is a bug in make_misifits_for_source()") 
+            assert ipos[iproc] == len(values[iproc]), "if this is printed, there is a bug in make_misifits_for_source()"
         
     def make_misfits_for_source( self, source ):
         """Calculate misfits for given source and fill these into the receivers datastructure."""
@@ -774,8 +774,12 @@ class Seismosizer(SeismosizerBase):
     
     
     def best_source(self, sources, return_failings=False, **outer_misfit_config):
+        receiver_mask = num.array([ rec.enabled for rec in self.receivers ], dtype=num.bool)
+
         misfits_by_src, norms_by_src, failings = self.make_misfits_for_sources(sources)
-        misfits_by_s, misfits_by_sr = make_global_misfits( misfits_by_src, norms_by_src, **outer_misfit_config)
+        misfits_by_s, misfits_by_sr = make_global_misfits( misfits_by_src, norms_by_src, 
+            reveiver_mask=receiver_mask, **outer_misfit_config)
+            
         misfits_by_s = num.where( misfits_by_s > 0, misfits_by_s, num.NaN)
         ibest = num.nanargmin(misfits_by_s)
         if num.isnan(ibest) or num.isnan(misfits_by_s[ibest]): raise NoValidSources()
@@ -820,7 +824,7 @@ class Seismosizer(SeismosizerBase):
                 self._set_receiver_process(irec+1, None)
                 
         else:
-            assert(len(self.receivers) >= len(self))
+            #assert len(self.receivers) >= len(self)
             if len(self) > 1:
                 distances = [ r.distance_m for r in self.receivers ]
                 distances_active = [ r.distance_m for r in self.receivers if r.enabled ]
@@ -868,20 +872,40 @@ class Seismosizer(SeismosizerBase):
         f.close()
         os.remove(fn)
 
-def make_global_misfits(misfits_by_src, norms_by_src, receiver_weights=1., outer_norm='l2norm', anarchy=False, bootstrap=False, **kwargs):
+def make_global_misfits(misfits_by_src, norms_by_src, receiver_mask=None, receiver_weights=1., outer_norm='l2norm', anarchy=False, bootstrap=False, **kwargs):
     
     nreceivers = misfits_by_src.shape[1]
     
     if isinstance(receiver_weights, float):
+        mask2 = None
         rweights = receiver_weights
     else:
+        mask2 = receiver_weights != 0
         rweights = receiver_weights[num.newaxis,:].copy()
-    
+        
     if bootstrap:
-        bweights = num.zeros(nreceivers, dtype=num.float)
-        bweights_x = num.bincount(num.random.randint(0,nreceivers,nreceivers))
-        bweights[:len(bweights_x)] = bweights_x[:]
-    
+        
+        mask = None
+        if receiver_mask is not None:
+            mask = num.asarray(receiver_mask, dtype=num.bool)
+        
+        if mask2 is not None:
+            if mask is not None:
+                mask = num.logical_and(mask2, receiver_mask)
+            else:
+                mask = mask2
+                
+        if mask is not None:
+            nenabled = sum(mask)
+            enabled = num.arange(nreceivers, dtype=num.int)[mask]
+            bweights = num.zeros(nreceivers, dtype=num.float)
+            _bweights = num.bincount(num.take(enabled, num.random.randint(0,nenabled,nenabled)))
+            bweights[:_bweights.size] = _bweights
+        else:
+            bweights = num.zeros(nreceivers, dtype=num.float)
+            _bweights = num.bincount(num.random.randint(0,nreceivers,nreceivers))
+            bweights[:_bweights.size] = bweights_x[:]
+                    
     if outer_norm == 'l1norm':
         misfits_by_sr = num.sum(misfits_by_src,2)
         norms_by_sr   = num.sum(norms_by_src,2)
@@ -902,7 +926,7 @@ def make_global_misfits(misfits_by_src, norms_by_src, receiver_weights=1., outer
         ns = num.sum( norms_by_sr, 1 )
         
         misfits_by_s  = num.where(ns > 0., ms/ns, -1.)
-        misfits_by_s = num.where(misfits_by_s<0, num.NaN, misfits_by_s)
+        misfits_by_s = num.where(misfits_by_s<0., num.NaN, misfits_by_s)
         
     elif outer_norm == 'l2norm':
         misfits_by_sr = num.sqrt(num.sum(misfits_by_src**2,2))

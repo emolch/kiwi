@@ -121,10 +121,10 @@ class Timing:
                 
         self.offset = float(offset)
         
-    def __call__(self, distance):
+    def __call__(self, distance, depth=10000.):
         '''Returns timing at given distance.'''
         for phase in self.phases:
-            t = phase(distance)
+            t = phase(distance, depth)
             if not t is None:
                 return t+self.offset
 
@@ -148,12 +148,12 @@ class Taper:
         self.timings = timings
         self.amplitude = amplitude
         
-    def __call__(self, distance):
+    def __call__(self, distance, depth=10000.):
         '''Returns representation which can be used for Seismosizer.do_set_misfit_taper().'''
-        return ( self.timings[0](distance), 0.,
-                 self.timings[1](distance), self.amplitude,
-                 self.timings[2](distance), self.amplitude,
-                 self.timings[3](distance), 0. )
+        return ( self.timings[0](distance,depth), 0.,
+                 self.timings[1](distance,depth), self.amplitude,
+                 self.timings[2](distance,depth), self.amplitude,
+                 self.timings[3](distance,depth), 0. )
 
     def __repr__(self):
         s = 'Taper(timings=[\n    '

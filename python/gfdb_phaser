@@ -26,10 +26,10 @@ from tunguska.gfdb import Gfdb
 pjoin = os.path.join
 
 
-def get_arrivals(phases, distance):
+def get_arrivals(phases, distance, depth):
     arrivals = []
     for phase in phases:
-        t = phase(distance)
+        t = phase(distance, depth)
         if t is not None:
             arrivals.append(t)
     return arrivals
@@ -80,22 +80,23 @@ p = Popen( cmd, stdin=PIPE )
 for ix in xrange(in_db.nx):
     x = in_db.firstx + ix * in_db.dx
     if not (out_db.firstx <= x and x <= out_db.firstx + (out_db.nx-1)*out_db.dx): continue
-    if cut_mode:
-        arrivals = get_arrivals( phases, x )
-        (tbeg,tend) = get_arrivals((beg,end), x)
-        if not arrivals:
-            arrivals.append( tbeg )
-        twin_begin = max(min(arrivals)+trange[0], tbeg)
-        twin_end   = min(max(arrivals)+trange[1], tend)
-        print 'distance: %g  time window: %g %g' % (x, twin_begin, twin_end)
-    else:
-        print 'distance: %g' % x
-        
+    
+    
     for iz in xrange(in_db.nz):
         z = in_db.firstz + iz * in_db.dz
         if not (out_db.firstz <= z and z <= out_db.firstz + (out_db.nz-1)*out_db.dz): continue
+
+        sys.stderr.write('distance: %10g km, depth: %10g km\n' % (x/1000., z/1000.))
+
         if cut_mode:
+            arrivals = get_arrivals( phases, x, z )
+            (tbeg,) = get_arrivals((beg,), x, z)
+            if not arrivals:
+                arrivals.append( tbeg )
+            twin_begin = min(arrivals)+trange[0]
+            twin_end   = max(arrivals)+trange[1]
             p.stdin.write( '%g %g %g %g\n' % ( x, z, twin_begin, twin_end ) )
+            
         else:
             p.stdin.write( '%g %g\n' % ( x, z ) )
         
