@@ -482,11 +482,12 @@ module receiver
     
     end subroutine
     
-    subroutine receiver_output_seismogram( self, filenamebase, fileformat, which_probe, which_processing, ok )
+    subroutine receiver_output_seismogram( self, filenamebase, fileformat, which_probe, which_processing, reftime, ok )
     
         type(t_receiver), intent(inout)   :: self
         type(varying_string), intent(in)  :: filenamebase, fileformat
         integer, intent(in)               :: which_probe, which_processing
+        real(kind=8), intent(in)          :: reftime
         logical, intent(out)              :: ok
         
         type(varying_string)        :: outfn
@@ -512,7 +513,7 @@ module receiver
             span = strip_span( strip )
             call writeseismogram( char(outfn), "*", &
                         strip%data, &
-                        (span(1)-1)*dt, dt, nerr )
+                        reftime+(span(1)-1)*dt, dt, nerr )
             
             if (nerr /= 0) then
                 ok = .false.
@@ -554,7 +555,7 @@ module receiver
                 
             call writeseismogram( char(outfn), "*", &
                                   strip%data, &
-                                  0.0, df, nerr )
+                                  dble(0.0), df, nerr )
             if (nerr /= 0) then
                 ok = .false.
                 call error( "failed to write output file: " // outfn )
@@ -590,7 +591,7 @@ module receiver
             outfn = filenamebase // "-" // component_names(self%components(icomponent)) // ".table"
             call writeseismogram( char(outfn), "*", &
                                   self%cross_corr(:,icomponent), &
-                                  lbound(self%cross_corr,1)*self%dt, self%dt, nerr )
+                                  dble(lbound(self%cross_corr,1)*self%dt), self%dt, nerr )
             if (nerr /= 0) then
                 ok = .false.
                 call error( "failed to write output file: " // outfn )
@@ -600,16 +601,18 @@ module receiver
 
     end subroutine
     
-    subroutine receiver_set_ref_seismogram( self, reffnbase, refformat, ok )
+    subroutine receiver_set_ref_seismogram( self, reffnbase, refformat, reftime, ok )
     
         type(t_receiver), intent(inout)    :: self
         type(varying_string), intent(in)   :: reffnbase, refformat
+        real(kind=8), intent(in)           :: reftime
         logical, intent(out) :: ok
 
       ! read a set of reference seismograms from ascii or sac files
         
         integer                         :: icomponent, nerr
-        real                            :: toffset, deltat
+        real(kind=8)                    :: toffset
+        real                            :: deltat
         type(varying_string)            :: reffn
         type(t_strip)                   :: strip
         real, dimension(:), allocatable :: temp_seismogram
@@ -620,24 +623,37 @@ module receiver
             reffn = reffnbase // "-" // component_names(self%components(icomponent)) // "." // refformat
             call readseismogram( char(reffn), "*", temp_seismogram, toffset, &
                                 deltat, nerr )
-            if (nerr /= 0) call die("failed to read seismogram from file " // reffn)
-            
-            
-            if (abs(deltat - self%dt)>self%dt/10000.) then
-                call die("sampling rate in file " // reffn // " is " // deltat //&
-                            " but required sampling rate is " // self%dt )
+            if (nerr /= 0) then
+                call error("failed to read seismogram from file " // reffn)
+                ok = .false.
+                exit
             end if
             
-            call seismogram_to_strip( temp_seismogram, toffset, self%dt, &
+            if (abs(deltat - self%dt)>self%dt/10000.) then
+                call error("sampling rate in file '" // reffn // "' is " // deltat //&
+                            " but required sampling rate is " // self%dt )
+                ok = .false.
+                exit
+            end if
+            
+            if (abs(toffset-reftime) > 3600.*24.*7.) then
+                call error("origin time and seismogram starting time differ by " //&
+                           " more than 7 days (file is '" // reffn // ")" )
+                ok = .false.
+                exit
+            end if
+            
+            call seismogram_to_strip( temp_seismogram, real(toffset-reftime), self%dt, &
                                     strip )
             
             call probe_set_array( self%ref_probes(icomponent), strip )
             
         end do
-        
+
         call strip_destroy( strip )
         if ( allocated(temp_seismogram) ) deallocate(temp_seismogram)
-    
+
+
     end subroutine
     
     subroutine receiver_shift_ref_seismogram( self, ishift )

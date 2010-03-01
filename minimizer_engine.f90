@@ -318,6 +318,13 @@ module minimizer_engine
             call warn("have to set database prior to setting ref seismograms")
             return
         end if
+
+        call update_source_location( ok )
+        if (.not. ok) then
+            call warn("have to set source location prior to setting ref seismograms")
+            return
+        end if
+
         call update_receivers( ok )
         if (.not. ok) return
         
@@ -325,7 +332,11 @@ module minimizer_engine
         
         do ireceiver=1,nreceivers
             reffn = reffnbase // "-" // ireceiver
-            call receiver_set_ref_seismogram( receivers(ireceiver), reffn, refformat, ok )
+            call receiver_set_ref_seismogram( receivers(ireceiver), reffn, refformat, psm%ref_time, ok )
+            if (.not. ok) then
+                ref_probes_inited = .false.
+                return
+            end if
         end do
         
         ref_probes_inited = .true.
@@ -900,7 +911,8 @@ module minimizer_engine
         nreceivers = size(receivers)
         do ireceiver=1,nreceivers
             outfn = filenamebase // "-" // ireceiver
-            call receiver_output_seismogram( receivers(ireceiver), outfn, fileformat, which_probe, which_processing, ok )
+            call receiver_output_seismogram( receivers(ireceiver), outfn, fileformat, &
+                which_probe, which_processing, psm%ref_time, ok)
             if (.not. ok) return
         end do
         

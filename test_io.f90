@@ -29,7 +29,8 @@ program test_io
 
     type(t_strip) :: strip1
     integer :: nerr
-    real :: toffset, deltat
+    real(kind=8) :: toffset
+    real :: deltat
     real, allocatable, dimension(:) :: seismogram
     
     call test_begin("test_io")

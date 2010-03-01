@@ -49,7 +49,8 @@ module seismogram_io
         
         type(varying_string), intent(in) :: filename, fileformat
         real, dimension(:), intent(in)   :: seismogram
-        real, intent(in)                 :: toffset, deltat
+        real(kind=8), intent(in)         :: toffset
+        real, intent(in)                 :: deltat
         integer, intent(out)             :: nerr
         
         call writeseismogram_c( char(filename), char(fileformat), seismogram, toffset, deltat, nerr )
@@ -60,7 +61,8 @@ module seismogram_io
     
         character(len=*), intent(in)     :: filename, fileformat
         real, dimension(:), intent(in)   :: seismogram
-        real, intent(in)                 :: toffset, deltat
+        real(kind=8), intent(in)         :: toffset
+        real, intent(in)                 :: deltat
         integer, intent(out)             :: nerr
 
         type(varying_string)             :: fileformat_
@@ -68,7 +70,7 @@ module seismogram_io
       ! dump 1-component seismogram to file
         
         integer :: iunit, i, nlen
-        real(kind=8) :: dtoffset, ddeltat
+        real(kind=8) :: ddeltat
         real, dimension(size(seismogram)) :: seismogram_copy
         character(len=len(filename)+1) :: filename_cstr
              
@@ -100,12 +102,11 @@ module seismogram_io
         if (fileformat_ == 'mseed') then
             seismogram_copy(:) = seismogram(:)            
             
-            dtoffset = toffset
             ddeltat = deltat
             filename_cstr = filename//char(0)
             nlen = size(seismogram_copy)
             call writemseed( filename_cstr, seismogram_copy, nlen, &
-                dtoffset, ddeltat, nerr )
+                toffset, ddeltat, nerr )
             
         end if        
         
@@ -134,7 +135,8 @@ module seismogram_io
         
         character(len=*), intent(in)                  :: filename, fileformat
         real, dimension(:), allocatable, intent(inout)   :: seismogram
-        real, intent(out) :: toffset, deltat
+        real(kind=8), intent(out) :: toffset
+        real, intent(out)         ::  deltat
         integer, intent(out) :: nerr
         
         type(varying_string) :: vsfn
@@ -143,7 +145,7 @@ module seismogram_io
         real, dimension(:,:),allocatable :: tablebuf
         type(varying_string) :: fileformat_
         character(len=len(filename)+1) :: filename_cstr
-        real(kind=8) :: dtoffset, ddeltat
+        real(kind=8) :: ddeltat
         
       ! this is not a very brilliant way to determine the file type, but
       ! anyway, look at the filename extension if this is sac data...
@@ -201,7 +203,7 @@ module seismogram_io
           
             filename_cstr = filename//char(0)
             
-            call readmseed1( filename_cstr, nlen, dtoffset, ddeltat, nerr )
+            call readmseed1( filename_cstr, nlen, toffset, ddeltat, nerr )
             if (nerr .ne. 0) then
                 call error( "readmseed1 returned an error" )
                 return
@@ -212,7 +214,6 @@ module seismogram_io
             
             call readmseed2( seismogram )
             
-            toffset = real(dtoffset)
             deltat = real(ddeltat)
             
         end if
