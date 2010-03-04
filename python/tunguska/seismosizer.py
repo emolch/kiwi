@@ -93,7 +93,7 @@ class SeismosizerBase:
 
     def __del__(self):
         self.close()
-        shutil.rmtree(self.tempdir)
+        #shutil.rmtree(self.tempdir)
         
     def sighandler(self, *args):
         logging.warn('Caught signal %s, license to kill' % getsigdict()[args[0]])
@@ -526,7 +526,7 @@ class Seismosizer(SeismosizerBase):
         self.source = source
         self.do_set_source_params( source, **kwargs )
         
-    def set_taper( self, taper ):
+    def set_taper( self, taper, sourcedepth=None ):
         '''Set a general taper.
            If the taper is built on phases, which are not available at 
            a receivers distance, this will switch off the receiver in question.'''
@@ -535,7 +535,7 @@ class Seismosizer(SeismosizerBase):
             taper = [ taper ] * len(self.receivers)
             
         for irec, rec in enumerate(self.receivers):
-            values = taper[irec](rec.distance_m)
+            values = taper[irec](rec.distance_m, sourcedepth)
             if None in values:
                 # Phase(s) not existant at this distance
                 self.switch_receiver(irec+1, 'off')
@@ -824,7 +824,10 @@ class Seismosizer(SeismosizerBase):
                 self._set_receiver_process(irec+1, None)
                 
         else:
+
+
             #assert len(self.receivers) >= len(self)
+
             if len(self) > 1:
                 distances = [ r.distance_m for r in self.receivers ]
                 distances_active = [ r.distance_m for r in self.receivers if r.enabled ]

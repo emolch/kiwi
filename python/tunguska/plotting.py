@@ -241,7 +241,7 @@ def station_plot( slat, slon, lat, lon, rnames, station_color, station_size, sou
     layout = gmt.default_layout()
     layout.set_fixed_margins(*margins)
     widget = layout.get_widget()
-    widget['J'] = '-JE%g/%g/%g' % (slon, slat, maxdist) + '/%(width)gp'
+    widget['J'] = '-JE%g/%g/%g' % (slon, slat, min(maxdist,180.)) + '/%(width)gp'
     aspect = gmtpy.aspect_for_projection( R='g', *widget.J() )
     widget.set_aspect(aspect)
     

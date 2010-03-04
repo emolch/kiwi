@@ -9,7 +9,6 @@ def progress_off(option, opt_str, value, parser):
     config.show_progress = False
 
 def install(src, dst):
-    dirs = os.path.split(dst)
     d,x = os.path.split(dst)
     dirs = []
     while d and not os.path.isdir(d):
@@ -79,8 +78,12 @@ def kiwi_main(steps):
             t = Template(file=template_filename, searchList=[ data ])
             
             page = str(t)
+            
             files = [ x[1] or x[3] for x in re.findall(r'("([^"]+\.(png|pdf))"|\'([^\']+\.(png|pdf))\')', page) ]
-        
+            
+            if not os.path.exists(report_dir):
+                os.mkdir(report_dir)
+                
             for file in files:
                 install(file, pjoin(report_dir, file))
             

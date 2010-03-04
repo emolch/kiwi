@@ -53,13 +53,25 @@ class Receiver:
         self.distance_m   = distance_m
         self.azimuth      = azimuth
     
+    
+    
     def get_station(self):
-        return self.name.split('.')[0]
+        toks = self.name.split('.')
+        if len(toks) == 3:
+            return toks[1]
+        
+        # compatibility with old preprocessing scripts
+        else:
+            return toks[0]
        
     
     def get_network(self):
         toks = self.name.split('.')
-        if len(toks) > 1:
+        if len(toks) == 3:
+            return toks[0]
+            
+        # compatibility with old preprocessing scripts
+        elif len(toks) == 2:
             return toks[1]
         else:
             return ''

@@ -242,8 +242,8 @@ class IrisWilber(Wilber):
                       wanted_channels = ('BHE', 'BHN', 'BHZ'),
                       vnetcodes = ('_GSN-BROADBAND',),
                       netcodes = (),
-                      before = 5,
-                      after = 50,
+                      before = 20,
+                      after = 120,
                       outfilename='event_data.seed'):
             
             logging.info('Attempt to download data for event %s' % str(event))

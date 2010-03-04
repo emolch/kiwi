@@ -321,8 +321,7 @@ class MisfitGrid:
             gvalues = self.param_values[iparam][1]
             gedges = values_to_bin_edges(gvalues)
             hist, edges = num.histogram(self.stats[param].distribution,
-                                        bins=gedges,
-                                        new=True)
+                                        bins=gedges)
             
             hist = hist/float(len(bootstrap_sources))
             
@@ -363,16 +362,23 @@ class MisfitGrid:
         for iparam, param in enumerate(self.sourceparams):
             mini, maxi = param_min_misfits_range
             
+            if mini < 0.95:
+                maxi = 1.
+                       
+            else:
+                if mini < 1.95:
+                    maxi = 2.
+                       
             conf = dict( xlabel = param.title(),
                          xunit = self.base_source.sourceinfo(param).unit,
-                         ylimits = (mini, min(maxi,1.)) )
+                         ylimits = (mini, maxi) )
             
             if conf_overrides:
                 conf.update(conf_overrides)
 
-            
             plotting.km_hack(conf)
             fn = 'min-misfit-%s.pdf' % param
+                        
             plotting.misfit_plot_1d( [param_min_misfits[param]],
                                      pjoin(dirname, fn),
                                      conf,apply_moment_to_magnitude_hack=True )
@@ -428,7 +434,11 @@ class MisfitGrid:
                 else:
                     bootstrap_data = ([],[],[])
                 
-                zlimits = (az.min(),min(1.,az.max()))
+                if az.min() < 0.95:
+                    zlimits = (az.min(),min(1.,az.max()))
+                else:
+                    zlimits = (az.min(),az.max())
+                
                 if 'misfit_limits' in dir(config):
                     zlimits = config.misfit_limits
                 

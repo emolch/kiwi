@@ -170,7 +170,7 @@ def standard_setup( datadir,
         seis.blacklist_receivers( blacklist )
     if xblacklist:
         seis.xblacklist_receivers( xblacklist )
-    
+        
     # apply reference seismograms shifts
     if shifts is not None:
         seis.shift_ref_seismograms( shifts )
@@ -217,10 +217,10 @@ gen_dweights.required = set(('datadir',))
 gen_dweights.optional = set(('ref_seismogram_stem', 'ref_seismogram_format'))
 
 class Step:
-    inner_misfit_method_params = set(('inner_norm', 'taper', 'filter', 'nsets'))
+    inner_misfit_method_params = set(('inner_norm', 'taper', 'filter', 'nsets', 'depth'))
     outer_misfit_method_params = set(('outer_norm', 'bootstrap_iterations', 'anarchy', 'receiver_weights'))
     
-    def __init__(self, workdir, name):
+    def __init__(self, workdir, name, dump_processing='filtered'):
         self.baseworkdir = workdir
         self.stepname = name
         self.in_config = None
@@ -229,6 +229,7 @@ class Step:
         self.seismosizer = None
         self.required = set(standard_setup.required)
         self.optional = set(standard_setup.optional)
+        self.dump_processing = dump_processing
         
     def make_rundir_path(self, run_id):
         return pjoin(self.stepdir, str(run_id))
@@ -300,10 +301,12 @@ class Step:
         
         tapers_by_set = conf['taper']
         assert(len(tapers_by_set) == conf['nsets'])
-        tapers = [ tapers_by_set[i%len(tapers_by_set)] for i in range(len(seis.receivers)) ] 
-        seis.set_taper(tapers)
+        tapers = [ tapers_by_set[i%len(tapers_by_set)] for i in range(len(seis.receivers)) ]
+        
+        seis.set_taper(tapers, conf['depth'])
         if conf['filter']:
             seis.set_filter(conf['filter'])
+            
         seis.set_misfit_method(conf['inner_norm'])
         
     def post_work(self, stop_seismosizer=True):
@@ -388,7 +391,7 @@ class Step:
             return
         
         self.seismosizer.set_source( source )
-        receivers = self.seismosizer.get_receivers_snapshot(which_processing='filtered')
+        receivers = self.seismosizer.get_receivers_snapshot(which_processing=self.dump_processing)
         self.dump( receivers, 'snapshot_%s' % ident )
         
         self.dump( self.seismosizer.get_psm_infos(), 'source_infos_%s' % ident )
@@ -551,6 +554,7 @@ class Informer(Step):
         if nsta < 3:
             sys.exit('too few stations')
     
+
     def _plot(self, run_id='current'):
 
         saved = self.load('source_receivers', run_id=run_id)
@@ -763,9 +767,9 @@ class Shifter(Step):
 
 class ParamTuner(Step):
      
-    def __init__(self, workdir, sourcetype='eikonal', params=['time'], name=None, xblacklist_level=None):
+    def __init__(self, workdir, sourcetype='eikonal', params=['time'], name=None, xblacklist_level=None, dump_processing=None):
         if name is None: name = '-'.join(params)+'-tuner'
-        Step.__init__(self, workdir, name)
+        Step.__init__(self, workdir, name, dump_processing)
         self.sourcetype = sourcetype
         self.params = params
         self.xblacklist_level = xblacklist_level
