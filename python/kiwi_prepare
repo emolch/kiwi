@@ -26,8 +26,26 @@ def save_rapid_station_table(stations_path, stations):
         f.write('%-10s %15.8e %15.8e\n' % (nsl, station.lat, station.lon))
     f.close()
     
-def save_rapid_input_file(rapid_input_path, event):
+def save_rapid_input_file(rapid_input_path, event, gfdb):
+    mag = event.magnitude
+    if mag is None:
+        mag = 6.0
     
+    depth = event.depth
+    if depth is None:
+        depth = 20000.
+    
+    depth_range = (gfdb.firstz, gfdb.firstz+gfdb.dz*(gfdb.nz-1))
+    
+    x = dict(
+        lat=event.lat,
+        lon=event.lon,
+        eventname=event.name,
+        eventmom=moment_tensor.magnitude_to_moment(mag),
+        depth=depth,
+        depth_upperlim=depth_range[0]/1000.,
+        depth_bottomlim=depth_range[1]/1000.)
+        
     f = open(rapid_input_path, 'w')
     f.write('''#FileSystem
 INVERSION_DIR    results
@@ -67,20 +85,14 @@ BP_F1_STEP3      0.01
 BP_F2_STEP3      0.01
 BP_F3_STEP3      0.10
 BP_F4_STEP3      0.10
-''' % dict(
-    lat=event.lat,
-    lon=event.lon,
-    eventname=event.name,
-    eventmom=moment_tensor.magnitude_to_moment(event.magnitude),
-    depth=event.depth,
-    depth_upperlim=1.,
-    depth_bottomlim=99.))
+''' % x )
     f.close()
     
     
 def save_kiwi_dataset( stations, traces, event, config):
     
-    copy_files(config.path('skeleton_dir'), config.path('main_dir'))
+    if hasattr(config, 'skeleton_dir'): 
+        copy_files(config.path('skeleton_dir'), config.path('main_dir'))
 
     # gather traces by station
     dataset = []
@@ -111,6 +123,7 @@ def save_kiwi_dataset( stations, traces, event, config):
                 if config.trace_time_zero == 'event':
                     tr.shift(-event.time)
                 ydata = tr.get_ydata()
+                ydata *= config.trace_factor
                 fn = config.path('trace_path', {
                     'ireceiver': iref, 
                     'component': config.kiwi_component_map[tr.channel]})
@@ -133,12 +146,13 @@ def save_kiwi_dataset( stations, traces, event, config):
     f.close()
     
     
-def save_rapid_dataset(stations, traces, event, config):
+def save_rapid_dataset(stations, traces, event, gfdb, config):
     
-    copy_files(config.path('skeleton_dir'), config.path('main_dir'))
+    if hasattr(config, 'skeleton_dir'): 
+        copy_files(config.path('skeleton_dir'), config.path('main_dir'))
     
     save_rapid_station_table(config.path('stations_path'), stations)
-    save_rapid_input_file(config.path('rapid_input_path'), event)
+    save_rapid_input_file(config.path('rapid_input_path'), event, gfdb)
     
     used_traces = []
     for station in stations:
@@ -159,7 +173,7 @@ def copy_files(source_dir, dest_dir):
         shutil.rmtree(dest_dir)
     shutil.copytree(source_dir, dest_dir)
 
-usage = '%prog [ options ] configfile eventnames ...'
+usage = '%prog [ options ] configfile [ eventnames ... ]'
 
 parser = OptionParser(usage=usage)
 parser.add_option('--loglevel', 
@@ -175,7 +189,7 @@ parser.add_option('--loglevel',
 
 util.setup_logging(options.loglevel)
 
-if len(args) < 2:
+if len(args) < 1:
     parser.error('required argument is missing')
 
 
@@ -199,6 +213,8 @@ deltat = db.dt
 min_dist = db.firstx + config.gfdb_margin
 max_dist = db.firstx + (db.nx-1)*db.dx - config.gfdb_margin
 
+if not event_names and hasattr(config, 'event_names'):
+    event_names = config.event_names
 
 for event_name in event_names:
     
@@ -214,6 +230,8 @@ for event_name in event_names:
         sys.exit('config has neither entry "seed_volume" nor "edump_data_dir"')
         
     event = acc.get_events()[0]
+    event.name = event_name
+    
     
     events = acc.get_events()
     if not events:
@@ -227,6 +245,7 @@ for event_name in event_names:
     chan_count = {}
     
     processed_traces = []
+     
     for traces in acc.iter_displacement_traces(
             config.restitution_fade_time, 
             config.resitution_frequencyband, deltat=deltat, rotate=(get_angle, config.rotation_table),
@@ -259,7 +278,7 @@ for event_name in event_names:
         save_kiwi_dataset(dstations, processed_traces, event, kiwi_config)
     
     if rapid_config is not None:
-        save_rapid_dataset(dstations, processed_traces, event, rapid_config)
+        save_rapid_dataset(dstations, processed_traces, event, db, rapid_config)
     
     for k,v in chan_count.iteritems():
         logger.info( 'Number of displacement traces for channel %s: %i\n' % (k,v) )
