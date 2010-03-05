@@ -67,8 +67,20 @@ program gfdb_info
             call gfdb_dump_missing( db, stdout )
         else if (command == 'stats') then
             call gfdb_dump_stats( db, stdout )
+        else if (command == 'chunkstats') then
+            call gfdb_infos( db, indexmemory_per_chunk, ntraces_in_chunks )
+            write (*,'(a)') char("indexmemory_per_chunk="// indexmemory_per_chunk)
+            ntraces = 0
+            ntraces_used = 0
+            do i=1,size(ntraces_in_chunks,2)
+                write (*,'(a)') char("chunk"//i//"_traces="// ntraces_in_chunks(1,i) // "/" //&
+                                                        ntraces_in_chunks(2,i) )
+                ntraces_used = ntraces_used+ntraces_in_chunks(1,i)
+                ntraces = ntraces+ntraces_in_chunks(2,i)
+            end do
+            write (*,'(a)') char("total_traces="// ntraces_used // "/" //&
+                                                        ntraces )
         end if
-        
     else
     
         write (*,'(a)') char("dt="// db%dt)
@@ -82,18 +94,6 @@ program gfdb_info
         write (*,'(a)') char("nchunks="// db%nchunks)
         write (*,'(a)') char("nxc="// db%nxc)
         
-        call gfdb_infos( db, indexmemory_per_chunk, ntraces_in_chunks )
-        write (*,'(a)') char("indexmemory_per_chunk="// indexmemory_per_chunk)
-        ntraces = 0
-        ntraces_used = 0
-        do i=1,size(ntraces_in_chunks,2)
-            write (*,'(a)') char("chunk"//i//"_traces="// ntraces_in_chunks(1,i) // "/" //&
-                                                    ntraces_in_chunks(2,i) )
-            ntraces_used = ntraces_used+ntraces_in_chunks(1,i)
-            ntraces = ntraces+ntraces_in_chunks(2,i)
-        end do
-        write (*,'(a)') char("total_traces="// ntraces_used // "/" //&
-                                                    ntraces )
     end if
     
     call gfdb_destroy( db )
