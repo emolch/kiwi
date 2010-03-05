@@ -9,7 +9,7 @@ from optparse import OptionParser
 from os.path import join as pjoin
 
 
-logger = logging.getLogger('kiwi_prapare')
+logger = logging.getLogger('kiwi_prepare')
 
 def get_nsl(x):
     return x.network, x.station, x.location
@@ -43,8 +43,8 @@ def save_rapid_input_file(rapid_input_path, event, gfdb):
         eventname=event.name,
         eventmom=moment_tensor.magnitude_to_moment(mag),
         depth=depth,
-        depth_upperlim=depth_range[0]/1000.,
-        depth_bottomlim=depth_range[1]/1000.)
+        depth_upperlim=depth_range[0]/1000.+1,
+        depth_bottomlim=depth_range[1]/1000.-1)
         
     f = open(rapid_input_path, 'w')
     f.write('''#FileSystem
@@ -242,26 +242,36 @@ for event_name in event_names:
     stations = acc.get_stations(relative_event=event)
     get_angle = lambda tr: stations[tr.network, tr.station, tr.location].backazimuth + 180.
     
+    
     chan_count = {}
     
     processed_traces = []
      
     for traces in acc.iter_displacement_traces(
             config.restitution_fade_time, 
-            config.resitution_frequencyband, deltat=deltat, rotate=(get_angle, config.rotation_table),
-            maxdisplacement=config.displacement_limit):    
+            config.restitution_frequencyband, deltat=deltat, rotate=(get_angle, config.rotation_table),
+            maxdisplacement=config.displacement_limit):
         
-        shifted = []
         for tr in traces:
+            
+            station = stations[get_nsl(tr)]
+            span_complete = True
+            if hasattr(config, 'check_span'):
+                for timing in config.check_span:
+                    arrival_time = event.time + timing(station.dist_m, event.depth)
+                    if arrival_time is not None and not (tr.tmin <= arrival_time and arrival_time <= tr.tmax):
+                        logger.warn('Trace does not contain all required arrivals: %s.%s.%s.%s' % tr.nslc_id)
+                        span_complete = False
+                
+            if not span_complete: continue
+            
+            processed_traces.append(tr)
             
             if tr.channel not in chan_count:
                 chan_count[tr.channel] = 0
                 
             chan_count[tr.channel] += 1
-        
-        processed_traces.extend(traces)
-        
-    
+                
     # use only one sensor at each station; use lexically first
     sstations = stations.values()
     sstations.sort( lambda a,b: cmp(get_nsl(a),  get_nsl(b)) )
@@ -282,6 +292,9 @@ for event_name in event_names:
     
     for k,v in chan_count.iteritems():
         logger.info( 'Number of displacement traces for channel %s: %i\n' % (k,v) )
+        
+    if hasattr(config, 'raw_trace_path'):
+        io.save(acc.get_pile().all(), config.path('raw_trace_path'))
         
     logger.info( 'Stopwatch: %5.1f s' % sw() )
     
