@@ -261,13 +261,13 @@ for event_name in event_names:
             maxdisplacement=config.displacement_limit):
         
         for tr in traces:
+            station = stations[get_nsl(tr)]
             
             if min_dist is not None and station.dist_m < min_dist:
                 continue
             if max_dist is not None and station.dist_m > max_dist:
                 continue
             
-            station = stations[get_nsl(tr)]
             span_complete = True
             
             timings = []
