@@ -695,7 +695,7 @@ class Shifter(Step):
         
         tapers_by_set = conf['taper']
         tapers = [ tapers_by_set[i%len(tapers_by_set)] for i in range(len(seis.receivers)) ]
-        seis.set_taper(tapers)
+        seis.set_taper(tapers, base_source['depth'])
         seis.set_filter(conf['filter'])
         
         shifts = seis.autoshift_ref_seismograms( conf['autoshift_range'] )
