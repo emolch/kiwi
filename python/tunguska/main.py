@@ -69,11 +69,13 @@ def kiwi_main(steps):
             data[step.stepname] = step
         data['posted'] = time.time()
         
-        report_dir = 'report'
-        templates_dir = 'report_templates'
+        report_dir = steps[0].ic()['report_dir']
+        templates_dir = steps[0].ic()['report_templates_dir']
+        
         template_filenames = []
         for entry in os.listdir(templates_dir):
             if entry.startswith('.') or entry.startswith('_'): continue
+            if entry.endswith('~'): continue
             template_filename = pjoin(templates_dir, entry)
             t = Template(file=template_filename, searchList=[ data ])
             
