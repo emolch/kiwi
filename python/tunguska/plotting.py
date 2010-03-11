@@ -8,6 +8,7 @@ import progressbar
 import math
 from os.path import join as pjoin
 import orthodrome
+import moment_tensor
 from moment_tensor import moment_to_magnitude
 from plotting_traces import multi_seismogram_plot2
 
@@ -797,6 +798,22 @@ def autoplot_gmtpy(data, filename, **conf ):
 
 def beachball(source, filename, **conf_overrides):
     
+    if 'strike' in source.keys() and 'dip' in source.keys() and 'slip-rake' in source.keys():
+       
+        r2d = 180./math.pi
+        d2r = 1./r2d
+
+        strike, dip, rake = source['strike'], source['dip'], source['slip-rake']        
+        dip, strike, mrake = [r2d*xx for xx in moment_tensor.unique_euler(dip*d2r, strike*d2r, -rake*d2r)]
+        rake = -mrake
+                
+        return beachball_mt(None, filename,  sdr=(strike,dip,rake), **conf_overrides)
+    
+    else:
+        return []
+        
+def beachball_mt(mt, filename, sdr=None, **conf_overrides):
+    
     conf = dict(**config.beachball_config)
     if conf_overrides is not None:
         conf.update( conf_overrides )
@@ -824,19 +841,24 @@ def beachball(source, filename, **conf_overrides):
 
     widget = layout.get_widget()
     
-    if 'strike' in source.keys() and 'dip' in source.keys() and 'slip-rake' in source.keys():
-        kwargs = dict( R=(-1.,1.,-1.,1.), S='a%gc' % (((w-margins[0]-margins[1])/gmtpy.cm)-2./28.34), in_rows=[[
-                            0., 0., 1.,
-                            source['strike'], source['dip'], source['slip-rake'], 
-                            5., 0.,0., '' ]]) 
-        
-        #gmt.psmeca( *widget.JXY(), **kwargs )
-        if indicate_plane == 0:
-            gmt.psmeca( L='2p,black', G=conf['fillcolor'], *widget.JXY(), **kwargs )
-        else:
-            gmt.psmeca( L='1p,black,.', G=conf['fillcolor'], *widget.JXY(), **kwargs )        
-            gmt.psmeca( T='%i/2p,%s' % (indicate_plane, gmtpy.color('black')), *widget.JXY(), **kwargs )
+    if mt is not None:
+        strike, dip, rake = mt.both_strike_dip_rake()[0]
+    else:
+        strike, dip, rake = sdr
+    
+    kwargs = dict( R=(-1.,1.,-1.,1.), S='a%gc' % (((w-margins[0]-margins[1])/gmtpy.cm)-2./28.34), in_rows=[[
+                        0., 0., 1.,
+                        strike, dip, rake, 
+                        5., 0.,0., '' ]]) 
+    
+    #gmt.psmeca( *widget.JXY(), **kwargs )
+    if indicate_plane == 0:
+        gmt.psmeca( L='2p,black', G=conf['fillcolor'], *widget.JXY(), **kwargs )
+    else:
+        gmt.psmeca( L='1p,black,.', G=conf['fillcolor'], *widget.JXY(), **kwargs )        
+        gmt.psmeca( T='%i/2p,%s' % (indicate_plane, gmtpy.color('black')), *widget.JXY(), **kwargs )
                 
     gmt.save(filename)
     return filename
+    
     
