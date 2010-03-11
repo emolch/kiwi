@@ -35,7 +35,10 @@ def save_rapid_input_file(rapid_input_path, event, gfdb):
     if depth is None:
         depth = 20000.
     
-    depth_range = (gfdb.firstz, gfdb.firstz+gfdb.dz*(gfdb.nz-1))
+    if gfdb is not None:
+        depth_range = (gfdb.firstz, gfdb.firstz+gfdb.dz*(gfdb.nz-1))
+    else:
+        depth_range = (1000.,600000.)
     
     x = dict(
         lat=event.lat,
@@ -207,12 +210,17 @@ config = conf['config']
 kiwi_config = conf.get('kiwi_config', None)
 rapid_config = conf.get('rapid_config', None)
 
-
-db = gfdb.Gfdb(config.path('gfdb_path'))
-deltat = db.dt
-min_dist = db.firstx + config.gfdb_margin
-max_dist = db.firstx + (db.nx-1)*db.dx - config.gfdb_margin
-
+if hasattr(config, 'gfdb_path'):
+    db = gfdb.Gfdb(config.path('gfdb_path'))
+    deltat = db.dt
+    min_dist = db.firstx + config.gfdb_margin
+    max_dist = db.firstx + (db.nx-1)*db.dx - config.gfdb_margin
+else:
+    db = None
+    deltat = config.deltat
+    min_dist = None
+    max_dist = None
+    
 if not event_names and hasattr(config, 'event_names'):
     event_names = config.event_names
 
@@ -254,16 +262,44 @@ for event_name in event_names:
         
         for tr in traces:
             
+            if min_dist is not None and station.dist_m < min_dist:
+                continue
+            if max_dist is not None and station.dist_m > max_dist:
+                continue
+            
             station = stations[get_nsl(tr)]
             span_complete = True
+            
+            timings = []
             if hasattr(config, 'check_span'):
-                for timing in config.check_span:
-                    arrival_time = event.time + timing(station.dist_m, event.depth)
-                    if arrival_time is not None and not (tr.tmin <= arrival_time and arrival_time <= tr.tmax):
-                        logger.warn('Trace does not contain all required arrivals: %s.%s.%s.%s' % tr.nslc_id)
-                        span_complete = False
+                timings = config.check_span
                 
-            if not span_complete: continue
+            if hasattr(config, 'cut_span'):
+                timings.extend(config.cut_span)
+            
+            for timing in timings:
+                tt = timing(station.dist_m, event.depth)
+                if tt is None:
+                    logger.warn('Trace does not contain all required arrivals: %s.%s.%s.%s (timing not present)' % tr.nslc_id)
+                    span_complete = False
+                    break
+                
+                arrival_time = event.time + tt
+                if not (tr.tmin <= arrival_time and arrival_time <= tr.tmax):
+                    what = arrival_time
+                    logger.warn('Trace does not contain all required arrivals: %s.%s.%s.%s (timing not in trace)' % tr.nslc_id)
+                    span_complete = False
+                    break
+                            
+            if not span_complete:
+                continue
+            
+            if hasattr(config, 'cut_span'):
+                cs = config.cut_span
+                tmin, tmax = (event.time+cs[0](station.dist_m, event.depth),
+                              event.time+cs[1](station.dist_m, event.depth))
+                              
+                tr.chop(tmin, tmax, inplace=True)
             
             processed_traces.append(tr)
             
