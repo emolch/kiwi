@@ -96,7 +96,7 @@ class EventDumpAccess(eventdata.EventDataAccess):
         ev.lat = float(inp['latitude'])
         ev.lon = float(inp['longitude'])
         if 'depth' in inp:
-            ev.depth = float(inp['depth'])
+            ev.depth = float(inp['depth'])*1000.
         if 'publicID' in inp:
             ev.name = inp['publicID']
         if 'magnitude' in inp:
