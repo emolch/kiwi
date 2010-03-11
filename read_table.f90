@@ -174,7 +174,9 @@ module read_table
         if ( allocated(a) ) deallocate( a )
         
         if ( nchunks == 0 ) then
-            deallocate( field )
+            if (allocated(field)) then
+                deallocate( field )
+            end if
             return
         end if
         nrows = (nchunks-1)*CHUNK_ROWS + current%nrows
