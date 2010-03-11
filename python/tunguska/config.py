@@ -14,6 +14,7 @@ default_loglevel = logging.INFO
 source_info_prog = 'source_info'
 gfdb_info_prog = 'gfdb_info'
 gfdb_extract_prog = 'gfdb_extract'
+gfdb_build_prog = 'gfdb_build'
 seismosizer_prog = 'minimizer'
 
 topo_dir = pjoin(kiwi_aux_dir(),'topo')

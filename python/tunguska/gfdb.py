@@ -15,6 +15,7 @@ class Gfdb:
    
         self.path = gfdbpath
         self.extractor = None
+        self.builder = None
         self.tempdir = None
         self.tempfilebase = None
         
@@ -56,18 +57,11 @@ class Gfdb:
         traces = []
         for fn in fns:
             if fn:
-                f = open(fn,'r')
-                tabX = []
-                for line in f:
-                    x,y = [float(x) for x in line.split()]
-                    tabX.append([x,y])
-                
-                tab = num.array( tabX, dtype=num.float ).transpose()
-                f.close()
+                tab = num.loadtxt(fn, dtype=num.float).transpose()
                 
                 if tab.ndim == 2:
-                    time = tab[0].copy()
-                    data = tab[1].copy()
+                    time = tab[0]
+                    data = tab[1]
                 else:
                     time = num.array([tab[0].copy()])
                     data = num.array([tab[1].copy()])
@@ -79,12 +73,46 @@ class Gfdb:
         
         return traces
     
+    def put_traces_slow( self, x,z, traces):
+        assert len(traces) == self.ng
+        if not self.builder:
+            self.builder = Popen( [config.gfdb_build_prog, self.path], stdin=PIPE, stdout=PIPE, close_fds=True)
+            print self.path
+            self.tempdir = tempfile.mkdtemp('','gfdb_build-')
+            self.tempfilebase = pjoin(self.tempdir, 'trace')
+            
+        fns = []
+        
+        for ig, xx in enumerate(traces):
+            if xx is not None:
+                (time, data)  = xx
+                tab = num.array((time,data)).transpose()
+                if len(tab) > 0:
+                    fn = '%s-%i.table' % (self.tempfilebase, ig)
+                    num.savetxt(fn, tab)
+                    self.builder.stdin.write("%f %f %i '%s'\n" % (x,z,ig+1,fn))
+                    fns.append(fn)
+        
+        self.builder.stdin.flush()
+
+        for fn in fns:
+            answer = self.builder.stdout.readline()
+            assert answer.strip() == fn
+                
+            
     def terminate(self):
         if self.extractor:
             self.extractor.stdin.close()
             self.extractor.stdout.close()
             self.extractor.wait()
             self.extractor = None
+        
+        if self.builder:
+            self.builder.stdin.close()
+            self.builder.stdout.close()
+            self.builder.wait()
+            self.builder = None
+            
         if self.tempdir:
             shutil.rmtree(self.tempdir)
             self.tempdir = None

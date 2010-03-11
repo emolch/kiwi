@@ -1,0 +1,106 @@
+#!/usr/bin/env python
+
+import os, sys
+from subprocess import Popen, PIPE
+from tunguska.phase import Phase
+from tunguska.gfdb import Gfdb
+from scipy import signal
+pjoin = os.path.join
+
+def decimate(x, q, n=None, ftype='iir', axis=-1):
+    """downsample the signal x by an integer factor q, using an order n filter
+    
+    By default, an order 8 Chebyshev type I filter is used or a 30 point FIR 
+    filter with hamming window if ftype is 'fir'.
+
+    (port to python of the GNU Octave function decimate.)
+
+    Inputs:
+        x -- the signal to be downsampled (N-dimensional array)
+        q -- the downsampling factor
+        n -- order of the filter (1 less than the length of the filter for a
+             'fir' filter)
+        ftype -- type of the filter; can be 'iir' or 'fir'
+        axis -- the axis along which the filter should be applied
+    
+    Outputs:
+        y -- the downsampled signal
+
+    """
+
+    if type(q) != type(1):
+        raise Error, "q should be an integer"
+
+    if n is None:
+        if ftype == 'fir':
+            n = 30
+        else:
+            n = 8
+    if ftype == 'fir':
+        b = signal.firwin(n+1, 1./q, window='hamming')
+        y = signal.lfilter(b, 1., x, axis=axis)
+    else:
+        (b, a) = signal.cheby1(n, 0.05, 0.8/q)
+        y = signal.lfilter(b, a, x, axis=axis)
+
+    return y.swapaxes(0,axis)[n/2::q].swapaxes(0,axis)
+    
+
+if  len(sys.argv) != 4:
+    sys.exit('usage: gfdb_downsample in_db_path out_db_path tratio')
+    
+
+in_db_path = sys.argv[1]
+out_db_path = sys.argv[2]
+tratio = int(sys.argv[3])
+
+# create database if it does not exist already
+
+in_db = Gfdb( in_db_path )
+if not os.path.isfile( out_db_path + '.index' ):
+    cmd = [str(x) for x in ['gfdb_build',   out_db_path, 
+                                            in_db.nchunks, 
+                                            in_db.nx, 
+                                            in_db.nz, 
+                                            in_db.ng, 
+                                            in_db.dt, 
+                                            in_db.dx, 
+                                            in_db.dz, 
+                                            in_db.firstx, 
+                                            in_db.firstz ]]
+    p = Popen( cmd, stdin=PIPE )
+    p.communicate()
+    
+
+out_db = Gfdb( out_db_path )
+
+n = 8
+(b, a) = signal.cheby1(n, 0.05, 0.8/tratio)
+
+for ix in xrange(out_db.nx):
+    x = out_db.firstx + ix * out_db.dx
+    for iz in xrange(out_db.nz):
+        z = out_db.firstz + iz * out_db.dz
+        
+        sys.stderr.write('distance: %10g km, depth: %10g km\n' % (x/1000., z/1000.))
+        
+        data_in = in_db.get_traces_slow(x,z)
+        
+        data_out = []
+        for ig, xx in enumerate(data_in):
+            if xx is not None:
+                t, u = xx
+                u2 = signal.lfilter(b, a, u)[n/2::tratio]
+                t2 = t[n/2::tratio]
+                if len(u) == 1:
+                    u2 = u
+                    t2 = t
+                    
+                data_out.append((t2,u2))
+            else:
+                data_out.append(None)
+            
+        out_db.put_traces_slow(x,z, data_out)
+        
+        
+            
