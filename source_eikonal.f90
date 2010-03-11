@@ -273,7 +273,8 @@ module source_eikonal
         integer :: nx, ny
         type(t_polygon) :: rupture_poly, rupture_poly_rc
         real, dimension(3) :: min_rc, max_rc
-        
+        real :: deltagrid
+
         bord_shift_x = psm%params(9)
         bord_shift_y = psm%params(10)
         bord_radius = psm%params(11)
@@ -290,8 +291,9 @@ module source_eikonal
         end if
 
       ! solve eikonal equation on a fine and rectangular grid
-        call polygon_box( rupture_poly_rc, min_rc, max_rc )  
-        call psm_make_eikonal_grid( psm, min_rc, max_rc, 100., rupture_poly, psm%egrid, ok )
+        call polygon_box( rupture_poly_rc, min_rc, max_rc )
+        deltagrid = min(100.*shortest_doi/2.,4000.)
+        call psm_make_eikonal_grid( psm, min_rc, max_rc, deltagrid, rupture_poly, psm%egrid, ok )
         if (.not. ok) return
         
       ! determine optimal grid size  
