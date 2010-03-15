@@ -1,4 +1,6 @@
 
+import time, calendar
+
 class Config:
     def __init__(self, base=None, **kwargs):
         self.base = base
@@ -40,3 +42,23 @@ class Config:
             last = s
             
         raise Exception('Maximum number of replacements reached (recusive directory naming?)')
+
+    def mktime(self, s):
+        if isinstance(s, tuple):
+            base, offset = s
+        else:
+            base, offset = s, 0
+        
+        if base == 'now':
+            tbase = time.time()
+        else:
+            tbase = calendar.timegm(time.strptime(s, "%Y-%m-%d %H:%M:%S"))
+        
+        return tbase + offset
+        
+    def timerange(self, name):
+        stbeg, stend = getattr(self, name)
+        tbeg, tend = self.mktime(stbeg), self.mktime(stend)
+        
+        
+    

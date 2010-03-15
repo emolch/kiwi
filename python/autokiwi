@@ -1,0 +1,139 @@
+#!/usr/bin/env python
+import logging, sys, os
+
+from pyrocko import wilber, util
+
+from optparse import OptionParser
+from tunguska import prepare
+
+from os.path import join as pjoin
+
+class GlobalDataRequest(wilber.IrisWilber):
+    
+    def __init__(self,
+            seed_volume_tmpl='events/%(event_name)s/data.seed', 
+            vnetcodes=['_GSN-BROADBAND'],
+            netcodes=[],
+            event_filter_func=None,
+            station_filter_func=None,
+            before_p=5,
+            after_p=5,
+            wanted_channels = ['BHZ'],
+            **kwargs
+            ):
+
+        wilber.IrisWilber.__init__(self, **kwargs)
+        self.seed_volume_tmpl = seed_volume_tmpl
+        self.vnetcodes = vnetcodes
+        self.netcodes = netcodes
+        self.event_filter_func = event_filter_func
+        self.station_filter_func = station_filter_func
+        self.before_p = before_p
+        self.after_p = after_p
+        self.wanted_channels = wanted_channels
+
+    def station_filter(self, station):
+        if station_filter_func:
+            self.station_filter_func(station)
+        
+    def event_filter(self, event):
+        if event_filter_func:
+            self.event_filter_func(event)
+
+    def event_name(event):
+        region = '-'.join(event.region.replace('.','').lower().split())
+        date_time = time.strftime('%Y-%m-%d_%H-%M-%S', time.gmtime(event.timestamp))
+        return '%s_%s' % (region, date_time)
+
+    def download_newest_event_in_range(time_range):
+        events = request.get_events(time_range=time_range)
+        events.sort(lambda a,b: cmp(a.timestamp, b.timestamp))
+        events.reverse()
+        for event in events:
+            seed_volume = self.seed_volume_tmpl % { 'event_name' : self.event_name(event) }
+            if not os.path.exists(seed_volume):
+                util.ensuredirs(seed_volume)
+                request.get_data(event, outfilename=seed_volume+'.incomplete', vnetcodes=self.vnetcodes, netcodes=self.netcodes,
+                                 before=self.before_p, after=self.after_p,
+                                 wanted_channels=self.wanted_channels)
+                os.rename(seed_volume+'.incomplete', seed_volume)
+                return event_name(event)
+        
+        logging.info('Already have all data for given time range and event selection.')
+        return None
+
+def command_download(config):
+    
+    r = GlobalDataRequest(
+        seed_volume_tmpl    = config.seed_volume,
+        event_filter_func   = config.event_filter,
+        station_filter_func = config.station_filter,
+        vnetcodes           = config.vnetcodes,
+        netcodes            = config.netcodes,
+        before_p            = config.before_p,
+        after_p             = config.after_p,
+        username            = config.username,
+        email               = config.email,
+        wanted_channels     = config.channels)
+    
+    return r.download_newest_event_in_range(config.timerange('time_range'))
+
+user_home_dir = os.environ['HOME']
+
+usage = '%prog [ options ] [ command ] [ eventnames ... ]'
+
+parser = OptionParser(usage=usage)
+
+parser.add_option('--loglevel', 
+    action='store', 
+    dest='loglevel', 
+    type='choice',
+    choices=('error', 'warning', 'info', 'debug'), 
+    default='error',
+    help='set logger level to "error", "warning", "info", or "debug". '
+         'Default is "%default".')
+
+parser.add_option('--config',
+    action='store',
+    dest='config_filename',
+    default=pjoin(user_home_dir, '.autokiwi.conf'),
+    help='set name of config file to use')
+
+
+(options, args) = parser.parse_args()
+
+util.setup_logging(options.loglevel)
+
+if len(args) < 1:
+    parser.error('required argument is missing')
+
+commands = args[0].split(',')
+
+conf = {}
+try:
+    execfile(options.config_filename, conf)
+except Exception, e:
+    sys.exit('error in config file: %s' % e)
+
+base_config = conf['base_config']
+prepare_config = conf['prepare_config']
+kiwi_config = conf.get('kiwi_config', None)
+rapid_config = conf.get('rapid_config', None)
+wilber_config = conf.get('wilber_config', None)
+
+event_names = args[2:]
+
+if not event_names and hasattr(base_config, 'event_names'):
+    event_names = base_config.event_names
+
+if 'download' in commands:
+    event_name = command_download(wilber_config)
+    event_names = [ event_name ]
+    
+
+if 'prepare' in commands:
+    prepare.prepare(prepare_config, kiwi_config, rapid_config, event_names)
+
+
+
+
