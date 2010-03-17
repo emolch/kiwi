@@ -1,12 +1,15 @@
 #!/usr/bin/env python
-import logging, sys, os
+import logging, sys, os, time, glob, re, subprocess
 
-from pyrocko import wilber, util
+from pyrocko import wilber, util, model
 
 from optparse import OptionParser
-from tunguska import prepare
+from tunguska import prepare, sc_edump
 
 from os.path import join as pjoin
+
+
+logger = logging.getLogger('autokiwi')
 
 class GlobalDataRequest(wilber.IrisWilber):
     
@@ -33,39 +36,56 @@ class GlobalDataRequest(wilber.IrisWilber):
         self.wanted_channels = wanted_channels
 
     def station_filter(self, station):
-        if station_filter_func:
-            self.station_filter_func(station)
-        
+        b = self.station_filter_func is None or self.station_filter_func(station)
+        logger.debug('Filter is %s for station %s' % (b, station))
+        return b
+    
     def event_filter(self, event):
-        if event_filter_func:
-            self.event_filter_func(event)
-
-    def event_name(event):
+        b = self.event_filter_func is None or self.event_filter_func(event)
+        logger.debug('Filter is %s for event %s' % (b, event))
+        return b
+    
+    def event_name(self, event):
         region = '-'.join(event.region.replace('.','').lower().split())
-        date_time = time.strftime('%Y-%m-%d_%H-%M-%S', time.gmtime(event.timestamp))
+        date_time = time.strftime('%Y-%m-%d_%H-%M-%S', time.gmtime(event.time))
         return '%s_%s' % (region, date_time)
 
-    def download_newest_event_in_range(time_range):
-        events = request.get_events(time_range=time_range)
-        events.sort(lambda a,b: cmp(a.timestamp, b.timestamp))
-        events.reverse()
+    def download_newest_event_in_range(self, time_range):
+        events = self.get_events(time_range=time_range)
+        events.sort(lambda a,b: cmp(b.time, a.time))
         for event in events:
             seed_volume = self.seed_volume_tmpl % { 'event_name' : self.event_name(event) }
             if not os.path.exists(seed_volume):
                 util.ensuredirs(seed_volume)
-                request.get_data(event, outfilename=seed_volume+'.incomplete', vnetcodes=self.vnetcodes, netcodes=self.netcodes,
+                try:
+                    self.get_data(event, outfilename=seed_volume+'.incomplete', vnetcodes=self.vnetcodes, netcodes=self.netcodes,
                                  before=self.before_p, after=self.after_p,
                                  wanted_channels=self.wanted_channels)
-                os.rename(seed_volume+'.incomplete', seed_volume)
-                return event_name(event)
+                    os.rename(seed_volume+'.incomplete', seed_volume)
+                    return self.event_name(event)
+                except wilber.WilberNoStations, e:
+                    logger.warn("%s (%s)" % (e, self.event_name(event)))
         
-        logging.info('Already have all data for given time range and event selection.')
+        logger.info('Already have all data for given time range and event selection.')
         return None
 
-def command_download(config):
+def event_names_from_pathes(base_config):
+    # not nice; reverse lookup event names from pathes
+    ev_dirs = glob.glob(base_config.path('event_dir') % { 'event_name': '*' })
+    event_names = []
+    for ev_dir in ev_dirs:
+        if not os.path.isdir(ev_dir): continue
+        pat = base_config.path('event_dir') % {'event_name': 'xxxEVENTNAMExxx'}
+        pat = re.escape(pat).replace('xxxEVENTNAMExxx', r'([^/]+)')
+        m = re.match(pat, ev_dir)
+        if m:
+            event_names.append(m.group(1))
+    return event_names
+            
+def wilber_pull(config):
     
     r = GlobalDataRequest(
-        seed_volume_tmpl    = config.seed_volume,
+        seed_volume_tmpl    = config.path('seed_volume'),
         event_filter_func   = config.event_filter,
         station_filter_func = config.station_filter,
         vnetcodes           = config.vnetcodes,
@@ -77,6 +97,59 @@ def command_download(config):
         wanted_channels     = config.channels)
     
     return r.download_newest_event_in_range(config.timerange('time_range'))
+
+def edump_pull(config, all=False):
+    events = []
+    for event in model.load_kps_event_list(config.path('events_file')):
+        if  hasattr(config, 'event_filter') and not config.event_filter(event):
+            continue
+        edump_data_dir = config.path('edump_data_dir') % { 'event_name': event.name }
+        if os.path.exists(edump_data_dir): 
+            continue
+        events.append(event)
+        
+    if events:
+        if not all: events = events[0:1]
+        
+        dumper = sc_edump.EventDumper( ['edump'] + config.argv, 
+            channels = config.channels,
+            time_range = config.time_range,
+            event_path = config.path('edump_data_dir'),
+            events = events)
+            
+        dumper()
+        ok = []
+        for event in events:
+            if os.path.exists(edump_data_dir):
+                ok.append(event.name)
+        return ok
+        
+    logger.info('Already have all data for given events.')
+    return []
+    
+def run_processing_command(processing_dir, processing_command, event_name):
+    for event_name in event_names:
+        pdir = processing_dir % { 'event_name': event_name }
+        oldwd = os.getcwd()
+        os.chdir(pdir)
+        subprocess.check_call(processing_command)
+        os.chdir(oldwd)
+
+def post_event(config, event_name):
+    source_dir = config.path('source_dir').rstrip('/')
+    target_dir = config.path('target_dir').rstrip('/')
+    target_host = config.target_host
+    trigger_command = config.trigger_command
+    
+    if os.path.isdir(report_dir):
+        target = target_dir
+        if target_host:
+            target = target_host+':'+target_dir
+            
+        check_call(['rsync', '-a', source_dir+'/', target ])
+        # trigger host to import the new data
+        check_call(trigger_command)
+
 
 user_home_dir = os.environ['HOME']
 
@@ -97,18 +170,17 @@ parser.add_option('--config',
     action='store',
     dest='config_filename',
     default=pjoin(user_home_dir, '.autokiwi.conf'),
-    help='set name of config file to use')
+    help='set name of config file to use. Default is "%default"')
 
 
 (options, args) = parser.parse_args()
 
-util.setup_logging(options.loglevel)
+util.setup_logging('autokiwi', options.loglevel)
 
 if len(args) < 1:
     parser.error('required argument is missing')
 
 commands = args[0].split(',')
-
 conf = {}
 try:
     execfile(options.config_filename, conf)
@@ -116,24 +188,63 @@ except Exception, e:
     sys.exit('error in config file: %s' % e)
 
 base_config = conf['base_config']
+
 prepare_config = conf['prepare_config']
 kiwi_config = conf.get('kiwi_config', None)
 rapid_config = conf.get('rapid_config', None)
 wilber_config = conf.get('wilber_config', None)
+edump_config = conf.get('edump_config', None)
+post_config = conf.get('post_config', None)
 
-event_names = args[2:]
+if 'pull' in commands:
+    if wilber_config is None and edump_config is None:
+        sys.exit('no wilber nor edump configuration found')
+    if wilber_config:
+        event_names = [ wilber_pull(wilber_config) ]
+    elif edump_config:
+        pullall = False
+        if len(args) == 2 and args[1] == 'all':
+            pullall = True
+        
+        event_names = edump_pull(edump_config, all=pullall)
+        
+    if not event_names: sys.exit()
+    
+    for event_name in event_names:
+        print 'downloaded event: %s' % event_name
+        
+event_names = args[1:]
+if len(event_names) == 1 and event_names[0] == 'all':
+    event_names = event_names_from_pathes(base_config)
 
 if not event_names and hasattr(base_config, 'event_names'):
     event_names = base_config.event_names
 
-if 'download' in commands:
-    event_name = command_download(wilber_config)
-    event_names = [ event_name ]
-    
-
+        
 if 'prepare' in commands:
     prepare.prepare(prepare_config, kiwi_config, rapid_config, event_names)
 
+if 'process' in commands:
+    for event_name in event_names:
+        run_processing_command( kiwi_config.path('main_dir'),
+                                kiwi_config.processing_command,
+                                event_name)
+    
+if 'report' in commands:
+    for event_name in event_names:
+        run_processing_command( kiwi_config.path('main_dir'),
+                                kiwi_config.report_command,
+                                event_name)
 
+if 'post' in commands:
+    if post_config is None:
+        sys.exit('no post configuration found')
 
-
+    for event_name in event_names:
+        pass
+    
+if 'list' in commands:
+    levent_names = event_names_from_pathes(base_config)
+    for event_name in levent_names:
+        print event_name
+        

@@ -5,7 +5,7 @@ from tunguska import phase, gfdb, edump_access
 import sys, os, logging, shutil, time, copy
 from os.path import join as pjoin
 
-logger = logging.getLogger('prepare')
+logger = logging.getLogger('tunguska.prepare')
 
 def get_nsl(x):
     return x.network, x.station, x.location
@@ -89,7 +89,6 @@ BP_F4_STEP3      0.10
     
     
 def save_kiwi_dataset( stations, traces, event, config):
-    
     if hasattr(config, 'skeleton_dir'): 
         copy_files(config.path('skeleton_dir'), config.path('main_dir'))
 
@@ -172,7 +171,7 @@ def copy_files(source_dir, dest_dir):
         shutil.rmtree(dest_dir)
     shutil.copytree(source_dir, dest_dir)
 
-def prepare(prepare_config, kiwi_config, rapid_config, event_names):
+def prepare(config, kiwi_config, rapid_config, event_names):
 
     if hasattr(config, 'gfdb_path'):
         db = gfdb.Gfdb(config.path('gfdb_path'))
@@ -185,28 +184,34 @@ def prepare(prepare_config, kiwi_config, rapid_config, event_names):
         min_dist = None
         max_dist = None
     
+    
+    
     for event_name in event_names:
+        
+        logger.info('Preparing event %s' % event_name)
         
         config.event_name = event_name
         
         sw = util.Stopwatch()
         if hasattr(config, 'seed_volume'):
-            acc = rdseed.SeedVolumeAccess(config.path('seed_volume'))
-            
+            try:
+                acc = rdseed.SeedVolumeAccess(config.path('seed_volume'))
+            except rdseed.SeedVolumeNotFound:
+                logger.error('SEED volume not found for event %s' % event_name)
+                continue
+               
         elif hasattr(config, 'edump_data_dir'):
             acc = edump_access.EventDumpAccess(config.path('edump_data_dir'))
         else:
             sys.exit('config has neither entry "seed_volume" nor "edump_data_dir"')
             
-        event = acc.get_events()[0]
-        event.name = event_name
-        
-        
         events = acc.get_events()
         if not events:
-            sys.exit('No event metainformation found for %s\n' % event_name)
-            
+            logger.error('No event metainformation found for %s\n' % event_name)
+            continue
+        
         event = events[0]
+        event.name = event_name
         
         stations = acc.get_stations(relative_event=event)
         get_angle = lambda tr: stations[tr.network, tr.station, tr.location].backazimuth + 180.
@@ -216,10 +221,23 @@ def prepare(prepare_config, kiwi_config, rapid_config, event_names):
         
         processed_traces = []
         
+        if hasattr(config, 'rotation_table'):
+            rotate = (get_angle, config.rotation_table)
+        else:
+            rotate = None
+        
+        displacement_limit = None
+        if hasattr(config, 'displacement_limit'):
+            displacement_limit = config.displacement_limi
+        
         for traces in acc.iter_displacement_traces(
                 config.restitution_fade_time, 
-                config.restitution_frequencyband, deltat=deltat, rotate=(get_angle, config.rotation_table),
-                maxdisplacement=config.displacement_limit):
+                config.restitution_frequencyband, 
+                deltat=deltat,
+                rotate=rotate,
+                maxdisplacement=displacement_limit,
+                allowed_methods=config.restitution_methods,
+                crop=config.restitution_crop):
             
             for tr in traces:
                 station = stations[get_nsl(tr)]

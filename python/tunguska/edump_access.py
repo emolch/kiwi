@@ -21,23 +21,28 @@ class EventDumpAccess(eventdata.EventDataAccess):
         eventdata.EventDataAccess.__init__(self)
         
         self._dirpath = dirpath
-        self._pile = pile.Pile(util.select_files([self._dirpath], regex=r'raw-[^/]+\.mseed$'))
+        self._pile = pile.Pile()
+        self._pile.add_files(util.select_files([self._dirpath], regex=r'raw-[^/]+\.mseed$'))
         
-    def get_restitution(self, tr):
-        try:
-            zeros, poles, constant = self._get_polezero(tr)
-            zeros.append(0.0j) # for displacement
-            return trace.PoleZeroResponse( poles, zeros, 1./constant )
-        except FileNotFound:
-            pass
+    def get_restitution(self, tr, allowed_methods):
         
-        try:
-            gain = self._get_gain(tr)
-            return trace.IntegrationResponse(1./gain)
+        if 'polezero' in allowed_methods:
+            try:
+                zeros, poles, constant = self._get_polezero(tr)
+                zeros.append(0.0j) # for displacement
+                return trace.PoleZeroResponse( poles, zeros, 1./constant )
+            except FileNotFound:
+                pass
         
-        except FileNotFound, e:
-            raise eventdata.NoRestitution(e)
+        if 'integration' in allowed_methods:
+            try:
+                gain = self._get_gain(tr)
+                return trace.IntegrationResponse(1./gain)
+            
+            except FileNotFound, e:
+                raise eventdata.NoRestitution(e)
         
+        raise eventdata.NoRestitution('no working restitution method available')
         
     def _get_gain(self, tr):
         fnt = pjoin(self._dirpath, 'gain-%s.txt' % st_nslc)

@@ -59,6 +59,7 @@ class Config:
     def timerange(self, name):
         stbeg, stend = getattr(self, name)
         tbeg, tend = self.mktime(stbeg), self.mktime(stend)
+        return (tbeg, tend)
         
         
     
