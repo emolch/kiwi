@@ -25,6 +25,9 @@ class Config:
         else:
             raise AttributeError(k)
     
+    def has(self, k):
+        return hasattr(self,k) and getattr(self,k) is not None
+    
     def path(self, name, additional=None):
         return self.mkpath(getattr(self, name), additional)
     

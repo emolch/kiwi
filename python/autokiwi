@@ -8,7 +8,6 @@ from tunguska import prepare, sc_edump
 
 from os.path import join as pjoin
 
-
 logger = logging.getLogger('autokiwi')
 
 class GlobalDataRequest(wilber.IrisWilber):
@@ -101,7 +100,7 @@ def wilber_pull(config):
 def edump_pull(config, all=False):
     events = []
     for event in model.load_kps_event_list(config.path('events_file')):
-        if  hasattr(config, 'event_filter') and not config.event_filter(event):
+        if  config.has('event_filter') and not config.event_filter(event):
             continue
         edump_data_dir = config.path('edump_data_dir') % { 'event_name': event.name }
         if os.path.exists(edump_data_dir): 
@@ -217,7 +216,7 @@ event_names = args[1:]
 if len(event_names) == 1 and event_names[0] == 'all':
     event_names = event_names_from_pathes(base_config)
 
-if not event_names and hasattr(base_config, 'event_names'):
+if not event_names and base_config.has('event_names'):
     event_names = base_config.event_names
 
         

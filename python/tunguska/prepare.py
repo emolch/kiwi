@@ -22,7 +22,7 @@ def save_rapid_station_table(stations_path, stations):
         f.write('%-10s %15.8e %15.8e\n' % (nsl, station.lat, station.lon))
     f.close()
     
-def save_rapid_input_file(rapid_input_path, event, gfdb):
+def save_event_info_file(event_info_path, event):
     mag = event.magnitude
     if mag is None:
         mag = 6.0
@@ -31,67 +31,43 @@ def save_rapid_input_file(rapid_input_path, event, gfdb):
     if depth is None:
         depth = 20000.
     
-    if gfdb is not None:
-        depth_range = (gfdb.firstz, gfdb.firstz+gfdb.dz*(gfdb.nz-1))
-    else:
-        depth_range = (1000.,600000.)
-    
     x = dict(
+        time = util.gmctime(event.time),
         lat=event.lat,
         lon=event.lon,
         eventname=event.name,
+        eventmag=mag,
         eventmom=moment_tensor.magnitude_to_moment(mag),
-        depth=depth,
-        depth_upperlim=depth_range[0]/1000.+1,
-        depth_bottomlim=depth_range[1]/1000.-1)
+        depth=depth)
         
-    f = open(rapid_input_path, 'w')
-    f.write('''#FileSystem
-INVERSION_DIR    results
-DATA_DIR         data
-DATA_FILE        %(eventname)s
-
-#SourceStartingValues
-LATITUDE_NORTH   %(lat)e
-LONGITUDE_EAST   %(lon)e
-DEPTH_1          %(depth)e
-DEPTH_2          %(depth)e
-DEPTH_UPPERLIM   %(depth_upperlim)e
-DEPTH_BOTTOMLIM  %(depth_bottomlim)e
-SCAL_MOM_1       %(eventmom)e
-SCAL_MOM_2       %(eventmom)e
-SCAL_MOM_STEP    1e16
-
-#SpecificFocalMecInversion
-BP_F1_STEP1      0.01
-BP_F2_STEP1      0.01
-BP_F3_STEP1      0.03
-BP_F4_STEP1      0.03
-
-#SpecificCentroidInversion
-REL_TIME_1       0
-REL_TIME_2       16
-REL_TIME_STEP    2
-BP_F1_STEP2      0.01
-BP_F2_STEP2      0.01
-BP_F3_STEP2      0.03
-BP_F4_STEP2      0.03
-
-#SpecificKinematicInversion
-EFFECTIVE_DT_ST3 2.0
-KIN_RISETIME     2
-BP_F1_STEP3      0.01
-BP_F2_STEP3      0.01
-BP_F3_STEP3      0.10
-BP_F4_STEP3      0.10
+    f = open(event_info_path, 'w')
+    f.write('''name = %(eventname)s
+time = %(time)s
+latitude = %(lat)e
+longitude = %(lon)e
+depth = %(depth)e
+moment = %(eventmom)e
+magnitude = %(eventmag)f
 ''' % x )
     f.close()
     
     
-def save_kiwi_dataset( stations, traces, event, config):
-    if hasattr(config, 'skeleton_dir'): 
+def save_kiwi_dataset(acc, stations, traces, event, config):
+    
+    if config.has('data_dir'):
+        data_dir = config.path('data_dir')
+        if os.path.exists(data_dir):
+            shutil.rmtree(data_dir)
+    
+    if config.has('skeleton_dir'): 
         copy_files(config.path('skeleton_dir'), config.path('main_dir'))
 
+    if config.has('raw_trace_path'):
+        for raw_traces in acc.iter_traces():
+            io.save(raw_traces, config.path('raw_trace_path'))
+
+    save_event_info_file(config.path('event_info_path'), event)
+    
     # gather traces by station
     dataset = []
     for station in stations:
@@ -122,7 +98,7 @@ def save_kiwi_dataset( stations, traces, event, config):
                     tr.shift(-event.time)
                 ydata = tr.get_ydata()
                 ydata *= config.trace_factor
-                fn = config.path('trace_path', {
+                fn = config.path('displacement_trace_path', {
                     'ireceiver': iref, 
                     'component': config.kiwi_component_map[tr.channel]})
                 io.save([tr], fn)
@@ -142,15 +118,25 @@ def save_kiwi_dataset( stations, traces, event, config):
     f = open(fpath, 'w')
     f.write('%e %e 0\n' % (event.lat, event.lon))
     f.close()
+        
+
     
+def save_rapid_dataset(acc, stations, traces, event, config):
     
-def save_rapid_dataset(stations, traces, event, gfdb, config):
-    
-    if hasattr(config, 'skeleton_dir'): 
+    if config.has('data_dir'):
+        data_dir = config.path('data_dir')
+        if os.path.exists(data_dir):
+            shutil.rmtree(data_dir)
+
+    if config.has('skeleton_dir'): 
         copy_files(config.path('skeleton_dir'), config.path('main_dir'))
     
+    if config.has('raw_trace_path'):
+        for raw_traces in acc.iter_traces():
+            io.save(raw_traces, config.path('raw_trace_path'))
+
     save_rapid_station_table(config.path('stations_path'), stations)
-    save_rapid_input_file(config.path('rapid_input_path'), event, gfdb)
+    save_event_info_file(config.path('event_info_path'), event)
     
     used_traces = []
     for station in stations:
@@ -163,8 +149,7 @@ def save_rapid_dataset(stations, traces, event, gfdb, config):
                 ydata *= config.trace_factor
                 used_traces.append(tr)
     
-    io.save(used_traces, config.path('trace_path'))
-
+    io.save(used_traces, config.path('displacement_trace_path'))
     
 def copy_files(source_dir, dest_dir):
     if os.path.exists(dest_dir):
@@ -173,7 +158,7 @@ def copy_files(source_dir, dest_dir):
 
 def prepare(config, kiwi_config, rapid_config, event_names):
 
-    if hasattr(config, 'gfdb_path'):
+    if config.has('gfdb_path'):
         db = gfdb.Gfdb(config.path('gfdb_path'))
         deltat = db.dt
         min_dist = db.firstx + config.gfdb_margin
@@ -193,14 +178,14 @@ def prepare(config, kiwi_config, rapid_config, event_names):
         config.event_name = event_name
         
         sw = util.Stopwatch()
-        if hasattr(config, 'seed_volume'):
+        if config.has('seed_volume'):
             try:
                 acc = rdseed.SeedVolumeAccess(config.path('seed_volume'))
             except rdseed.SeedVolumeNotFound:
                 logger.error('SEED volume not found for event %s' % event_name)
                 continue
                
-        elif hasattr(config, 'edump_data_dir'):
+        elif config.has('edump_data_dir'):
             acc = edump_access.EventDumpAccess(config.path('edump_data_dir'))
         else:
             sys.exit('config has neither entry "seed_volume" nor "edump_data_dir"')
@@ -221,14 +206,24 @@ def prepare(config, kiwi_config, rapid_config, event_names):
         
         processed_traces = []
         
-        if hasattr(config, 'rotation_table'):
+        if config.has('rotation_table'):
             rotate = (get_angle, config.rotation_table)
         else:
             rotate = None
         
         displacement_limit = None
-        if hasattr(config, 'displacement_limit'):
-            displacement_limit = config.displacement_limi
+        if config.has('displacement_limit'):
+            displacement_limit = config.displacement_limit
+        
+        
+        
+        extend = None
+        if config.has('restitution_pre_extend'):
+            extend = config.restitution_pre_extend
+        
+        crop = True
+        if config.has('restitution_crop'):
+            crop = config.restitution_crop
         
         for traces in acc.iter_displacement_traces(
                 config.restitution_fade_time, 
@@ -237,7 +232,8 @@ def prepare(config, kiwi_config, rapid_config, event_names):
                 rotate=rotate,
                 maxdisplacement=displacement_limit,
                 allowed_methods=config.restitution_methods,
-                crop=config.restitution_crop):
+                extend=extend,
+                crop=crop):
             
             for tr in traces:
                 station = stations[get_nsl(tr)]
@@ -250,10 +246,10 @@ def prepare(config, kiwi_config, rapid_config, event_names):
                 span_complete = True
                 
                 timings = []
-                if hasattr(config, 'check_span'):
+                if config.has('check_span'):
                     timings = config.check_span
                     
-                if hasattr(config, 'cut_span'):
+                if config.has('cut_span'):
                     timings.extend(config.cut_span)
                 
                 for timing in timings:
@@ -273,7 +269,7 @@ def prepare(config, kiwi_config, rapid_config, event_names):
                 if not span_complete:
                     continue
                 
-                if hasattr(config, 'cut_span'):
+                if config.has('cut_span'):
                     cs = config.cut_span
                     tmin, tmax = (event.time+cs[0](station.dist_m, event.depth),
                                 event.time+cs[1](station.dist_m, event.depth))
@@ -300,15 +296,15 @@ def prepare(config, kiwi_config, rapid_config, event_names):
         dstations.sort( lambda a,b: cmp(a.dist_m, b.dist_m) )
         
         if kiwi_config is not None:
-            save_kiwi_dataset(dstations, processed_traces, event, kiwi_config)
+            save_kiwi_dataset(acc, dstations, processed_traces, event, kiwi_config)
         
         if rapid_config is not None:
-            save_rapid_dataset(dstations, processed_traces, event, db, rapid_config)
+            save_rapid_dataset(acc, dstations, processed_traces, event, rapid_config)
         
         for k,v in chan_count.iteritems():
             logger.info( 'Number of displacement traces for channel %s: %i\n' % (k,v) )
             
-        if hasattr(config, 'raw_trace_path'):
+        if config.has('raw_trace_path'):
             io.save(acc.get_pile().all(), config.path('raw_trace_path'))
             
         logger.info( 'Stopwatch: %5.1f s' % sw() )
