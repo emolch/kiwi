@@ -321,7 +321,7 @@ class MisfitGrid:
             gvalues = self.param_values[iparam][1]
             gedges = values_to_bin_edges(gvalues)
             hist, edges = num.histogram(self.stats[param].distribution,
-                                        bins=gedges)
+                                        bins=gedges, new=True)
             
             hist = hist/float(len(bootstrap_sources))
             
