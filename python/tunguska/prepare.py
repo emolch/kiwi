@@ -39,7 +39,7 @@ def save_event_info_file(event_info_path, event):
         eventmag=mag,
         eventmom=moment_tensor.magnitude_to_moment(mag),
         depth=depth)
-        
+    util.ensuredirs(event_info_path)
     f = open(event_info_path, 'w')
     f.write('''name = %(eventname)s
 time = %(time)s
@@ -164,11 +164,13 @@ def prepare(config, kiwi_config, rapid_config, event_names):
         min_dist = db.firstx + config.gfdb_margin
         max_dist = db.firstx + (db.nx-1)*db.dx - config.gfdb_margin
     else:
+        if config.has('deltat'):
+            deltat = config.deltat
+        else:
+            deltat = None
         db = None
-        deltat = config.deltat
         min_dist = None
         max_dist = None
-    
     
     
     for event_name in event_names:
@@ -188,16 +190,16 @@ def prepare(config, kiwi_config, rapid_config, event_names):
         elif config.has('edump_data_dir'):
             acc = edump_access.EventDumpAccess(config.path('edump_data_dir'))
             
-        elif config.has('custom_data_accessor'):
+        elif config.has('custom_accessor'):
             gargs = []
-            for arg in config.custom_data_accessor_args:
+            for arg in config.custom_accessor_args:
                 gargs.append( config.mkpath(arg) )
             
             if config.has('plugins_dir'):
-                pd = config.plugins_dir
+                pd = config.path('plugins_dir')
                 if pd not in sys.path: sys.path[0:0] = [ pd ]
                 
-            module_name, class_name = config.custom_data_accessor
+            module_name, class_name = config.custom_accessor
             module = __import__(module_name)
             acc_class = getattr(module, class_name)
             acc = acc_class(*gargs)
@@ -215,6 +217,7 @@ def prepare(config, kiwi_config, rapid_config, event_names):
         event.name = event_name
         
         stations = acc.get_stations(relative_event=event)
+        
         get_angle = lambda tr: stations[tr.network, tr.station, tr.location].backazimuth + 180.
         
         
@@ -230,9 +233,7 @@ def prepare(config, kiwi_config, rapid_config, event_names):
         displacement_limit = None
         if config.has('displacement_limit'):
             displacement_limit = config.displacement_limit
-        
-        
-        
+                
         extend = None
         if config.has('restitution_pre_extend'):
             extend = config.restitution_pre_extend
@@ -241,11 +242,16 @@ def prepare(config, kiwi_config, rapid_config, event_names):
         if config.has('restitution_crop'):
             crop = config.restitution_crop
         
+        project = None
+        if config.has('projection_function'):
+            project = config.projection_function
+        
         for traces in acc.iter_displacement_traces(
                 config.restitution_fade_time, 
-                config.restitution_frequencyband, 
+                config.restitution_frequencyband,
                 deltat=deltat,
                 rotate=rotate,
+                project=project,
                 maxdisplacement=displacement_limit,
                 allowed_methods=config.restitution_methods,
                 extend=extend,
