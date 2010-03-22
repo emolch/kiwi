@@ -187,9 +187,25 @@ def prepare(config, kiwi_config, rapid_config, event_names):
                
         elif config.has('edump_data_dir'):
             acc = edump_access.EventDumpAccess(config.path('edump_data_dir'))
-        else:
-            sys.exit('config has neither entry "seed_volume" nor "edump_data_dir"')
             
+        elif config.has('custom_data_accessor'):
+            gargs = []
+            for arg in config.custom_data_accessor_args:
+                gargs.append( config.mkpath(arg) )
+            
+            if config.has('plugins_dir'):
+                pd = config.plugins_dir
+                if pd not in sys.path: sys.path[0:0] = [ pd ]
+                
+            module_name, class_name = config.custom_data_accessor
+            module = __import__(module_name)
+            acc_class = getattr(module, class_name)
+            acc = acc_class(*gargs)
+            
+        else:
+            sys.exit('config has neither entry "seed_volume" nor "edump_data_dir" nor "custom_data_accessor"')
+            
+       
         events = acc.get_events()
         if not events:
             logger.error('No event metainformation found for %s\n' % event_name)
