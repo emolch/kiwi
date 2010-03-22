@@ -49,9 +49,9 @@ class GlobalDataRequest(wilber.IrisWilber):
         date_time = time.strftime('%Y-%m-%d_%H-%M-%S', time.gmtime(event.time))
         return '%s_%s' % (region, date_time)
 
-    def download_newest_event_in_range(self, time_range):
+    def download_next_event_in_range(self, time_range, sorting):
         events = self.get_events(time_range=time_range)
-        events.sort(lambda a,b: cmp(b.time, a.time))
+        events.sort(sorting)
         for event in events:
             seed_volume = self.seed_volume_tmpl % { 'event_name' : self.event_name(event) }
             if not os.path.exists(seed_volume):
@@ -94,8 +94,14 @@ def wilber_pull(config):
         username            = config.username,
         email               = config.email,
         wanted_channels     = config.channels)
+        
+    if config.has('event_sorting'):
+        sorting = config.event_sorting
+    else:
+        # by default get newest event first
+        sorting = lambda a,b: cmp(b.time, a.time)
     
-    return r.download_newest_event_in_range(config.timerange('time_range'))
+    return r.download_next_event_in_range(config.timerange('time_range'), sorting)
 
 def edump_pull(config, all=False):
     events = []
