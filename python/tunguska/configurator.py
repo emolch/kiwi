@@ -1,6 +1,9 @@
 
 import time, calendar
 
+class ConfigAttributeError(AttributeError):
+    pass
+
 class Config:
     def __init__(self, base=None, **kwargs):
         self.base = base
@@ -10,20 +13,20 @@ class Config:
     def __getitem__(self, k):
         try:
             return getattr(self,k)
-        except AttributeError:
+        except ConfigAttributeError:
             return '%('+k+')s'
     
     def __getattr__(self, k):
         if self.base is not None:
             return getattr(self.base, k)
         else:
-            raise AttributeError(k)
+            raise ConfigAttributeError(k)
 
     def __hasattr__(self, k):
         if self.base is not None:
             return hasattr(self.base, k)
         else:
-            raise AttributeError(k)
+            raise ConfigAttributeError(k)
     
     def has(self, k):
         return hasattr(self,k) and getattr(self,k) is not None
@@ -39,7 +42,10 @@ class Config:
             s = s % self
             if last == s:
                 if additional is not None:
-                    return s % additional
+                    try:
+                        return s % additional
+                    except KeyError, e:
+                        raise ConfigAttributeError(*e.args)
                 else:
                     return s
             last = s

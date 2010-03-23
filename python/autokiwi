@@ -4,11 +4,21 @@ import logging, sys, os, time, glob, re, subprocess
 from pyrocko import wilber, util, model
 
 from optparse import OptionParser
-from tunguska import prepare, sc_edump
+from tunguska import prepare, sc_edump, configurator
 
 from os.path import join as pjoin
 
 logger = logging.getLogger('autokiwi')
+
+def die(mess):
+    messlines = mess.splitlines()
+    lead = ''
+    for line in messlines:
+        logger.critical(lead+line)
+        lead = '... '
+    
+    sys.exit(1)
+
 
 class GlobalDataRequest(wilber.IrisWilber):
     
@@ -70,7 +80,7 @@ class GlobalDataRequest(wilber.IrisWilber):
 
 def event_names_from_pathes(base_config):
     # not nice; reverse lookup event names from pathes
-    ev_dirs = glob.glob(base_config.path('event_dir') % { 'event_name': '*' })
+    ev_dirs = glob.glob(base_config.path('event_dir', additional={ 'event_name': '*' }))
     event_names = []
     for ev_dir in ev_dirs:
         if not os.path.isdir(ev_dir): continue
@@ -81,7 +91,7 @@ def event_names_from_pathes(base_config):
             event_names.append(m.group(1))
     return event_names
             
-def wilber_pull(config):
+def wilber_pull(config, all=False):
     
     r = GlobalDataRequest(
         seed_volume_tmpl    = config.path('seed_volume'),
@@ -100,8 +110,19 @@ def wilber_pull(config):
     else:
         # by default get newest event first
         sorting = lambda a,b: cmp(b.time, a.time)
+        
+        
+    events = []
     
-    return r.download_next_event_in_range(config.timerange('time_range'), sorting)
+    while True:
+        ev = r.download_next_event_in_range(config.timerange('time_range'), sorting)
+        if ev is None:
+            break
+        seed_volume = config.path('seed_volume') % { 'event_name': ev }
+        if os.path.exists(seed_volume):
+            events.append(ev)
+        
+    return events 
 
 def edump_pull(config, all=False):
     events = []
@@ -158,7 +179,14 @@ def post_event(config, event_name):
 
 user_home_dir = os.environ['HOME']
 
-usage = '%prog [ options ] [ command ] [ eventnames ... ]'
+usage = '''%prog [options] <command> [args]
+
+%prog [options] pull    [ all ]
+%prog [options] prepare [ all | eventnames ... ]
+%prog [options] process [ all | eventnames ... ]
+%prog [options] report  [ all | eventnames ... ]
+%prog [options] post    [ all | eventnames ... ]
+%prog [options] list'''
 
 parser = OptionParser(usage=usage)
 
@@ -174,7 +202,7 @@ parser.add_option('--loglevel',
 parser.add_option('--config',
     action='store',
     dest='config_filename',
-    default=pjoin(user_home_dir, '.autokiwi.conf'),
+    default='__search_parent_dirs_for_autokiwi.conf__',
     help='set name of config file to use. Default is "%default"')
 
 
@@ -185,15 +213,35 @@ util.setup_logging('autokiwi', options.loglevel)
 if len(args) < 1:
     parser.error('required argument is missing')
 
+available_commands = ['pull', 'prepare', 'process', 'report', 'post', 'list']
+
 commands = args[0].split(',')
+for command in commands:
+    if command not in available_commands:
+        parser.error('no such command: %s' % command)
+        
+if options.config_filename is '__search_parent_dirs_for_autokiwi.conf__':
+    wd = os.getcwd()
+    while True:
+        fn = pjoin(wd,'autokiwi.conf')
+        if os.path.exists(fn):
+            config_filename = fn
+            break
+        nwd, cur = os.path.split(wd)
+        if nwd == wd: break
+        wd = nwd
+else:
+    config_filename = options.config_filename
+
+
 conf = {}
 try:
-    execfile(options.config_filename, conf)
+    logger.info('Using config from file %s' % config_filename)
+    execfile(config_filename, conf)
 except Exception, e:
-    sys.exit('error in config file: %s' % e)
+    die('error in config file: %s' % e)
 
 base_config = conf['base_config']
-
 prepare_config = conf['prepare_config']
 kiwi_config = conf.get('kiwi_config', None)
 rapid_config = conf.get('rapid_config', None)
@@ -201,55 +249,64 @@ wilber_config = conf.get('wilber_config', None)
 edump_config = conf.get('edump_config', None)
 post_config = conf.get('post_config', None)
 
-if 'pull' in commands:
-    if wilber_config is None and edump_config is None:
-        sys.exit('no wilber nor edump configuration found')
-    if wilber_config:
-        event_names = [ wilber_pull(wilber_config) ]
-    elif edump_config:
+try:
+    if 'pull' in commands:
         pullall = False
         if len(args) == 2 and args[1] == 'all':
             pullall = True
         
-        event_names = edump_pull(edump_config, all=pullall)
+        if wilber_config is None and edump_config is None:
+            die('No wilber nor edump configuration found\n(using config from file "%s".)' % (e, config_filename))
+        if wilber_config:
+            event_names = wilber_pull(wilber_config, all=pullall)
+        elif edump_config:
+            event_names = edump_pull(edump_config, all=pullall)
+            
+        if not event_names: sys.exit()
         
-    if not event_names: sys.exit()
+        for event_name in event_names:
+            print 'downloaded event: %s' % event_name
+            
+    event_names = args[1:]
+    if len(event_names) == 1 and event_names[0] == 'all':
+        event_names = event_names_from_pathes(base_config)
     
-    for event_name in event_names:
-        print 'downloaded event: %s' % event_name
-        
-event_names = args[1:]
-if len(event_names) == 1 and event_names[0] == 'all':
-    event_names = event_names_from_pathes(base_config)
-
-if not event_names and base_config.has('event_names'):
-    event_names = base_config.event_names
-
-        
-if 'prepare' in commands:
-    prepare.prepare(prepare_config, kiwi_config, rapid_config, event_names)
-
-if 'process' in commands:
-    for event_name in event_names:
-        run_processing_command( kiwi_config.path('main_dir'),
-                                kiwi_config.processing_command,
-                                event_name)
+    if not event_names and base_config.has('event_names'):
+        event_names = base_config.event_names
+            
+    for command in commands:
+        if command in ('prepare', 'process', 'report', 'post'):
+            if not event_names:
+                parser.error('What do you want to %s today?' % command)
+            
+    if 'prepare' in commands:
+        prepare.prepare(prepare_config, kiwi_config, rapid_config, event_names)
     
-if 'report' in commands:
-    for event_name in event_names:
-        run_processing_command( kiwi_config.path('main_dir'),
-                                kiwi_config.report_command,
-                                event_name)
-
-if 'post' in commands:
-    if post_config is None:
-        sys.exit('no post configuration found')
-
-    for event_name in event_names:
-        pass
-    
-if 'list' in commands:
-    levent_names = event_names_from_pathes(base_config)
-    for event_name in levent_names:
-        print event_name
+    if 'process' in commands:
+        for event_name in event_names:
+            run_processing_command( kiwi_config.path('main_dir'),
+                                    kiwi_config.processing_command,
+                                    event_name)
         
+    if 'report' in commands:
+        for event_name in event_names:
+            run_processing_command( kiwi_config.path('main_dir'),
+                                    kiwi_config.report_command,
+                                    event_name)
+    
+    if 'post' in commands:
+        if post_config is None:
+            die('No post configuration found\n(using config from file "%s".)' % (e, config_filename))
+    
+        for event_name in event_names:
+            pass
+        
+    if 'list' in commands:
+        levent_names = event_names_from_pathes(base_config)
+        for event_name in levent_names:
+            print event_name
+            
+except configurator.ConfigAttributeError, e:
+    die('Configuration directive "%s" not found.\n(using config from file "%s".)' % (e, config_filename))
+    
+    
