@@ -116,7 +116,7 @@ def wilber_pull(config, all=False):
     
     while True:
         ev = r.download_next_event_in_range(config.timerange('time_range'), sorting)
-        if ev is None:
+        if not all or ev is None:
             break
         seed_volume = config.path('seed_volume') % { 'event_name': ev }
         if os.path.exists(seed_volume):
