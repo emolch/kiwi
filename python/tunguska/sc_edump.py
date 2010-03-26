@@ -255,7 +255,7 @@ try:
             mh = self.messagingHost()
             streamurl = 'combined://%s:18000;%s:18001' % (mh,mh)
             
-            all = list(stream_to_timewindow.iteritems())[:100]
+            all = list(stream_to_timewindow.iteritems())
             nblock = 100
             i = 0
             while i < len(all):

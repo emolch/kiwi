@@ -153,28 +153,35 @@ def edump_pull(config, all=False):
     logger.info('Already have all data for given events.')
     return []
     
-def run_processing_command(processing_dir, processing_command, event_name):
+def run_processing_command(processing_dir, processing_command, event_names):
     for event_name in event_names:
         pdir = processing_dir % { 'event_name': event_name }
+        if not os.path.exists(pdir):
+            logger.error('Cannot run process on event %s (no processing directory found)' % event_name)
+            continue
         oldwd = os.getcwd()
         os.chdir(pdir)
-        subprocess.check_call(processing_command)
+        try:
+            subprocess.check_call(processing_command)
+        except subprocess.CalledProcessError:
+            logger.error('Running process on event %s failed.' % event_name)
         os.chdir(oldwd)
 
-def post_event(config, event_name):
-    source_dir = config.path('source_dir').rstrip('/')
-    target_dir = config.path('target_dir').rstrip('/')
-    target_host = config.target_host
-    trigger_command = config.trigger_command
-    
-    if os.path.isdir(report_dir):
-        target = target_dir
-        if target_host:
-            target = target_host+':'+target_dir
-            
-        check_call(['rsync', '-a', source_dir+'/', target ])
-        # trigger host to import the new data
-        check_call(trigger_command)
+def post_event(config, event_names):
+    for event_name in event_names:
+        source_dir = config.path('source_dir', additional={ 'event_name': event_name }).rstrip('/')
+        target_dir = config.path('target_dir').rstrip('/')
+        target_host = config.target_host
+        trigger_command = config.trigger_command
+        
+        if os.path.isdir(report_dir):
+            target = target_dir
+            if target_host:
+                target = target_host+':'+target_dir
+                
+            check_call(['rsync', '-a', source_dir+'/', target ])
+            # trigger host to import the new data
+            check_call(trigger_command)
 
 
 user_home_dir = os.environ['HOME']
@@ -195,7 +202,7 @@ parser.add_option('--loglevel',
     dest='loglevel', 
     type='choice',
     choices=('error', 'warning', 'info', 'debug'), 
-    default='error',
+    default='warning',
     help='set logger level to "error", "warning", "info", or "debug". '
          'Default is "%default".')
 
@@ -282,17 +289,15 @@ try:
     if 'prepare' in commands:
         prepare.prepare(prepare_config, kiwi_config, rapid_config, event_names)
     
-    if 'process' in commands:
-        for event_name in event_names:
-            run_processing_command( kiwi_config.path('main_dir'),
+    if 'process' in commands:   
+        run_processing_command( kiwi_config.path('main_dir'),
                                     kiwi_config.processing_command,
-                                    event_name)
+                                    event_names)
         
     if 'report' in commands:
-        for event_name in event_names:
-            run_processing_command( kiwi_config.path('main_dir'),
+        run_processing_command( kiwi_config.path('main_dir'),
                                     kiwi_config.report_command,
-                                    event_name)
+                                    event_names)
     
     if 'post' in commands:
         if post_config is None:

@@ -164,7 +164,11 @@ def standard_setup( datadir,
     
     # setup receivers
     receivers = receiver.load_table(receivers_file, components=components)
+    
+    if len(receivers) == 0: sys.exit('no receivers')
+    
     seis.set_receivers(receivers)
+    
     seis.set_ref_seismograms( ref_seismogram_stem, ref_seismogram_format )
     if blacklist:
         seis.blacklist_receivers( blacklist )

@@ -285,6 +285,7 @@ def prepare(config, kiwi_config, rapid_config, event_names):
                     if not (tr.tmin <= arrival_time and arrival_time <= tr.tmax):
                         what = arrival_time
                         logger.warn('Trace does not contain all required arrivals: %s.%s.%s.%s (timing not in trace)' % tr.nslc_id)
+                        acc.problems().add('gappy', tr.full_id)
                         span_complete = False
                         break
                                 
@@ -328,6 +329,9 @@ def prepare(config, kiwi_config, rapid_config, event_names):
             
         if config.has('raw_trace_path'):
             io.save(acc.get_pile().all(), config.path('raw_trace_path'))
+            
+        if config.has('problems_file'):
+            acc.problems().dump(config.path('problems_file'))
             
         logger.info( 'Stopwatch: %5.1f s' % sw() )
     
