@@ -67,6 +67,11 @@ def pdfjoin(files, outfile):
     cmd.extend(files)
     subprocess.call(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
+def pdfjoin_gs(files, outfile):
+    cmd = ['gs', '-dBATCH', '-dNOPAUSE', '-q', '-sDEVICE=pdfwrite', '-sOutputFile=%s' % outfile ]
+    cmd.extend(files)
+    subprocess.call(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
 def misfit_plot_1d( data, filename, conf_overrides, apply_moment_to_magnitude_hack=False ):
     conf = dict(**config.misfit_plot_1d_config)
     conf.update( conf_overrides )

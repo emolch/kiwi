@@ -117,7 +117,8 @@ class ValControl(QFrame):
             
             self.emit(SIGNAL("valchange(float,int)"), float(self.cur), int(self.ind) )
         
-   
+    def __del__(self):
+        print 'x'
         
 def printChildren(obj, indent=""):
     children=obj.children()

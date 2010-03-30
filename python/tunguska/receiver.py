@@ -53,7 +53,12 @@ class Receiver:
         self.distance_m   = distance_m
         self.azimuth      = azimuth
     
-    
+    def get_location(self):
+        toks = self.name.split('.')
+        if len(toks) == 3:
+            return toks[2]
+        else:
+            return ''
     
     def get_station(self):
         toks = self.name.split('.')

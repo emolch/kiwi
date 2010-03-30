@@ -161,31 +161,33 @@ try:
             
             for x in self.iterNSSC(sctime(event.time)):
                 network_code, station, stream, component = x
-                if stream.code()+component.code() in self._wanted_channels:
+                
+                if stream.code()+component.code() not in self._wanted_channels:
+                    continue
+                
+                tmin = self._timewindow[0]
+                tmax = self._timewindow[1]
+                
+                nslcc = network_code, station.code(), stream.locCode(), stream.code(), component.code()
+                nslc = nslcc[:4]
+                
+                try:
+                    responses[nslcc] = self.get_response(network_code, station, stream)
+                except ResponseUnavailable, e:
+                    pass
                     
-                    tmin = self._timewindow[0]
-                    tmax = self._timewindow[1]
-                    
-                    nslcc = network_code, station.code(), stream.locCode(), stream.code(), component.code()
-                    nslc = nslcc[:4]
-                    
-                    try:
-                        responses[nslcc] = self.get_response(network_code, station, stream)
-                    except ResponseUnavailable, e:
-                        pass
-                        
-                    gains[nslcc] = component.gain()
-                    
-                    # we need timewindows per stream, not per component because of
-                    # problem with SeedLink
-                    if nslc not in timewindows:
-                        timewindows[nslc] = (tmin, tmax)
-                    else:
-                        ptmin, ptmax = timewindows[nslc]
-                        timewindows[nslc] = (min(tmin,ptmin), max(tmax,ptmax))
-                    
-                    # treat locations as different stations
-                    used_stations[network_code, station.code(), stream.locCode()] = station
+                gains[nslcc] = component.gain()
+                
+                # we need timewindows per stream, not per component because of
+                # problem with SeedLink
+                if nslc not in timewindows:
+                    timewindows[nslc] = (tmin, tmax)
+                else:
+                    ptmin, ptmax = timewindows[nslc]
+                    timewindows[nslc] = (min(tmin,ptmin), max(tmax,ptmax))
+                
+                # treat locations as different stations
+                used_stations[network_code, station.code(), stream.locCode()] = station
                     
             stream_to_timewindow = {}
             for nslcc in gains.keys():
@@ -193,7 +195,7 @@ try:
             
             
             self.dumpEventInfo(event)
-            self.dumpStreams(stream_to_timewindow, event.name, sctime(event.time))
+            #self.dumpStreams(stream_to_timewindow, event.name, sctime(event.time))
             self.dumpGains(gains, event.name)
             self.dumpPoleZeros(responses, event.name)
             self.dumpStations(used_stations, event.name)
@@ -232,7 +234,7 @@ try:
                 f.write('POLES %i\n' % resp.npoles())
                 for v in resp.poles().content():
                     f.write('%e %e\n' % (v.real, v.imag))
-                f.write('CONSTANT %e\n' % (resp.gain()*datalogger.gain()))
+                f.write('CONSTANT %e\n' % (resp.gain()*resp.normFac()*datalogger.gain()))
                 f.close()
                 
         def dumpStations(self, stations, eventid):

@@ -59,12 +59,12 @@ class GlobalDataRequest(wilber.IrisWilber):
         date_time = time.strftime('%Y-%m-%d_%H-%M-%S', time.gmtime(event.time))
         return '%s_%s' % (region, date_time)
 
-    def download_next_event_in_range(self, time_range, sorting):
+    def download_next_event_in_range(self, time_range, sorting, force=False):
         events = self.get_events(time_range=time_range)
         events.sort(sorting)
         for event in events:
             seed_volume = self.seed_volume_tmpl % { 'event_name' : self.event_name(event) }
-            if not os.path.exists(seed_volume):
+            if not os.path.exists(seed_volume) or force:
                 util.ensuredirs(seed_volume)
                 try:
                     self.get_data(event, outfilename=seed_volume+'.incomplete', vnetcodes=self.vnetcodes, netcodes=self.netcodes,
@@ -91,7 +91,7 @@ def event_names_from_pathes(base_config):
             event_names.append(m.group(1))
     return event_names
             
-def wilber_pull(config, all=False):
+def wilber_pull(config, all=False, force=False):
     
     r = GlobalDataRequest(
         seed_volume_tmpl    = config.path('seed_volume'),
@@ -115,7 +115,7 @@ def wilber_pull(config, all=False):
     events = []
     
     while True:
-        ev = r.download_next_event_in_range(config.timerange('time_range'), sorting)
+        ev = r.download_next_event_in_range(config.timerange('time_range'), sorting, force=force)
         if not all or ev is None:
             break
         seed_volume = config.path('seed_volume') % { 'event_name': ev }
@@ -124,13 +124,13 @@ def wilber_pull(config, all=False):
         
     return events 
 
-def edump_pull(config, all=False):
+def edump_pull(config, all=False, force=False):
     events = []
     for event in model.load_kps_event_list(config.path('events_file')):
         if  config.has('event_filter') and not config.event_filter(event):
             continue
         edump_data_dir = config.path('edump_data_dir') % { 'event_name': event.name }
-        if os.path.exists(edump_data_dir): 
+        if not force and os.path.exists(edump_data_dir): 
             continue
         events.append(event)
         
@@ -183,7 +183,11 @@ def post_event(config, event_names):
             # trigger host to import the new data
             check_call(trigger_command)
 
-
+def load_plugin( plugins_dir, plugin_name):
+    if plugins_dir not in sys.path: sys.path[0:0] = [ plugins_dir ]
+    plugin_modules = []
+    return  __import__(plugin_name)
+    
 user_home_dir = os.environ['HOME']
 
 usage = '''%prog [options] <command> [args]
@@ -193,7 +197,8 @@ usage = '''%prog [options] <command> [args]
 %prog [options] process [ all | eventnames ... ]
 %prog [options] report  [ all | eventnames ... ]
 %prog [options] post    [ all | eventnames ... ]
-%prog [options] list'''
+%prog [options] list
+'''
 
 parser = OptionParser(usage=usage)
 
@@ -212,20 +217,18 @@ parser.add_option('--config',
     default='__search_parent_dirs_for_autokiwi.conf__',
     help='set name of config file to use. Default is "%default"')
 
+parser.add_option('--force',
+    action='store_true',
+    dest='force',
+    default=False,
+    help='force pulling of events that have already been downloaded')
 
 (options, args) = parser.parse_args()
 
 util.setup_logging('autokiwi', options.loglevel)
 
-if len(args) < 1:
-    parser.error('required argument is missing')
 
 available_commands = ['pull', 'prepare', 'process', 'report', 'post', 'list']
-
-commands = args[0].split(',')
-for command in commands:
-    if command not in available_commands:
-        parser.error('no such command: %s' % command)
         
 if options.config_filename is '__search_parent_dirs_for_autokiwi.conf__':
     wd = os.getcwd()
@@ -257,6 +260,32 @@ edump_config = conf.get('edump_config', None)
 post_config = conf.get('post_config', None)
 
 try:
+    plugins = []
+    if base_config.has('plugins_dir'):
+        plugins_dir = base_config.path('plugins_dir')
+        plugin_names = base_config.plugins
+        usage_str = usage
+        for plugin_name in plugin_names:
+            plugin = load_plugin( plugins_dir, plugin_name )
+            for command in plugin.__autokiwi_commands__:
+                if command in available_commands:
+                    die('Command defined more than once: "%s" (in plugin "%s")' % (command, plugin_name))
+                available_commands.append(command)
+            
+            usage_str += plugin.__autokiwi_usage__[command]
+            plugins.append(plugin)
+            
+        parser.set_usage(usage_str)
+
+    if len(args) < 1:
+        parser.error('required argument is missing')
+
+    commands = args[0].split(',')
+    for command in commands:
+        if command not in available_commands:
+            parser.error('no such command: %s' % command)
+
+    
     if 'pull' in commands:
         pullall = False
         if len(args) == 2 and args[1] == 'all':
@@ -265,9 +294,9 @@ try:
         if wilber_config is None and edump_config is None:
             die('No wilber nor edump configuration found\n(using config from file "%s".)' % (e, config_filename))
         if wilber_config:
-            event_names = wilber_pull(wilber_config, all=pullall)
+            event_names = wilber_pull(wilber_config, all=pullall, force=options.force)
         elif edump_config:
-            event_names = edump_pull(edump_config, all=pullall)
+            event_names = edump_pull(edump_config, all=pullall, force=options.force)
             
         if not event_names: sys.exit()
         
@@ -310,6 +339,11 @@ try:
         levent_names = event_names_from_pathes(base_config)
         for event_name in levent_names:
             print event_name
+    
+    for plugin in plugins:
+        for command in plugin.__autokiwi_commands__:
+            if command in commands:
+                plugin.__autokiwi_main__(command, options, conf, event_names)
             
 except configurator.ConfigAttributeError, e:
     die('Configuration directive "%s" not found.\n(using config from file "%s".)' % (e, config_filename))
