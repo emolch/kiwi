@@ -36,7 +36,7 @@ class EventDumpAccess(eventdata.EventDataAccess):
         
         if 'integration' in allowed_methods:
             try:
-                gain = self._get_gain(tr)
+                gain = self._get_channel_description(tr)
                 return trace.IntegrationResponse(1./gain)
             
             except FileNotFound, e:
@@ -44,14 +44,15 @@ class EventDumpAccess(eventdata.EventDataAccess):
         
         raise eventdata.NoRestitution('no working restitution method available')
         
-    def _get_gain(self, tr):
-        fnt = pjoin(self._dirpath, 'gain-%s.txt' % st_nslc)
-        fn = tr.fill_template(fnt)
+    def _get_channel_description_from_file(self, nslc):
+        fnt = pjoin(self._dirpath, 'component-%s.txt' % st_nslc)
+        fn = fnt % dict(zip( ('network', 'station', 'location', 'channel'), nslc))
         if os.path.exists(fn):
             f = open(fn,'r')
-            gain = float(f.read())
+            gain, azimuth, dip = [ float(x) for x in f.read().split() ]
             f.close()
-            return gain
+            
+            return model.Channel(nslc[3], azimuth, dip, gain=gain)
         else:
             raise FileNotFound(fn)
     

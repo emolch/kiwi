@@ -63,14 +63,21 @@ def save_kiwi_dataset(acc, stations, traces, event, config):
         copy_files(config.path('skeleton_dir'), config.path('main_dir'))
 
     if config.has('raw_trace_path'):
-        for raw_traces in acc.iter_traces():
+        trace_selector = None
+        if config.has('station_filter'):
+            trace_selector = lambda tr: get_nsl(tr) in stations and config.station_filter(stations[get_nsl(tr)])
+        
+        for raw_traces in acc.iter_traces(trace_selector=trace_selector):
             io.save(raw_traces, config.path('raw_trace_path'))
 
     save_event_info_file(config.path('event_info_path'), event)
     
+    dstations = stations.values()
+    dstations.sort( lambda a,b: cmp(a.dist_m, b.dist_m) )
+    
     # gather traces by station
     dataset = []
-    for station in stations:
+    for station in dstations:
         station_traces = []
         for tr in traces:
             if get_nsl(tr) == get_nsl(station):
@@ -132,14 +139,21 @@ def save_rapid_dataset(acc, stations, traces, event, config):
         copy_files(config.path('skeleton_dir'), config.path('main_dir'))
     
     if config.has('raw_trace_path'):
-        for raw_traces in acc.iter_traces():
+        trace_selector = None
+        if config.has('station_filter'):
+            trace_selector = lambda tr: get_nsl(tr) in stations and config.station_filter(stations[get_nsl(tr)])
+        
+        for raw_traces in acc.iter_traces(trace_selector=trace_selector):
             io.save(raw_traces, config.path('raw_trace_path'))
 
-    save_rapid_station_table(config.path('stations_path'), stations)
+    dstations = stations.values()
+    dstations.sort( lambda a,b: cmp(a.dist_m, b.dist_m) )
+    
+    save_rapid_station_table(config.path('stations_path'), dstations)
     save_event_info_file(config.path('event_info_path'), event)
     
     used_traces = []
-    for station in stations:
+    for station in dstations:
         for tr in traces:
             if get_nsl(tr) == get_nsl(station):
                 tr = tr.copy()
@@ -246,6 +260,10 @@ def prepare(config, kiwi_config, rapid_config, event_names):
         if config.has('projection_function'):
             project = config.projection_function
         
+        trace_selector = None
+        if config.has('station_filter'):
+            trace_selector = lambda tr: config.station_filter(stations[get_nsl(tr)])
+        
         for traces in acc.iter_displacement_traces(
                 config.restitution_fade_time, 
                 config.restitution_frequencyband,
@@ -254,6 +272,7 @@ def prepare(config, kiwi_config, rapid_config, event_names):
                 project=project,
                 maxdisplacement=displacement_limit,
                 allowed_methods=config.restitution_methods,
+                trace_selector=trace_selector,
                 extend=extend,
                 crop=crop):
             
@@ -310,25 +329,23 @@ def prepare(config, kiwi_config, rapid_config, event_names):
         sstations = stations.values()
         sstations.sort( lambda a,b: cmp(get_nsl(a),  get_nsl(b)) )
         xstations = {}
+        have = {}
         for station in sstations:
-            if get_ns(station) not in xstations:
-                xstations[get_ns(station)] = station
-        
-        # stations by distance
-        dstations = xstations.values()
-        dstations.sort( lambda a,b: cmp(a.dist_m, b.dist_m) )
+            if get_ns(station) not in have:
+                have[get_ns(station)] = 1
+                xstations[get_nsl(station)] = station
         
         if kiwi_config is not None:
-            save_kiwi_dataset(acc, dstations, processed_traces, event, kiwi_config)
+            save_kiwi_dataset(acc, xstations, processed_traces, event, kiwi_config)
         
         if rapid_config is not None:
-            save_rapid_dataset(acc, dstations, processed_traces, event, rapid_config)
+            save_rapid_dataset(acc, xstations, processed_traces, event, rapid_config)
         
         for k,v in chan_count.iteritems():
             logger.info( 'Number of displacement traces for channel %s: %i\n' % (k,v) )
             
         if config.has('raw_trace_path'):
-            io.save(acc.get_pile().all(), config.path('raw_trace_path'))
+            io.save(acc.get_pile().all(trace_selector=trace_selector), config.path('raw_trace_path'))
             
         if config.has('problems_file'):
             acc.problems().dump(config.path('problems_file'))

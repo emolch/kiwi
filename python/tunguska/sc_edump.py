@@ -83,7 +83,7 @@ try:
             self._event_path_template = event_path
             
             self._mseed_fn_template = 'raw-%s.mseed' % st_nslc
-            self._gain_fn_template = 'gain-%s.txt' % st_nslc
+            self._component_fn_template = 'component-%s.txt' % st_nslc
             self._polezero_fn_template = 'polezero-%s.txt' % st_nslc
             self._station_fn_template = 'stations.txt'
             self._fseed_fn_template = 'dataless.seed'
@@ -155,7 +155,7 @@ try:
                                     
             phase_counter = {}
             timewindows = {}
-            gains = {}
+            components = {}
             responses = {}
             used_stations = {}
             
@@ -176,7 +176,7 @@ try:
                 except ResponseUnavailable, e:
                     pass
                     
-                gains[nslcc] = component.gain()
+                components[nslcc] = component
                 
                 # we need timewindows per stream, not per component because of
                 # problem with SeedLink
@@ -190,13 +190,13 @@ try:
                 used_stations[network_code, station.code(), stream.locCode()] = station
                     
             stream_to_timewindow = {}
-            for nslcc in gains.keys():
+            for nslcc in components.keys():
                 stream_to_timewindow[nslcc] = timewindows[nslcc[:4]]
             
             
             self.dumpEventInfo(event)
             #self.dumpStreams(stream_to_timewindow, event.name, sctime(event.time))
-            self.dumpGains(gains, event.name)
+            self.dumpComponents(components, event.name)
             self.dumpPoleZeros(responses, event.name)
             self.dumpStations(used_stations, event.name)
         
@@ -213,13 +213,13 @@ try:
             f.write('magnitude = %15.8e\n' % event.magnitude)
             f.close()
     
-        def dumpGains(self, streams, eventid):
-            for (net, sta, loc, cha, com), gain in streams.iteritems():
-                ofpath_tmpl = pjoin(self._event_path_template,  self._gain_fn_template)
+        def dumpComponents(self, streams, eventid):
+            for (net, sta, loc, cha, com), component in streams.iteritems():
+                ofpath_tmpl = pjoin(self._event_path_template,  self._component_fn_template)
                 ofpath = fill_stream_tmpl( ofpath_tmpl, net, sta, loc, cha+com, event_name=eventid)
                 ensuredirs(ofpath)
                 f = open(ofpath, 'w')
-                f.write('%e\n' % gain)
+                f.write('%e %e %e\n' % (component.gain(), component.azimuth(), component.dip()))
                 f.close()
                 
         def dumpPoleZeros(self, responses, eventid):

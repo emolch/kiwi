@@ -7,6 +7,7 @@ from optparse import OptionParser
 from tunguska import prepare, sc_edump, configurator
 
 from os.path import join as pjoin
+from subprocess import check_call
 
 logger = logging.getLogger('autokiwi')
 
@@ -125,14 +126,22 @@ def wilber_pull(config, all=False, force=False):
     return events 
 
 def edump_pull(config, all=False, force=False):
+    xevents = []
+    if config.has('kps_events_file'):
+        xevents.extend(model.load_kps_event_list(config.path('kps_events_file')))
+    if config.has('gfz_events_file'):
+        xevents.extend(model.load_gfz_event_list(config.path('gfz_events_file')))
+        
     events = []
-    for event in model.load_kps_event_list(config.path('events_file')):
+    for event in xevents:
+        
         if  config.has('event_filter') and not config.event_filter(event):
             continue
         edump_data_dir = config.path('edump_data_dir') % { 'event_name': event.name }
         if not force and os.path.exists(edump_data_dir): 
             continue
         events.append(event)
+        
         
     if events:
         if not all: events = events[0:1]
@@ -170,11 +179,11 @@ def run_processing_command(processing_dir, processing_command, event_names):
 def post_event(config, event_names):
     for event_name in event_names:
         source_dir = config.path('source_dir', additional={ 'event_name': event_name }).rstrip('/')
-        target_dir = config.path('target_dir').rstrip('/')
+        target_dir = config.path('target_dir', additional={ 'event_name': event_name }).rstrip('/')
         target_host = config.target_host
         trigger_command = config.trigger_command
         
-        if os.path.isdir(report_dir):
+        if os.path.isdir(source_dir):
             target = target_dir
             if target_host:
                 target = target_host+':'+target_dir
@@ -332,8 +341,7 @@ try:
         if post_config is None:
             die('No post configuration found\n(using config from file "%s".)' % (e, config_filename))
     
-        for event_name in event_names:
-            pass
+        post_event(post_config, event_names)
         
     if 'list' in commands:
         levent_names = event_names_from_pathes(base_config)
