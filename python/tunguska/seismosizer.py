@@ -612,7 +612,7 @@ class Seismosizer(SeismosizerBase):
         if 'syn' in which_seismograms: self.do_output_seismograms(tempfnbase2, extension, "synthetics", which_processing)
         if 'ref' in which_spectra: self.do_output_seismogram_spectra(tempfnbase3, "references", which_processing)
         if 'syn' in which_spectra: self.do_output_seismogram_spectra(tempfnbase4, "synthetics", which_processing)
-                
+        
         receivers = copy.deepcopy(self.receivers)
         for irec, rec in enumerate(receivers):
             irec_fortran = irec+1

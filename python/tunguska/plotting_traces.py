@@ -6,6 +6,7 @@ import pymseed
 import sys, copy
 import config
 from os.path import join as pjoin
+import plotting
 
 def minmax(traces, minmaxtrace, key=lambda tr: None):
     
@@ -315,11 +316,11 @@ class PileTracy(Tracy):
 
 class MyTracy(Tracy):
     
-    def map_ygroup(self, trace):
-        return trace.station, trace.network, trace.azimuth, trace.distance_deg
-    
     def map_xgroup(self, trace):
         return trace.channel
+    
+    def map_ygroup(self, trace):
+        return trace.station, trace.network, trace.azimuth, trace.distance_deg
     
     def order_xgroup(self, a,b):
         return cmp(b,a)
@@ -327,12 +328,14 @@ class MyTracy(Tracy):
     def order_ygroup(self, a,b):
         return cmp((round(a[3]/30.),a[2]),(round(a[3]/30.),b[2]))
     
-   # def map_yscaling(self, trace):
-   #     return round(trace.distance_deg/10.)
-    
     def map_color(self, trace):
         return trace.location
 
+    def label_xgroup(self, a):
+        return a
+    
+    def label_ygroup(self, a):
+        return '.'.join(a[:2]).rstrip('.')
 
 class UTrace:
     def __init__(self, **kwargs):
@@ -349,9 +352,10 @@ def multi_seismogram_plot2(snapshots, plotdir):
                     ('synthetics', 'seismogram'): 'syn_seismograms',
                     ('references', 'seismogram'): 'ref_seismograms' }
                 
-    fns = []
+    fns_all = []
     for typ in 'seismogram', 'spectrum':
         traces = []
+        fns = []
         for receivers in snapshots:
             for rec in receivers:
                 for icomp, comp in enumerate(rec.components):
@@ -374,10 +378,17 @@ def multi_seismogram_plot2(snapshots, plotdir):
                         
                         traces.append(trace)
                     
-        plotter = MyTracy(height=40*cm)
+        plotter = MyTracy(width=20*gmtpy.cm, height=20*gmtpy.cm,
+        margins=(3*gmtpy.cm,0.5*gmtpy.cm, 1*gmtpy.cm, 1*gmtpy.cm))
+        
         plotter.set_traces(traces)
         
         fns.extend(plotter.save(pjoin(plotdir,'%s_%s.pdf' % (plural[typ], '%i'))))
+        fn_all = pjoin(plotdir, '%s_%s.pdf' % (plural[typ], 'all'))
+        plotting.pdfjoin_gs(fns, fn_all)
+        fns.append(fn_all)
         
-    return fns
+        fns_all.extend(fns)
+        
+    return fns_all
     

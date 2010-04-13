@@ -771,7 +771,7 @@ class Shifter(Step):
 
 class ParamTuner(Step):
      
-    def __init__(self, workdir, sourcetype='eikonal', params=['time'], name=None, xblacklist_level=None, dump_processing=None):
+    def __init__(self, workdir, sourcetype='eikonal', params=['time'], name=None, xblacklist_level=None, dump_processing='filtered'):
         if name is None: name = '-'.join(params)+'-tuner'
         Step.__init__(self, workdir, name, dump_processing)
         self.sourcetype = sourcetype

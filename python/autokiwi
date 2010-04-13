@@ -181,7 +181,7 @@ def post_event(config, event_names):
         source_dir = config.path('source_dir', additional={ 'event_name': event_name }).rstrip('/')
         target_dir = config.path('target_dir', additional={ 'event_name': event_name }).rstrip('/')
         target_host = config.target_host
-        trigger_command = config.trigger_command
+        trigger_command = [ config.mkpath(xxx, additional={ 'event_name': event_name }) for xxx in  config.trigger_command ]
         
         if os.path.isdir(source_dir):
             target = target_dir
@@ -190,6 +190,7 @@ def post_event(config, event_names):
                 
             check_call(['rsync', '-a', source_dir+'/', target ])
             # trigger host to import the new data
+            
             check_call(trigger_command)
 
 def load_plugin( plugins_dir, plugin_name):
