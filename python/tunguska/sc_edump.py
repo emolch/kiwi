@@ -195,7 +195,7 @@ try:
             
             
             self.dumpEventInfo(event)
-            #self.dumpStreams(stream_to_timewindow, event.name, sctime(event.time))
+           # self.dumpStreams(stream_to_timewindow, event.name, sctime(event.time))
             self.dumpComponents(components, event.name)
             self.dumpPoleZeros(responses, event.name)
             self.dumpStations(used_stations, event.name)
@@ -205,12 +205,14 @@ try:
             ofpath = ofpath_tmpl % dict(event_name=event.name)
             ensuredirs(ofpath)
             f = open(ofpath, 'w')
-            f.write('publicID = %s\n' % event.name)
+            f.write('name = %s\n' % event.name)
             f.write('time = %s\n' % gmctime(event.time) )
             f.write('latitude = %15.8e\n' % event.lat)
             f.write('longitude = %15.8e\n' % event.lon)
-            f.write('depth = %15.8e\n' % (event.depth/1000.))
+            f.write('depth = %15.8e\n' % (event.depth))
             f.write('magnitude = %15.8e\n' % event.magnitude)
+            if event.region:
+                f.write('region = %s\n' % event.region)
             f.close()
     
         def dumpComponents(self, streams, eventid):

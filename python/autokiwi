@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import logging, sys, os, time, glob, re, subprocess
 
-from pyrocko import wilber, util, model
+from pyrocko import wilber, util, model, catalog
 
 from optparse import OptionParser
 from tunguska import prepare, sc_edump, configurator
@@ -60,6 +60,17 @@ class GlobalDataRequest(wilber.IrisWilber):
         date_time = time.strftime('%Y-%m-%d_%H-%M-%S', time.gmtime(event.time))
         return '%s_%s' % (region, date_time)
 
+    def pending_events(self, time_range, sorting, force=False):
+        events = self.get_events(time_range=time_range)
+        events.sort(sorting)
+        xevents = []
+        for event in events:
+            seed_volume = self.seed_volume_tmpl % { 'event_name' : self.event_name(event) }
+            if not os.path.exists(seed_volume) or force:
+                xevents.append(event)
+        
+        return xevents
+        
     def download_next_event_in_range(self, time_range, sorting, force=False):
         events = self.get_events(time_range=time_range)
         events.sort(sorting)
@@ -92,7 +103,7 @@ def event_names_from_pathes(base_config):
             event_names.append(m.group(1))
     return event_names
             
-def wilber_pull(config, all=False, force=False):
+def wilber_pull(config, all=False, force=False, onlylist=False):
     
     r = GlobalDataRequest(
         seed_volume_tmpl    = config.path('seed_volume'),
@@ -112,9 +123,10 @@ def wilber_pull(config, all=False, force=False):
         # by default get newest event first
         sorting = lambda a,b: cmp(b.time, a.time)
         
-        
-    events = []
+    if onlylist:
+        return r.pending_events(config.timerange('time_range'), sorting, force=force)
     
+    events = []
     while True:
         ev = r.download_next_event_in_range(config.timerange('time_range'), sorting, force=force)
         if not all or ev is None:
@@ -125,30 +137,37 @@ def wilber_pull(config, all=False, force=False):
         
     return events 
 
-def edump_pull(config, all=False, force=False):
+def edump_pull(config, all=False, force=False, onlylist=False):
     xevents = []
     if config.has('kps_events_file'):
         xevents.extend(model.load_kps_event_list(config.path('kps_events_file')))
+        
     if config.has('gfz_events_file'):
         xevents.extend(model.load_gfz_event_list(config.path('gfz_events_file')))
         
+    if config.has('use_geofon_catalog') and config.use_geofon_catalog:
+        cat = catalog.Geofon()
+        tr = config.timerange('time_range')
+        xevents.extend(cat.get_events(tr))
+        
     events = []
     for event in xevents:
-        
         if  config.has('event_filter') and not config.event_filter(event):
             continue
         edump_data_dir = config.path('edump_data_dir') % { 'event_name': event.name }
         if not force and os.path.exists(edump_data_dir): 
             continue
         events.append(event)
-        
+    
+    if onlylist:
+        return events
         
     if events:
         if not all: events = events[0:1]
         
         dumper = sc_edump.EventDumper( ['edump'] + config.argv, 
             channels = config.channels,
-            time_range = config.time_range,
+            time_range = config.time_window,
             event_path = config.path('edump_data_dir'),
             events = events)
             
@@ -232,7 +251,13 @@ parser.add_option('--force',
     dest='force',
     default=False,
     help='force pulling of events that have already been downloaded')
-
+    
+parser.add_option('--pending',
+    action='store_true',
+    dest='pending',
+    default=False,
+    help='list events to be pulled')
+    
 (options, args) = parser.parse_args()
 
 util.setup_logging('autokiwi', options.loglevel)
@@ -275,6 +300,8 @@ try:
         plugins_dir = base_config.path('plugins_dir')
         plugin_names = base_config.plugins
         usage_str = usage
+        if plugin_names:
+            usage_str += '\nPlugin commands:\n'
         for plugin_name in plugin_names:
             plugin = load_plugin( plugins_dir, plugin_name )
             for command in plugin.__autokiwi_commands__:
@@ -282,7 +309,7 @@ try:
                     die('Command defined more than once: "%s" (in plugin "%s")' % (command, plugin_name))
                 available_commands.append(command)
             
-            usage_str += plugin.__autokiwi_usage__[command]
+            usage_str += plugin.__autokiwi_usage__[command]+'\n'
             plugins.append(plugin)
             
         parser.set_usage(usage_str)
@@ -296,7 +323,7 @@ try:
             parser.error('no such command: %s' % command)
 
     
-    if 'pull' in commands:
+    if 'pull' in commands or ('list' in commands and options.pending):
         pullall = False
         if len(args) == 2 and args[1] == 'all':
             pullall = True
@@ -304,15 +331,20 @@ try:
         if wilber_config is None and edump_config is None:
             die('No wilber nor edump configuration found\n(using config from file "%s".)' % (e, config_filename))
         if wilber_config:
-            event_names = wilber_pull(wilber_config, all=pullall, force=options.force)
+            event_names = wilber_pull(wilber_config, all=pullall, force=options.force, onlylist=options.pending)
         elif edump_config:
-            event_names = edump_pull(edump_config, all=pullall, force=options.force)
-            
-        if not event_names: sys.exit()
+            event_names = edump_pull(edump_config, all=pullall, force=options.force, onlylist=options.pending)
         
-        for event_name in event_names:
-            print 'downloaded event: %s' % event_name
-            
+        if options.pending:
+            for event_name in event_names:
+                print event_name
+            event_names = []
+        else:
+            for event_name in event_names:
+                print 'downloaded event: %s' % event_name
+                
+        if not event_names: sys.exit()
+          
     event_names = args[1:]
     if len(event_names) == 1 and event_names[0] == 'all':
         event_names = event_names_from_pathes(base_config)

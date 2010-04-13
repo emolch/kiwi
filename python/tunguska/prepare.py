@@ -23,34 +23,7 @@ def save_rapid_station_table(stations_path, stations):
     f.close()
     
 def save_event_info_file(event_info_path, event):
-    mag = event.magnitude
-    if mag is None:
-        mag = 6.0
-    
-    depth = event.depth
-    if depth is None:
-        depth = 20000.
-    
-    x = dict(
-        time = util.gmctime(event.time),
-        lat=event.lat,
-        lon=event.lon,
-        eventname=event.name,
-        eventmag=mag,
-        eventmom=moment_tensor.magnitude_to_moment(mag),
-        depth=depth)
-    util.ensuredirs(event_info_path)
-    f = open(event_info_path, 'w')
-    f.write('''name = %(eventname)s
-time = %(time)s
-latitude = %(lat)e
-longitude = %(lon)e
-depth = %(depth)e
-moment = %(eventmom)e
-magnitude = %(eventmag)f
-''' % x )
-    f.close()
-    
+    event.dump(event_info_path)
     
 def save_kiwi_dataset(acc, stations, traces, event, config):
     
