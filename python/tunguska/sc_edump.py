@@ -1,7 +1,7 @@
 
 import sys, calendar, time, os, logging
 from os.path import join as pjoin
-from pyrocko import trace
+from pyrocko import trace, model
 
 try:
     
@@ -64,6 +64,7 @@ try:
         
         def __init__(self, argv,
                 trace_selector = lambda tr: True,
+                station_selector = lambda sta: True,
                 time_range = (-100,100),
                 event_path = 'events/%(event_name)s',
                 events = []):
@@ -80,6 +81,7 @@ try:
             st_nslc = '%(network)s_%(station)s_%(location)s_%(channel)s'
             
             self._trace_selector = trace_selector
+            self._station_selector = station_selector
             self._timewindow = time_range
             self._event_path_template = event_path
             
@@ -170,7 +172,19 @@ try:
                                  deltat=1./stream.sampleRate(),
                                  tmin=0.,tmax=0.)
                 
+                sta = model.Station(network=network_code,
+                                    station=station.code(),
+                                    location=stream.locCode(),
+                                    lat=station.latitude(),
+                                    lon=station.longitude(),
+                                    elevation=station.elevation())
+                
+                sta.set_event_relative_data(event)
+                
                 if not self._trace_selector(tr):
+                    continue
+                
+                if not self._station_selector(sta):
                     continue
                 
                 tmin = self._timewindow[0]

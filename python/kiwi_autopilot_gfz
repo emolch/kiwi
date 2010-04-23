@@ -62,7 +62,7 @@ def prepare_event(skeleton_dir, event_dir):
                             pjoin(event_dir,dn))
 
     os.chdir(event_dir)        
-    check_call(['kiwi_prepare', 'kiwi_prepare.config'])
+    check_call(['kiwi_prepare_old', 'kiwi_prepare.config'])
     os.chdir(oldcwd)
 
 def process_event(event_dir):

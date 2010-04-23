@@ -197,16 +197,16 @@ def edump_pull(config, which='first', force=False, onlylist=False):
             badness = prepare.get_badness(badness_dir, event.time)
             whitelist = lambda tr: tr.nslc_id in badness and badness[tr.nslc_id] <= badness_limit
             
-        station_filter = lambda tr: True
+        station_selector = lambda sta: True
         if config.has('station_filter'):
-            station_filter = lambda tr: config.station_filter(stations[get_nsl(tr)])
+            station_selector = config.station_filter
         
-        trace_selector = lambda tr: (station_filter(tr) and 
-                                     whitelist(tr) and 
-                                     tr.channel in config.channels)
-        
+        trace_selector = lambda tr: ( whitelist(tr) and 
+                                      tr.channel in config.channels)
+       
         dumper = sc_edump.EventDumper( ['edump'] + config.argv, 
             trace_selector = trace_selector,
+            station_selector = station_selector,
             time_range = config.time_window,
             event_path = config.path('edump_data_dir'),
             events = events)
