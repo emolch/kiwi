@@ -1,5 +1,6 @@
 from optparse import OptionParser
 import logging, os, sys, shutil, re, time
+from pyrocko import model
 
 from Cheetah.Template import Template
 
@@ -64,6 +65,7 @@ def kiwi_main(steps):
     stepnames_all = [ step.stepname for step in steps ]
     
     if command == 'report':
+        
         data = {}
         for step in steps: 
             data[step.stepname] = step
@@ -71,6 +73,12 @@ def kiwi_main(steps):
         
         report_dir = steps[0].ic()['report_dir']
         templates_dir = steps[0].ic()['report_templates_dir']
+        data_dir = steps[0].ic()['datadir']
+        
+        eventfile = pjoin(data_dir, 'event.txt')
+        if os.path.exists(eventfile):
+            ev = model.Event(load=eventfile)
+            data['earthquake'] = ev
         
         template_filenames = []
         for entry in os.listdir(templates_dir):

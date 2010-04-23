@@ -13,6 +13,38 @@ def get_nsl(x):
 def get_ns(x):
     return x.network, x.station
 
+def get_badness(streams_badness_dir, time):
+    fns = os.listdir(streams_badness_dir)
+    fns.sort()
+    bef = {}
+    for fn in fns:
+        toks = fn.split('_')
+        if len(toks) != 5 or toks[0] != 'badness': continue
+        beg_d, beg_t, end_d, end_t = toks[1:]
+        begin = util.ctimegm(beg_d+' '+beg_t.replace('-',':'))
+        end = util.ctimegm(end_d+' '+end_t.replace('-',':'))
+        dist = 0.
+        if time < begin:
+            dist = begin-time
+        if time > end:
+            dist = time-end
+        
+        bef[dist] = fn
+        
+    fn = bef[sorted(bef.keys())[0]]
+    
+    f = open(pjoin(streams_badness_dir, fn), 'r')
+    badness = {}
+    for line in f:
+        toks = line.split()
+        if len(toks) != 2: continue
+        nslc = toks[0].split('.')
+        if len(nslc) != 4: continue
+        val = float(toks[1])
+        badness[tuple(nslc)] = val
+    f.close()
+    return badness
+
 def save_rapid_station_table(stations_path, stations):
     '''Save station table in format for rapidinv'''
     util.ensuredirs(stations_path)
@@ -42,8 +74,10 @@ def save_kiwi_dataset(acc, stations, traces, event, config):
         
         for raw_traces in acc.iter_traces(trace_selector=trace_selector):
             io.save(raw_traces, config.path('raw_trace_path'))
-
-    save_event_info_file(config.path('event_info_path'), event)
+    
+    eventfn = config.path('event_info_path')
+    util.ensuredirs(eventfn)
+    save_event_info_file(eventfn, event)
     
     dstations = stations.values()
     dstations.sort( lambda a,b: cmp(a.dist_m, b.dist_m) )
@@ -233,9 +267,18 @@ def prepare(config, kiwi_config, rapid_config, event_names):
         if config.has('projection_function'):
             project = config.projection_function
         
-        trace_selector = None
+        whitelist = lambda tr: True
+        if config.has('streams_badness_dir') and config.has('streams_badness_limit'):
+            badness_dir = config.path('streams_badness_dir')
+            badness_limit = config.streams_badness_limit
+            badness = get_badness(badness_dir, event.time)
+            whitelist = lambda tr: tr.nslc_id in badness and badness[tr.nslc_id] <= badness_limit
+            
+        station_filter = lambda tr: True
         if config.has('station_filter'):
-            trace_selector = lambda tr: config.station_filter(stations[get_nsl(tr)])
+            station_filter = lambda tr: config.station_filter(stations[get_nsl(tr)])
+            
+        trace_selector = lambda tr: station_filter(tr) and whitelist(tr)
         
         for traces in acc.iter_displacement_traces(
                 config.restitution_fade_time, 

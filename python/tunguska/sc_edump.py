@@ -1,6 +1,7 @@
 
 import sys, calendar, time, os, logging
 from os.path import join as pjoin
+from pyrocko import trace
 
 try:
     
@@ -62,10 +63,10 @@ try:
     class EventDumper(seiscomp3.Client.Application):
         
         def __init__(self, argv,
-                channels=['BHZ'],
-                time_range=(-100,100),
-                event_path='events/%(event_name)s',
-                events=[]):
+                trace_selector = lambda tr: True,
+                time_range = (-100,100),
+                event_path = 'events/%(event_name)s',
+                events = []):
             
             seiscomp3.Client.Application.__init__(self, len(argv), argv)
                     
@@ -78,7 +79,7 @@ try:
             
             st_nslc = '%(network)s_%(station)s_%(location)s_%(channel)s'
             
-            self._wanted_channels = channels
+            self._trace_selector = trace_selector
             self._timewindow = time_range
             self._event_path_template = event_path
             
@@ -162,7 +163,14 @@ try:
             for x in self.iterNSSC(sctime(event.time)):
                 network_code, station, stream, component = x
                 
-                if stream.code()+component.code() not in self._wanted_channels:
+                tr = trace.Trace(network=network_code,
+                                 station=station.code(),
+                                 location=stream.locCode(),
+                                 channel=stream.code()+component.code(),
+                                 deltat=1./stream.sampleRate(),
+                                 tmin=0.,tmax=0.)
+                
+                if not self._trace_selector(tr):
                     continue
                 
                 tmin = self._timewindow[0]
@@ -195,7 +203,7 @@ try:
             
             
             self.dumpEventInfo(event)
-           # self.dumpStreams(stream_to_timewindow, event.name, sctime(event.time))
+            self.dumpStreams(stream_to_timewindow, event.name, sctime(event.time))
             self.dumpComponents(components, event.name)
             self.dumpPoleZeros(responses, event.name)
             self.dumpStations(used_stations, event.name)

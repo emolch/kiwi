@@ -71,10 +71,12 @@ class GlobalDataRequest(wilber.IrisWilber):
         
         return xevents
         
-    def download_next_event_in_range(self, time_range, sorting, force=False):
+    def download_next_event_in_range(self, time_range, sorting, force=False, which=None):
         events = self.get_events(time_range=time_range)
         events.sort(sorting)
         for event in events:
+            if which is not None and event.name != which:
+                continue
             seed_volume = self.seed_volume_tmpl % { 'event_name' : self.event_name(event) }
             if not os.path.exists(seed_volume) or force:
                 util.ensuredirs(seed_volume)
@@ -103,7 +105,7 @@ def event_names_from_pathes(base_config):
             event_names.append(m.group(1))
     return event_names
             
-def wilber_pull(config, all=False, force=False, onlylist=False):
+def wilber_pull(config, which='first', force=False, onlylist=False):
     
     r = GlobalDataRequest(
         seed_volume_tmpl    = config.path('seed_volume'),
@@ -128,16 +130,32 @@ def wilber_pull(config, all=False, force=False, onlylist=False):
     
     events = []
     while True:
-        ev = r.download_next_event_in_range(config.timerange('time_range'), sorting, force=force)
-        if not all or ev is None:
+        xwhich = None
+        if which != 'all' and which != 'first':
+            xwhich = which
+        
+        ev = r.download_next_event_in_range(
+                config.timerange('time_range'), 
+                sorting,
+                force=force,
+                which=xwhich)
+                
+        if not which == 'all' or ev is None:
             break
+        
         seed_volume = config.path('seed_volume') % { 'event_name': ev }
         if os.path.exists(seed_volume):
             events.append(ev)
         
     return events 
 
-def edump_pull(config, all=False, force=False, onlylist=False):
+def edump_pull(config, which='first', force=False, onlylist=False):
+    if config.has('event_sorting'):
+        sorting = config.event_sorting
+    else:
+        # by default get newest event first
+        sorting = lambda a,b: cmp(b.time, a.time)
+        
     xevents = []
     if config.has('kps_events_file'):
         xevents.extend(model.load_kps_event_list(config.path('kps_events_file')))
@@ -149,7 +167,9 @@ def edump_pull(config, all=False, force=False, onlylist=False):
         cat = catalog.Geofon()
         tr = config.timerange('time_range')
         xevents.extend(cat.get_events(tr))
-        
+    
+    xevents.sort(sorting)
+    
     events = []
     for event in xevents:
         if  config.has('event_filter') and not config.event_filter(event):
@@ -163,10 +183,30 @@ def edump_pull(config, all=False, force=False, onlylist=False):
         return events
         
     if events:
-        if not all: events = events[0:1]
+        if which == 'first': 
+            events = events[0:1]
+        elif which == 'all':
+            pass
+        else:
+            events = [ ev for ev in events if ev.name == which ]
+        
+        whitelist = lambda tr: True
+        if config.has('streams_badness_dir') and config.has('streams_badness_limit'):
+            badness_dir = config.path('streams_badness_dir')
+            badness_limit = config.streams_badness_limit
+            badness = prepare.get_badness(badness_dir, event.time)
+            whitelist = lambda tr: tr.nslc_id in badness and badness[tr.nslc_id] <= badness_limit
+            
+        station_filter = lambda tr: True
+        if config.has('station_filter'):
+            station_filter = lambda tr: config.station_filter(stations[get_nsl(tr)])
+        
+        trace_selector = lambda tr: (station_filter(tr) and 
+                                     whitelist(tr) and 
+                                     tr.channel in config.channels)
         
         dumper = sc_edump.EventDumper( ['edump'] + config.argv, 
-            channels = config.channels,
+            trace_selector = trace_selector,
             time_range = config.time_window,
             event_path = config.path('edump_data_dir'),
             events = events)
@@ -221,7 +261,7 @@ user_home_dir = os.environ['HOME']
 
 usage = '''%prog [options] <command> [args]
 
-%prog [options] pull    [ all ]
+%prog [options] pull    [ first | all | eventname ]
 %prog [options] prepare [ all | eventnames ... ]
 %prog [options] process [ all | eventnames ... ]
 %prog [options] report  [ all | eventnames ... ]
@@ -322,18 +362,22 @@ try:
         if command not in available_commands:
             parser.error('no such command: %s' % command)
 
-    
+    event_names = []
     if 'pull' in commands or ('list' in commands and options.pending):
-        pullall = False
-        if len(args) == 2 and args[1] == 'all':
-            pullall = True
+        pullwhich = 'first'
+        if len(args) == 2:
+            pullwhich = args[1]
+        if len(args) > 2:
+            parser.error('too many arguments given for pull')
         
         if wilber_config is None and edump_config is None:
             die('No wilber nor edump configuration found\n(using config from file "%s".)' % (e, config_filename))
+            
         if wilber_config:
-            event_names = wilber_pull(wilber_config, all=pullall, force=options.force, onlylist=options.pending)
+            event_names = wilber_pull(wilber_config, which=pullwhich, force=options.force, onlylist=options.pending)
+            
         elif edump_config:
-            event_names = edump_pull(edump_config, all=pullall, force=options.force, onlylist=options.pending)
+            event_names = edump_pull(edump_config, which=pullwhich, force=options.force, onlylist=options.pending)
         
         if options.pending:
             for event_name in event_names:
@@ -344,8 +388,10 @@ try:
                 print 'downloaded event: %s' % event_name
                 
         if not event_names: sys.exit()
-          
-    event_names = args[1:]
+    
+    if not event_names:
+        event_names = args[1:]
+    
     if len(event_names) == 1 and event_names[0] == 'all':
         event_names = event_names_from_pathes(base_config)
     
