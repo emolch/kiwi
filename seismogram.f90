@@ -145,12 +145,12 @@ module seismogram
             
             
             call make_weights( real(azi), m, f )
-            
-            
+                        
             if (interpolate) then
-                call gfdb_get_indices_bilin( greensf, real(dist), depth, xundersample, zundersample, ix,iz, dix, diz )
+                call gfdb_get_indices_bilin( greensf, real(dist), depth-receiver%depth, &
+                                             xundersample, zundersample, ix,iz, dix, diz )
             else
-                call gfdb_get_indices( greensf, real(dist), depth, ix(1),iz(1) )
+                call gfdb_get_indices( greensf, real(dist), depth-receiver%depth, ix(1),iz(1) )
                 ix(2) = ix(1)+1
                 iz(2) = iz(1)+1
                 dix = 0.

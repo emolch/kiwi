@@ -66,6 +66,7 @@ module receiver
     
       ! location of the receiver
         type(t_geo_coords)                         :: origin
+        real                                       :: depth = 0.0
         
       ! number of components (must be in sync with size(components))
         integer                                    :: ncomponents
@@ -112,10 +113,11 @@ module receiver
     
   contains
  
-    subroutine receiver_init( self, origin, components_str, dt, ok )
+    subroutine receiver_init( self, origin, depth, components_str, dt, ok )
     
         type(t_receiver), intent(inout)  :: self
         type(t_geo_coords), intent(in)   :: origin          ! location of receiver 
+        real                             :: depth
         character(len=*), intent(in)     :: components_str  ! componenents at this receiver
         real, intent(in)                 :: dt              ! sampling rate
         logical, intent(out)             :: ok              ! exit status
@@ -166,6 +168,7 @@ module receiver
       
         self%ncomponents = ncomponents
         self%origin = origin
+        self%depth = depth
         
         allocate( self%displacement(ncomponents) )
         allocate( self%ref_probes(ncomponents) )

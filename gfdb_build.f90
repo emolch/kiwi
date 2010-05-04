@@ -205,8 +205,8 @@ program gfdb_build
         firstx = 0.
         firstz = 0.
         if (iargc() == 10) then
-            call real_getarg(  9, 0., huge(firstx), firstx )
-            call real_getarg( 10, 0., huge(firstz), firstz )
+            call real_getarg(  9, -huge(firstx), huge(firstx), firstx )
+            call real_getarg( 10, -huge(firstz), huge(firstz), firstz )
         end if
         call set_database( basefn, nchunks, nx,nz,ng, dt,dx,dz, firstx, firstz )
     else

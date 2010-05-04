@@ -204,9 +204,9 @@ module minimizer_wrappers
 
     end subroutine
         
-    subroutine do_set_receivers( receiversfn, answer, ok )
+    subroutine do_set_receivers( args, answer, ok )
       
-     !! === {{{set_receivers filename}}} ===
+     !! === {{{set_receivers filename [ has_depth ]}}} ===
       !
       ! Read a list of receiver coordinates from three column (lat lon components) ascii file {{{filename}}}.
       !
@@ -214,7 +214,7 @@ module minimizer_wrappers
       !
       !  * first column:   latitude in degrees
       !  * second column:  longitude in degrees
-      !  * third column:   selected components of the station; for every component you want,
+      !  * third column:   selected components of the station; for every component wanted,
       !    add one of the characters below:
       !     * radial component:
       !        * a = positive is displacement away from source
@@ -247,11 +247,24 @@ module minimizer_wrappers
       ! 35.87 14.52 d       
       ! }}}
       
-        type(varying_string), intent(in)  :: receiversfn
+        type(varying_string), intent(in)  :: args
         type(varying_string), intent(out) :: answer
         logical, intent(out)              :: ok
         
-        call set_receivers( receiversfn, answer, ok )
+        type(varying_string) :: args_mut
+        logical :: has_depth
+        type(varying_string) :: receiversfn
+        
+        has_depth = .false.
+        if (2 == count_words( char(args) )) then
+            args_mut = args
+            call split(args_mut, receiversfn, ' ') 
+            has_depth = (args_mut == "has_depth")
+        else
+            receiversfn = args
+        end if
+        
+        call set_receivers( receiversfn, has_depth, answer, ok )
         
     end subroutine
 

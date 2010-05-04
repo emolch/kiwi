@@ -157,11 +157,12 @@ module minimizer_engine
 
     end subroutine
     
-    subroutine set_receivers( receiversfn, answer, ok )
+    subroutine set_receivers( receiversfn, has_depth, answer, ok )
     
       ! load receiver list from file
             
         type(varying_string), intent(in)  :: receiversfn
+        logical, intent(in)               :: has_depth
         type(varying_string), intent(out) :: answer
         logical, intent(out)              :: ok
         
@@ -170,6 +171,7 @@ module minimizer_engine
         integer                             :: iostat, nskip, iunit
         integer                             :: nwords
         type(t_geo_coords)                  :: origin
+        real                                :: depth
      
       ! this subroutine will be a pain in fortran   
      
@@ -222,13 +224,19 @@ module minimizer_engine
                 call error("io error occured while reading " // receiversfn // " at receiver no " // (ireceiver+1)  )
                 exit line_loop
             end if
-            
+
+            components = ""
+            depth = 0.0
+
             nwords = count_words(str)
-            if (nwords == 3) then
+            if (has_depth .and. nwords == 4) then
+                read (str,*,iostat=iostat) origin%lat, origin%lon, depth, components
+            else if (has_depth .and. nwords == 3) then
+                read (str,*,iostat=iostat) origin%lat, origin%lon, depth
+            else if (.not. has_depth .and. nwords == 3) then
                 read (str,*,iostat=iostat) origin%lat, origin%lon, components
-            else if (nwords == 2) then
+            else if (.not. has_depth .and. nwords == 2) then
                 read (str,*,iostat=iostat) origin%lat, origin%lon
-                components = ''
             else
                 ok = .false.
                 call error("expected two or three words at receiver no " // (ireceiver+1) // &
@@ -246,7 +254,7 @@ module minimizer_engine
             ireceiver = ireceiver + 1
             if (ireceiver > nreceivers) exit line_loop
             
-            call receiver_init(receivers(ireceiver), d2r(origin), components, db%dt, ok )
+            call receiver_init(receivers(ireceiver), d2r(origin), depth, components, db%dt, ok )
             if (.not. ok) then 
                 call error("initializing receiver failed: possibly a forbidden "// &
                            "combination of receiver components has been given at receiver no. "// ireceiver)

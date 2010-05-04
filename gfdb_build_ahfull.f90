@@ -97,16 +97,29 @@ module gfdb_build_ahfull_
             ok = .true.
             
           ! det locations of source, receiver and relative location
-            s_location(1) = 0
-            s_location(2) = 0
-            r_location(2) = 0
+          !  s_location(1) = 0
+          !  s_location(2) = 0
+          !  r_location(2) = 0
+          !  s_location(3) = z
+          !  epiangle = x/earthradius
+          !  r_location(1) = real( sin(epiangle)*earthradius )
+          !  r_location(3) = real( (1.-cos(epiangle))*earthradius )
+          
+            s_location(1) = 0.
+            s_location(2) = 0.
             s_location(3) = z
-            epiangle = x/earthradius
-            r_location(1) = real( sin(epiangle)*earthradius )
-            r_location(3) = real( (1.-cos(epiangle))*earthradius )
+            
+            r_location(1) = x
+            r_location(2) = 0.
+            r_location(3) = 0.
+
             rel_location = r_location - s_location
             d = dist(s_location, r_location)
-            
+
+            rel_location(1) = x
+            rel_location(2) = 0.0
+            rel_location(3) = -z
+            d = dist(s_location, r_location)
           ! time window  
             
             tstf = (size(es%stf)-1)*es%dt
@@ -196,16 +209,16 @@ module gfdb_build_ahfull_
             deallocate(seismograms)
             
           ! rotate to local receiver coordinates. here: (South,Right,Down) 
-            rotmat(:,:) = 0.
-            rotmat(1,1) = real(cos(epiangle))
-            rotmat(2,2) = 1.
-            rotmat(3,3) = real(cos(epiangle))
-            rotmat(1,3) = real(sin(epiangle))
-            rotmat(3,1) = real(-sin(epiangle))
+          !  rotmat(:,:) = 0.
+          !  rotmat(1,1) = real(cos(epiangle))
+          !  rotmat(2,2) = 1.
+          !  rotmat(3,3) = real(cos(epiangle))
+          !  rotmat(1,3) = real(sin(epiangle))
+          !  rotmat(3,1) = real(-sin(epiangle))
             
-            call rotate_seismogram( rotmat, seismograms2(1:3,:) )
-            call rotate_seismogram( rotmat, seismograms2(4:6,:) )
-            call rotate_seismogram( rotmat, seismograms2(7:9,:) )
+          !  call rotate_seismogram( rotmat, seismograms2(1:3,:) )
+          !  call rotate_seismogram( rotmat, seismograms2(4:6,:) )
+          !  call rotate_seismogram( rotmat, seismograms2(7:9,:) )
             
           ! put in database
             call gfdb_get_indices( db, x, z, ix, iz )
