@@ -615,7 +615,8 @@ class WeightMaker(Step):
         
         sourcetype = 'eikonal'
         base_source = source_model.Source( sourcetype, 
-                               {"depth": float(conf['depth']),
+                               {"time": float(conf['time']),
+                                "depth": float(conf['depth']),
                                 "bord-radius": 0.,
                                 "moment": float(conf['moment']),
                                 "rise-time": float(conf['rise_time']) } )
@@ -847,14 +848,14 @@ class ParamTuner(Step):
         misfit_median = finder.get_median_of_misfits_by_r()
         if self.xblacklist_level is not None:
             ir = 0
-            xblacklist = []
+            xblacklist = set(conf['xblacklist'])
             for r, mm in zip(seis.receivers, finder.misfits_by_r):
                 if mm/misfit_median > self.xblacklist_level:
-                    xblacklist.append(ir) 
+                    xblacklist.add(ir) 
                     logging.info('Blacklisting:  %i, %s, %g' % (ir+1, r.name, mm/misfit_median))
                     
                 ir += 1
-            self.out_config.xblacklist = xblacklist
+            self.out_config.xblacklist = sorted(list(xblacklist))
                     
         if forward:
             self.snapshot( base_source, 'best' )
@@ -1028,16 +1029,17 @@ class Greeper(Step):
     
     aaahrrggg! this has to be rewritten!'''
      
-    def __init__(self, workdir, params=['time'], name=None):
+    def __init__(self, workdir, sourcetype='eikonal', params=['time'], name=None):
         if name is None: name = '-'.join(params)+'-greeper'
         Step.__init__(self, workdir, name)
         self.params = params
+        self.sourcetype = sourcetype
         
         self.required |= Step.outer_misfit_method_params | Step.inner_misfit_method_params \
                         | set([param+'_range' for param in self.params]) \
                         | set(self.params)
                         
-        self.optional |= set([d2u(p) for p in source_model.param_names('eikonal')])
+        self.optional |= set([d2u(p) for p in source_model.param_names(sourcetype)])
         
     def work(self, search=True, forward=True, run_id='current'):
         self.pre_work(search or forward)
@@ -1045,7 +1047,7 @@ class Greeper(Step):
         conf = self.in_config.get_config()
         mm_conf = self.in_config.get_config(keys=Step.outer_misfit_method_params)
         
-        sourcetype = 'eikonal'
+        sourcetype = self.sourcetype
         base_source = source_model.Source( sourcetype )
         
         for p in source_model.param_names(sourcetype):
@@ -1194,7 +1196,8 @@ class Greeper(Step):
             logging.error('Fixme: inversion.py')
         
         very_best_source_normalform = copy.deepcopy(very_best_source)
-        very_best_source_normalform.disambigue_sdr()
+        if 'strike' in base_source.keys():
+            very_best_source_normalform.disambigue_sdr()
         
         for param, coords in grid_def:
             val = very_best_source[param]

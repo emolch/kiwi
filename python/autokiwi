@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import logging, sys, os, time, glob, re, subprocess
+import logging, sys, os, time, glob, re
 
 from pyrocko import wilber, util, model, catalog
 
@@ -7,8 +7,20 @@ from optparse import OptionParser
 from tunguska import prepare, sc_edump, configurator
 
 from os.path import join as pjoin
-from subprocess import check_call
-
+try:
+    from subprocess import check_call, CalledProcessError
+except:
+    from subprocess import call
+    # older python versions don't have check_call, emulate it
+    class CalledProcessError(Exception):
+        pass
+            
+    def check_call(*args, **kwargs):
+        retcode = call(*args, **kwargs)
+        if retcode != 0:
+            raise CalledProcessError()
+    
+    
 logger = logging.getLogger('autokiwi')
 
 def die(mess):
@@ -230,8 +242,8 @@ def run_processing_command(processing_dir, processing_command, event_names):
         oldwd = os.getcwd()
         os.chdir(pdir)
         try:
-            subprocess.check_call(processing_command)
-        except subprocess.CalledProcessError:
+            check_call(processing_command)
+        except CalledProcessError:
             logger.error('Running process on event %s failed.' % event_name)
         os.chdir(oldwd)
 
@@ -262,10 +274,10 @@ user_home_dir = os.environ['HOME']
 usage = '''%prog [options] <command> [args]
 
 %prog [options] pull    [ first | all | eventname ]
-%prog [options] prepare [ all | eventnames ... ]
-%prog [options] process [ all | eventnames ... ]
-%prog [options] report  [ all | eventnames ... ]
-%prog [options] post    [ all | eventnames ... ]
+%prog [options] prepare ( all | eventnames ... )
+%prog [options] process ( all | eventnames ... )
+%prog [options] report  ( all | eventnames ... )
+%prog [options] post    ( all | eventnames ... )
 %prog [options] list
 '''
 

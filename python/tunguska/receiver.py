@@ -2,7 +2,7 @@ import pymseed
 
 class Receiver:
     
-    def __init__(self, lat=0.0, lon=0.0, components=None, name=None, from_string=None ):
+    def __init__(self, lat=0.0, lon=0.0, depth=0.0, components=None, name=None, from_string=None ):
         
         # treat as immutable, although it would be possible to change the attributes
         
@@ -10,24 +10,26 @@ class Receiver:
             if components is None: components = 'ned'
             self.lat = lat
             self.lon = lon
+            self.depth = depth
             self.components = components
             self.name = name
         else:
             toks = from_string.split()
-            if len(toks) >= 3:
+            if len(toks) >= 4:
                 self.lat = float(toks[0])
                 self.lon = float(toks[1])
+                self.depth = float(toks[2])
                 if components is None:
-                    self.components = toks[2]
+                    self.components = toks[3]
                 else:
                     comps = ''
                     for c in components:
-                        if c in toks[2]:
+                        if c in toks[3]:
                             comps += c
                     self.components = comps
                     
-            if len(toks) == 4:
-                self.name = toks[3]
+            if len(toks) == 5:
+                self.name = toks[4]
         
         self.cumulative_shift = 0.
         
@@ -82,7 +84,7 @@ class Receiver:
             return ''
         
     def __str__(self):
-        s = ' '.join( (str(self.lat), str(self.lon), self.components) )
+        s = ' '.join( (str(self.lat), str(self.lon), str(self.depth), self.components) )
         return s
     
     def save_traces_mseed(self, filename_tmpl='%{whichset}s_%(network)s_%(station)s_%(location)s_%(channel)s.mseed' ):

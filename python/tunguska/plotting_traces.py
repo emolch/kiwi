@@ -329,14 +329,29 @@ class MyTracy(Tracy):
         return cmp((round(a[3]/30.),a[2]),(round(a[3]/30.),b[2]))
     
     def map_color(self, trace):
-        return trace.location
+        if trace.set == 'references':
+            return -1
+        else:
+            return trace.snapshot
+
+    def colors(self, color_key):
+        ind = self.color_index[color_key]
+        if ind == 0:
+            return gmtpy.color('black')
+        else:
+            return gmtpy.color(ind)
 
     def label_xgroup(self, a):
         return a
     
     def label_ygroup(self, a):
         return '.'.join(a[:2]).rstrip('.')
-
+    
+    def draw_trace(self, gmt, widget, scaler, trace, ivisit):
+        
+        Tracy.draw_trace(self, gmt, widget, scaler, trace, ivisit)
+        
+        
 class UTrace:
     def __init__(self, **kwargs):
         for k,v in kwargs.iteritems():
@@ -356,7 +371,7 @@ def multi_seismogram_plot2(snapshots, plotdir):
     for typ in 'seismogram', 'spectrum':
         traces = []
         fns = []
-        for receivers in snapshots:
+        for isnap, receivers in enumerate(snapshots):
             for rec in receivers:
                 for icomp, comp in enumerate(rec.components):
                     
@@ -368,7 +383,8 @@ def multi_seismogram_plot2(snapshots, plotdir):
                         trace = UTrace(
                             station = rec.get_station(),
                             network = rec.get_network(),
-                            location = set,
+                            set = set,
+                            snapshot = isnap,
                             channel = config.component_names[comp],
                             distance_deg = rec.distance_deg,
                             azimuth = rec.azimuth,

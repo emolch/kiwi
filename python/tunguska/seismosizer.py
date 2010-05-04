@@ -495,13 +495,13 @@ class Seismosizer(SeismosizerBase):
         for r in receivers:
             file.write( "%s\n" % str(r) )
         file.close()
-        self.do_set_receivers(receiverfn)
+        self.do_set_receivers(receiverfn, 'has_depth')
         os.remove(receiverfn)
         self._locations_changed()
     
     def blacklist_receivers(self, blacklist):
         for irec, r in enumerate(self.receivers):
-            sid, nid = r.name.split('.')
+            sid = r.get_station()
             if sid in blacklist:
                 self.switch_receiver(irec+1, 'off')
     
@@ -535,7 +535,12 @@ class Seismosizer(SeismosizerBase):
             taper = [ taper ] * len(self.receivers)
             
         for irec, rec in enumerate(self.receivers):
-            values = taper[irec](rec.distance_m, sourcedepth)
+            if rec.depth != 0.0:
+                dist = num.sqrt(rec.distance_m**2 + (sourcedepth - rec.depth)**2)
+                values = taper[irec](dist, 0.0)
+            else:
+                values = taper[irec](rec.distance_m, sourcedepth)
+                
             if None in values:
                 # Phase(s) not existant at this distance
                 self.switch_receiver(irec+1, 'off')

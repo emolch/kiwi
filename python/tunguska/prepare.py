@@ -4,6 +4,7 @@ from tunguska import phase, gfdb, edump_access
 
 import sys, os, logging, shutil, time, copy
 from os.path import join as pjoin
+import numpy as numpy
 
 logger = logging.getLogger('tunguska.prepare')
 
@@ -105,7 +106,10 @@ def save_kiwi_dataset(acc, stations, traces, event, config):
     for station, components, traces in dataset:
         nsl = '.'.join((get_nsl(station)))
         for i in range(config.nsets):
-            f.write('%15.8e %15.8e %3s %-15s\n' % (station.lat, station.lon, components, nsl) )
+            depth = 0.0
+            if station.depth is not None:
+                depth = 0.0
+            f.write('%15.8e %15.8e %15.8e %3s %-15s\n' % (station.lat, station.lon, depth, components, nsl) )
             for tr in traces:
                 tr = tr.copy()
                 if config.trace_time_zero == 'event':
@@ -291,15 +295,16 @@ def prepare(config, kiwi_config, rapid_config, event_names):
                 trace_selector=trace_selector,
                 extend=extend,
                 crop=crop):
-            
             for tr in traces:
+                
                 station = stations[get_nsl(tr)]
                 
                 if min_dist is not None and station.dist_m < min_dist:
+                    logger.warn('Station %s is too close to the source (distance = %g m, limit = %g m' % (station.nsl_string(), station.dist_m, min_dist) )
                     continue
                 if max_dist is not None and station.dist_m > max_dist:
+                    logger.warn('Station %s is too far from the source (distance = %g m, limit = %g m' % (station.nsl_string(), station.dist_m, max_dist) )
                     continue
-                
                 span_complete = True
                 
                 timings = []
@@ -323,24 +328,21 @@ def prepare(config, kiwi_config, rapid_config, event_names):
                         acc.problems().add('gappy', tr.full_id)
                         span_complete = False
                         break
-                                
                 if not span_complete:
                     continue
-                
                 if config.has('cut_span'):
                     cs = config.cut_span
                     tmin, tmax = (event.time+cs[0](station.dist_m, event.depth),
                                 event.time+cs[1](station.dist_m, event.depth))
                                 
                     tr.chop(tmin, tmax, inplace=True)
-                
                 processed_traces.append(tr)
                 
                 if tr.channel not in chan_count:
                     chan_count[tr.channel] = 0
                     
                 chan_count[tr.channel] += 1
-                    
+        
         # use only one sensor at each station; use lexically first
         sstations = stations.values()
         sstations.sort( lambda a,b: cmp(get_nsl(a),  get_nsl(b)) )
@@ -350,6 +352,7 @@ def prepare(config, kiwi_config, rapid_config, event_names):
             if get_ns(station) not in have:
                 have[get_ns(station)] = 1
                 xstations[get_nsl(station)] = station
+        
         
         if kiwi_config is not None:
             save_kiwi_dataset(acc, xstations, processed_traces, event, kiwi_config)

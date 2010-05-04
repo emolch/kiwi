@@ -125,7 +125,7 @@ class TracesPlot(Qwt.QwtPlot):
         self.__curves = []
         self.__pos = [db.firstx, db.firstz]
         for i in range(db.ng):
-            curve = Qwt.QwtPlotCurve('%i' % (i+1))
+            curve = Qwt.QwtPlotCurve()#'%i' % (i+1))
             curve.attach(self)
             self.__curves.append( curve )
             curve.setPen( Qt.QPen( Qt.QColor(*graph_colors[i] )) )
@@ -135,7 +135,7 @@ class TracesPlot(Qwt.QwtPlot):
         #yscaler.setAttribute(Qwt.QwtScaleEngine.Floating, True)
         
         xscaler = self.axisScaleEngine(Qwt.QwtPlot.xBottom)
-        #xscaler.setAttribute(Qwt.QwtScaleEngine.Floating, True)
+        xscaler.setAttribute(Qwt.QwtScaleEngine.Floating, True)
 
         self.setCanvasBackground( Qt.QColor(*plot_background_color) )
         self.data_sync()

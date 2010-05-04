@@ -371,7 +371,8 @@ class MisfitGrid:
                        
             conf = dict( xlabel = param.title(),
                          xunit = self.base_source.sourceinfo(param).unit,
-                         ylimits = (mini, maxi) )
+                         ylimits = (mini, maxi),
+                         ymasking=False)
             
             if conf_overrides:
                 conf.update(conf_overrides)
@@ -444,11 +445,10 @@ class MisfitGrid:
                 
                 conf = dict( xlabel = xparam.title(),
                              xunit = self.base_source.sourceinfo(xparam).unit,
-                             xlimits = (ax.min(), ax.max()),
                              ylabel = yparam.title(),
                              yunit = self.base_source.sourceinfo(yparam).unit,
-                             ylimits = (ay.min(), ay.max()),
                              zlimits = zlimits,
+                             zmasking=False,
                              zsnap = True
                          )
                 
@@ -474,7 +474,7 @@ class MisfitGrid:
         lats = num.array( [ r.lat for r in self.receivers ], dtype='float' )
         lons = num.array( [ r.lon for r in self.receivers ], dtype='float' )
         dists = num.array( [ r.distance_deg for r in self.receivers ], dtype='float' )
-        rnames = [ re.sub(r'\..*$', '', r.name) for r in self.receivers ]
+        rnames = [ ' '.join(r.name.split('.')) for r in self.receivers ]
         slat, slon = self.source_location[:2]
         station_misfits = self.misfits_by_r-self.ref_misfits_by_r
         #station_varia = self.variability_by_r / num.sum(self.variability_by_r) * len(self.receivers)
@@ -501,8 +501,9 @@ class MisfitGrid:
                                   
             plot_files.append('location.pdf')
         
-        plotting.beachball(best_source, pjoin(dirname, 'beachball.pdf'), indicate_plane=indicate_plane)
-        plot_files.append('beachball.pdf')
+        fns = plotting.beachball(best_source, pjoin(dirname, 'beachball.pdf'), indicate_plane=indicate_plane)
+        if fns:
+            plot_files.append('beachball.pdf')
         
         
         

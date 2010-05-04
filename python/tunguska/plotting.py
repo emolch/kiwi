@@ -515,7 +515,7 @@ def location_map( filename, lat, lon, lat_delta, conf_overrides, source=None, so
             gmt.psxy( in_rows=[[lon,lat]], S='c20p', W='2p,0/0/0',  *(widget.JXY()+scaler.R()))
     
     else:
-        if source:
+        if source and 'strike' in source.keys() and 'dip' in source.keys() and 'slip-rake' in source.keys():
             gmt.psmeca( in_rows=[[lon, lat, 1., source['strike'], source['dip'], source['slip-rake'], 6., 0.,0., '' ]],
                      S='a0.3', *(widget.JXY()+scaler.R()) )
         else:
