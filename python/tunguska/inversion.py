@@ -848,7 +848,12 @@ class ParamTuner(Step):
         misfit_median = finder.get_median_of_misfits_by_r()
         if self.xblacklist_level is not None:
             ir = 0
-            xblacklist = set(conf['xblacklist'])
+            
+            if 'xblacklist' in conf:
+                xblacklist = set(conf['xblacklist'])
+            else:
+                xblacklist = set()
+                
             for r, mm in zip(seis.receivers, finder.misfits_by_r):
                 if mm/misfit_median > self.xblacklist_level:
                     xblacklist.add(ir) 
