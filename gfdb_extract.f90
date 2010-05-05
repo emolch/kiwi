@@ -31,6 +31,7 @@ module gfdb_extract_
     public getentry, set_database, close_database
     
     type(t_gfdb), save :: db
+    integer :: traces_added = 0
   
   contains
   
@@ -75,6 +76,14 @@ module gfdb_extract_
         if (nerr == 0) ok = .true.
 
         call gfdb_uncache_trace( db, ix,iz,ig )
+        traces_added = traces_added + 1
+
+        ! periodically close the gfdb, so that hdf is forced to deallocate
+        ! all it's memory
+        if (traces_added > 8000) then
+            call gfdb_close( db )
+            traces_added = 0
+        end if
         
     end subroutine
     
