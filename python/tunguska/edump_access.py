@@ -36,8 +36,8 @@ class EventDumpAccess(eventdata.EventDataAccess):
         
         if 'integration' in allowed_methods:
             try:
-                gain = self._get_channel_description(tr)
-                return trace.IntegrationResponse(1./gain)
+                cha = self.get_channel(tr)
+                return trace.IntegrationResponse(1./cha.gain)
             
             except FileNotFound, e:
                 raise eventdata.NoRestitution(e)

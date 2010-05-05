@@ -9,6 +9,7 @@ import plotting
 import moment_tensor
 import orthodrome
 import gridsearch
+import filtering
 from util import gform
 
 import shutil
@@ -674,8 +675,6 @@ class EffectiveDtTester(Step):
         self.post_work(True)
 
 
-
-
 class Shifter(Step):
     def __init__(self, workdir, name='shifter'):
         Step.__init__(self, workdir, name)
@@ -768,7 +767,48 @@ class Shifter(Step):
                                source, num.amax(dists)*1.05, fn, {}, zexpand=1.02, nsets=conf['nsets'])
                
         return [ 'stations.pdf' ]
+
+
+class ExtConfigurator(Step):
+    
+    def __init__(self, workdir, name, generate=('filter', 'constraining_planes', 
+                    'bord_radius_range', 'nukl_shift_x_range', 'nukl_shift_y_range' ), size_factor=4000.):
+        Step.__init__(self, workdir, name)
+        self.required |= Step.inner_misfit_method_params | set(('depth', 'rise_time'))
+        self.generate = generate
+        self.size_factor = size_factor
         
+    def work(self, **kwargs):
+        self.pre_work(False)
+        oc = self.out_config
+        ic = self.in_config.get_config()
+        
+        rise_time = ic['rise_time']
+        depth = ic['depth']
+        
+        if 'filter' in self.generate:
+            filter = ic['filter']
+            filter.set(2, 1./(rise_time*2./3.))
+            filter.set(3, 1./(rise_time*1./2.))
+            oc.filter = filter
+
+        maxradius = self.size_factor*rise_time
+        if 'bord_radius_range' in self.generate:
+            oc.bord_radius_range     = 0., maxradius, maxradius/5.
+        
+        if 'nukl_shift_x_range' in self.generate:
+            oc.nukl_shift_x_range    = -maxradius, maxradius, maxradius/5.
+        
+        if 'nukl_shift_y_range' in self.generate:
+            oc.nukl_shift_y_range    = -maxradius, maxradius, maxradius/5.
+
+        if 'constraining_planes' in self.generate:
+            cp = ic['constraining_planes']
+    
+            oc.constraining_planes   = [((0.,0.,cp[0][0][2]),(0.,0.,-1.)),
+                                        ((0.,0.,min(depth*2.,cp[1][0][2])),(0.,0.,+1.))]
+                                        
+        self.post_work(False)
 
 class ParamTuner(Step):
      
@@ -978,9 +1018,7 @@ class TracePlotter(Step):
     def __init__(self, workdir, snapshots, name='traceplotter'):
         Step.__init__(self, workdir, name)
         self.snapshots = snapshots
-        
         self.required |= set()
-                        
         self.optional |= set()
         
     def work(self, search=True, forward=True, run_id='current'):

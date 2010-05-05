@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import logging, sys, os, time, glob, re
 
-from pyrocko import wilber, util, model, catalog
+from pyrocko import wilber, util, model, catalog, weeding
 
 from optparse import OptionParser
 from tunguska import prepare, sc_edump, configurator
@@ -203,6 +203,7 @@ def edump_pull(config, which='first', force=False, onlylist=False):
             events = [ ev for ev in events if ev.name == which ]
         
         whitelist = lambda tr: True
+        badness = None
         if config.has('streams_badness_dir') and config.has('streams_badness_limit'):
             badness_dir = config.path('streams_badness_dir')
             badness_limit = config.streams_badness_limit
@@ -216,9 +217,14 @@ def edump_pull(config, which='first', force=False, onlylist=False):
         trace_selector = lambda tr: ( whitelist(tr) and 
                                       tr.channel in config.channels)
        
+        station_weeder = lambda stations: stations
+        if config.has('nwanted_stations'):
+            station_weeder = lambda stations: weeding.weed_stations(stations, nwanted=config.nwanted_stations, stream_badnesses=badness)[0]
+        
         dumper = sc_edump.EventDumper( ['edump'] + config.argv, 
             trace_selector = trace_selector,
             station_selector = station_selector,
+            station_weeder = station_weeder,
             time_range = config.time_window,
             event_path = config.path('edump_data_dir'),
             events = events)
@@ -226,6 +232,7 @@ def edump_pull(config, which='first', force=False, onlylist=False):
         dumper()
         ok = []
         for event in events:
+            edump_data_dir = config.path('edump_data_dir') % { 'event_name': event.name }
             if os.path.exists(edump_data_dir):
                 ok.append(event.name)
         return ok

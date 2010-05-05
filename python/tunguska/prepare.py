@@ -328,8 +328,10 @@ def prepare(config, kiwi_config, rapid_config, event_names):
                         acc.problems().add('gappy', tr.full_id)
                         span_complete = False
                         break
+                
                 if not span_complete:
                     continue
+                
                 if config.has('cut_span'):
                     cs = config.cut_span
                     tmin, tmax = (event.time+cs[0](station.dist_m, event.depth),

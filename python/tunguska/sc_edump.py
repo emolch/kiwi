@@ -13,6 +13,22 @@ try:
     def gmctime(t):
         return time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(t))
     
+
+    def pyrocko_trace(network_code, station, stream, component):
+        return trace.Trace(  network=network_code,
+                                station=station.code(),
+                                location=stream.locCode(),
+                                channel=stream.code()+component.code(),
+                                deltat=1./stream.sampleRate(),
+                                tmin=0.,tmax=0.)
+            
+    def pyrocko_station(network_code, station, stream):
+        return  model.Station(network=network_code,
+                                station=station.code(),
+                                location=stream.locCode(),
+                                lat=station.latitude(),
+                                lon=station.longitude(),
+                                elevation=station.elevation())
     
     class SimpleInventory:
         def __init__(self, inventory):
@@ -65,6 +81,7 @@ try:
         def __init__(self, argv,
                 trace_selector = lambda tr: True,
                 station_selector = lambda sta: True,
+                station_weeder = lambda stations: stations,
                 time_range = (-100,100),
                 event_path = 'events/%(event_name)s',
                 events = []):
@@ -82,6 +99,7 @@ try:
             
             self._trace_selector = trace_selector
             self._station_selector = station_selector
+            self._station_weeder = station_weeder
             self._timewindow = time_range
             self._event_path_template = event_path
             
@@ -153,7 +171,8 @@ try:
                                 component = stream.component(icomp)
                                 yield (cs.networkCode(), station, stream, component)
         
-        
+
+                
         def dumpEvent(self, event):
                                     
             phase_counter = {}
@@ -162,29 +181,43 @@ try:
             responses = {}
             used_stations = {}
             
+            # preselection 
+            pyr_stations = []
             for x in self.iterNSSC(sctime(event.time)):
                 network_code, station, stream, component = x
                 
-                tr = trace.Trace(network=network_code,
-                                 station=station.code(),
-                                 location=stream.locCode(),
-                                 channel=stream.code()+component.code(),
-                                 deltat=1./stream.sampleRate(),
-                                 tmin=0.,tmax=0.)
-                
-                sta = model.Station(network=network_code,
-                                    station=station.code(),
-                                    location=stream.locCode(),
-                                    lat=station.latitude(),
-                                    lon=station.longitude(),
-                                    elevation=station.elevation())
-                
+                tr = pyrocko_trace(network_code, station, stream, component)
+                sta = pyrocko_station(network_code, station, stream)
                 sta.set_event_relative_data(event)
                 
                 if not self._trace_selector(tr):
                     continue
                 
                 if not self._station_selector(sta):
+                    continue
+                
+                pyr_stations.append(sta)
+            
+            def get_nsl(x):
+                return x.network, x.station, x.location
+            
+            pyr_stations_wanted = self._station_weeder(pyr_stations)
+            stations_wanted_nsl = [ get_nsl(s) for s in pyr_stations_wanted ]
+            
+            for x in self.iterNSSC(sctime(event.time)):
+                network_code, station, stream, component = x
+            
+                tr = pyrocko_trace(network_code, station, stream, component)
+                sta = pyrocko_station(network_code, station, stream)
+                sta.set_event_relative_data(event)
+                
+                if not self._trace_selector(tr):
+                    continue
+                
+                if not self._station_selector(sta):
+                    continue
+                
+                if get_nsl(sta) not in stations_wanted_nsl:
                     continue
                 
                 tmin = self._timewindow[0]

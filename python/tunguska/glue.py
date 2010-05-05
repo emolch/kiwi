@@ -1,14 +1,27 @@
 
 from pyrocko import eventdata
+from pyrocko import model
 
 from tunguska import source
 from tunguska import receiver
 from tunguska import gfdb
 from tunguska import seismosizer
 
+kiwi_channels = {
+    'u': model.Channel('u', azimuth=0., dip=-90.),
+    'd': model.Channel('d', azimuth=0., dip=90.),
+    'e': model.Channel('e', azimuth=90., dip=0.),
+    'w': model.Channel('w', azimuth=-90., dip=0.),
+    'n': model.Channel('n', azimuth=0., dip=0.),
+    's': model.Channel('s', azimuth=180., dip=0.),
+    'a': model.Channel('a'),
+    'c': model.Channel('c'),
+    'r': model.Channel('r'),
+    'l': model.Channel('l'),
+}
+
 def station_to_receiver(station, kiwi_component_map=None):
     '''Convert pyrocko-style station into kiwi-style receiver.'''
-    
     components = ''
     for channel in station.channels:
         cname = channel.name
@@ -19,23 +32,27 @@ def station_to_receiver(station, kiwi_component_map=None):
         
     rname = '%s.%s.%s' % (station.network, station.station, station.location)
     r = receiver.Receiver(station.lat, station.lon, components, name=rname)
+    return r
     
-def start_seismosizer(  acc,
-                        gfdb_path, 
+def receiver_to_station(rec):
+    channels = []
+    for comp in rec.components:
+        channels.append(kiwi_channels[comp])
+        
+    sta = model.Station(rec.get_network(), rec.get_station(), rec.get_location(), rec.lat, rec.lon, 0.0, channels=channels)
+    return sta
+    
+def start_seismosizer(  gfdb_path, 
                         effective_dt, 
+                        event,
+                        stations,
                         hosts=['localhost'], 
-                        local_interpolation='bilinear'
-                        kiwi_component_map=None):
+                        local_interpolation='bilinear',
+                        kiwi_component_map=None ):
 
     database = gfdb.Gfdb(gfdb_path)
-
-    events = acc.get_events()
-    assert len(events) == 1
-    event = events[0]
-    
-    stations = acc.get_stations(relative_event=event)
     receivers = []
-    for station in stations.values():
+    for station in stations:
         receivers.append(station_to_receiver(station))
     
     seis = seismosizer.Seismosizer(hosts)
@@ -45,7 +62,5 @@ def start_seismosizer(  acc,
     seis.set_source_location(event.lat, event.lon, event.time)
     seis.set_receivers(receivers)
     return seis
-    
-    
     
 

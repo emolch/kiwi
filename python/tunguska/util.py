@@ -155,6 +155,10 @@ def autoplot( *args, **kwargs ):
     
     shutil.rmtree(tempdir)
 
+def cmp_version(a,b):
+    ai = [ int(x) for x in a.split('.') ]
+    bi = [ int(x) for x in b.split('.') ]
+    return cmp(ai, bi)
 
 if __name__ == '__main__':
     import random

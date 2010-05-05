@@ -331,7 +331,14 @@ def draw_topo(gmt, JXY, region, resolution, coastline_resolution, rivers, conf, 
     # work around GMT bug... detect if region contains coastlines
     if region != 'g':
         checkfile = gmt.tempfilename()
-        gmt.pscoast( M=True, D=coastline_resolution, W='thinnest,black', A=10., out_filename=checkfile, *(JXY+R))
+        
+        # newer versions of gmt expect -m instead of -M
+        if gmtpy.cmp_version(gmt.installation['version'], '4.5.0') < 0:
+            mtrue = { 'M':True }
+        else:
+            mtrue = { 'm':True }
+        
+        gmt.pscoast( D=coastline_resolution, W='thinnest,black', A=10., out_filename=checkfile, *(JXY+R), **mtrue)
         f = open(checkfile, 'r')
         has_coastlines = False
         for line in f:
