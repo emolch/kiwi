@@ -10,6 +10,12 @@ import numpy as num
 import scipy.stats
 from os.path import join as pjoin
 
+def numpy_version():
+    if hasattr(num.version, 'short_version'):
+        return num.version.short_version
+    else:
+        return num.version.version
+
 def mimainc_to_gvals(mi,ma,inc):
     vmin, vmax, vinc = float(mi), float(ma), float(inc)
     n = int(round((vmax-vmin)/vinc))+1
@@ -193,10 +199,15 @@ class MisfitGrid:
     def postprocess(self, **outer_misfit_config):
         '''Combine trace misfits to global misfits, find best source, make statistics.'''
         
+        self.ref_misfit, self.ref_misfits_by_r = self._ref_misfits( **outer_misfit_config)
+
+        if len(self.sources) == 0:
+            self.best_source, self.misfits_by_s, self.misfits_by_r, self.variability_by_r = self.base_source, [],[],[]
+            self.bootstrap_sources = []
+            self.stats = {}
+            return
+            
         self.best_source, self.misfits_by_s, self.misfits_by_r, self.variability_by_r = self._best_source(return_misfits_by_r=True, **outer_misfit_config)
-        
-        self.ref_misfits_by_r = self._ref_misfits_by_r(**outer_misfit_config)
-        
         self.bootstrap_sources = self._bootstrap(**outer_misfit_config)
         self.stats = self._stats(self.param_values, self.best_source, self.bootstrap_sources)
     
@@ -216,6 +227,10 @@ class MisfitGrid:
         
     def get_median_of_misfits_by_r(self):
         '''Get the median of the misfits per station of best source.'''
+        
+        if len(self.misfits_by_r) == 0:
+            return self.ref_misfit
+        
         misfits = []
         for irec in range(self.nreceivers):
             if self.receivers[irec].enabled:
@@ -227,6 +242,9 @@ class MisfitGrid:
         return num.median(misfits)
         
     def get_best_misfit(self):
+        if len(self.misfits_by_s) == 0:
+            return self.ref_misfit
+        
         return num.nanmin(self.misfits_by_s)
         
     def _best_source(self, return_misfits_by_r=False, **outer_misfit_config):
@@ -234,7 +252,7 @@ class MisfitGrid:
             self.misfits_by_src, self.norms_by_src, 
             receiver_mask=self.receiver_mask,
             **outer_misfit_config )
-        
+                
         ibest = num.nanargmin(misfits_by_s)
         if not return_misfits_by_r:
             return self.sources[ibest], misfits_by_s
@@ -244,11 +262,11 @@ class MisfitGrid:
             misfits_varia_by_r = num.std(misfits_by_sr,0)
             return self.sources[ibest], misfits_by_s, misfits_by_sr[ibest,:], misfits_varia_by_r
         
-    def _ref_misfits_by_r(self, **outer_misfit_config):
+    def _ref_misfits(self, **outer_misfit_config):
         misfits_by_s, misfits_by_sr = seismosizer.make_global_misfits(
             self.ref_misfits_by_src, self.ref_norms_by_src, 
             receiver_mask=self.receiver_mask, **outer_misfit_config)
-        return misfits_by_sr[0,:]
+        return misfits_by_s[0], misfits_by_sr[0,:]
         
     def _bootstrap(self, bootstrap_iterations=1000, **outer_misfit_config):
         bootstrap_sources = []
@@ -322,7 +340,7 @@ class MisfitGrid:
             gedges = values_to_bin_edges(gvalues)
             
             kwargs = {}
-            if util.cmp_version(num.version.short_version, '1.3.0') < 0:
+            if util.cmp_version(numpy_version(), '1.3.0') < 0:
                 kwargs = {'new': True}
                 
             hist, edges = num.histogram(self.stats[param].distribution,
@@ -481,7 +499,10 @@ class MisfitGrid:
         dists = num.array( [ r.distance_deg for r in self.receivers ], dtype='float' )
         rnames = [ ' '.join(r.name.split('.')) for r in self.receivers ]
         slat, slon = self.source_location[:2]
-        station_misfits = self.misfits_by_r-self.ref_misfits_by_r
+        if len(self.misfits_by_r) == 0:
+            station_misfits = self.ref_misfits_by_r
+        else:
+            station_misfits = self.misfits_by_r-self.ref_misfits_by_r
         #station_varia = self.variability_by_r / num.sum(self.variability_by_r) * len(self.receivers)
         station_varia = self.misfits_by_r / num.sum(self.misfits_by_r) * len(self.receivers)
         plotting.station_plot( slat, slon, lats, lons, rnames, station_misfits, station_varia, 

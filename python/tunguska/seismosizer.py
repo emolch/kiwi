@@ -487,6 +487,9 @@ class Seismosizer(SeismosizerBase):
         self.source_location = args
         self._locations_changed()
         
+    def get_source_location(self):
+        return self.source_location
+        
     def set_receivers(self, receivers, **kwargs ):
         self.receivers = receivers
         
@@ -734,6 +737,8 @@ class Seismosizer(SeismosizerBase):
         # results gathered by (source,receiver,component)
         misfits_by_src = num.zeros( (nsources, nreceivers, ncomponents), dtype=num.float)
         norms_by_src = num.zeros(  (nsources, nreceivers, ncomponents), dtype=num.float)
+        
+        if nsources == 0: show_progress=False
         
         if show_progress:
             widgets = [progress_title, ' ',

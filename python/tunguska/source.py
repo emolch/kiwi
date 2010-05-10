@@ -129,22 +129,23 @@ class Source:
             
         if sourceslist is None:
             sourceslist = []
-            
-        key = sourceparams[ irecurs ][0]
-        gvalues = [ float(v) for v in sourceparams[ irecurs ][1] ]
-        for v in gvalues:
-            paramlist[irecurs] = v
-            if irecurs < len(sourceparams)-1:
-                self._make_source_grid( sourceparams, irecurs+1, paramlist, sourceslist, source_constraints=source_constraints )
-            else:
-                v = {}
-                for i,elem in enumerate(sourceparams):
-                    v[elem[0]] = paramlist[i]
-                
-                s = copy.deepcopy(self)
-                s.update(v)
-                if source_constraints == None or source_constraints(s):
-                    sourceslist.append(s)
+        
+        if sourceparams:
+            key = sourceparams[ irecurs ][0]
+            gvalues = [ float(v) for v in sourceparams[ irecurs ][1] ]
+            for v in gvalues:
+                paramlist[irecurs] = v
+                if irecurs < len(sourceparams)-1:
+                    self._make_source_grid( sourceparams, irecurs+1, paramlist, sourceslist, source_constraints=source_constraints )
+                else:
+                    v = {}
+                    for i,elem in enumerate(sourceparams):
+                        v[elem[0]] = paramlist[i]
+                    
+                    s = copy.deepcopy(self)
+                    s.update(v)
+                    if source_constraints == None or source_constraints(s):
+                        sourceslist.append(s)
         
         return sourceslist
         

@@ -108,7 +108,7 @@ def save_kiwi_dataset(acc, stations, traces, event, config):
         for i in range(config.nsets):
             depth = 0.0
             if station.depth is not None:
-                depth = 0.0
+                depth = station.depth
             f.write('%15.8e %15.8e %15.8e %3s %-15s\n' % (station.lat, station.lon, depth, components, nsl) )
             for tr in traces:
                 tr = tr.copy()

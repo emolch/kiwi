@@ -7,21 +7,34 @@ import sys, copy
 import config
 from os.path import join as pjoin
 import plotting
+import scipy.stats
+import numpy as num
+import math
+from pyrocko import orthodrome
 
-def minmax(traces, minmaxtrace, key=lambda tr: None):
-    
-    ranges = {}
+def afloat(l):
+    return num.array(l, dtype=num.float)
+
+def minmax(traces, minmaxtrace, key=lambda tr: None, 
+                   mincombine=num.amin, maxcombine=num.amax):
+    limits = {}
     for trace in traces:
         mi, ma = minmaxtrace(trace)
         k = key(trace)
-        if k not in ranges:
-            ranges[k] = mi, ma
-        else:
-            tmi, tma = ranges[k]
-            ranges[k] = min(tmi,mi), max(tma,ma)
+        if k not in limits:
+            limits[k] = [], []
+        limits[k][0].append(mi)
+        limits[k][1].append(ma)
+    
+    ranges = {}
+    for k,(mins,maxs) in limits.iteritems():
+        mins, maxs = afloat(mins), afloat(maxs)
+        mi = mincombine(mins)
+        ma = maxcombine(maxs)
+        ranges[k] = mi, ma
     
     return ranges
-
+    
 class Tracy:
     
     def __init__(self,
@@ -52,6 +65,7 @@ class Tracy:
         self.height = height
         self.margins = margins
         self.nypaginate = 10
+        self.nxauxwidgets = 0
         
         self.subplot_margins =subplot_margins
             
@@ -151,6 +165,9 @@ class Tracy:
     def draw_ystuff(self, gmt, widget, yscaler, trace, ivisit):
         pass
 
+    def draw_xaux(self, gmt, widget, trace):
+        pass
+
     def _update_groups(self):
         self.xgroup_keys = self.gather(self.traces, self.map_xgroup, self.order_xgroup)
         self.ygroup_keys = self.gather(self.traces, self.map_ygroup, self.order_ygroup)
@@ -196,9 +213,10 @@ class Tracy:
     def _update_widgets(self):
         
         nxwidgets, nywidgets = self.nwidgets()
-        grid = gmtpy.GridLayout(nxwidgets, nywidgets)
+        grid = gmtpy.GridLayout(nxwidgets+self.nxauxwidgets, nywidgets)
         mw=0.1*cm
         widgets = {}
+        xauxwigets = {}
         for iywidget in range(nywidgets):
             for ixwidget in range(nxwidgets):
                 frame = gmtpy.FrameLayout()
@@ -207,9 +225,19 @@ class Tracy:
                 grid.set_widget(ixwidget,iywidget, frame)
                 widgets[(ixwidget, iywidget)] = frame.get_widget('center')
                 
+            for ixauxwidget in range(self.nxauxwidgets):
+                frame = gmtpy.FrameLayout()
+                frame.set_fixed_margins(*self.subplot_margins)
+                frame.set_horizontal(0.,0.25)
+                frame.get_widget('center').set_vertical(0., 1.)
+                grid.set_widget(nxwidgets+ixauxwidget, iywidget, frame)
+                widget = frame.get_widget('center')
+                widget.set_aspect(1.)
+                xauxwigets[(ixauxwidget, iywidget)] = widget
+
         self.inner_layout = grid
         self.widgets = widgets
-        
+        self.xauxwidgets = xauxwigets
         
     def _plot_traces(self, gmt, ipage):
         
@@ -240,6 +268,8 @@ class Tracy:
         xhave = {}
         yhave = {}
         
+        nxwidgets, nywidgets = self.nwidgets()
+
         for trace in self.traces:
             ixwidget, iywidget, ipage_ = self.group_to_widget_and_page(
                 self.map_xgroup(trace),
@@ -248,7 +278,6 @@ class Tracy:
             
             if ipage != ipage_: continue
             
-            
             if iywidget not in yhave:
                 left_widget = self.widgets[0,iywidget]
                 left_scaler = gmtpy.ScaleGuru([([0, left_widget.width()],[-1,1])])
@@ -256,7 +285,7 @@ class Tracy:
                 mleft = self.margins[0]
                 smleft = self.subplot_margins[0]
                 x,y,size,angle,fontno,justify,text = (
-                    -0.5*mleft-smleft, 0.0, 10., 0., 0, 'MC',
+                    -0.5*mleft-smleft, 0.0, 10., 0., 1, 'MC',
                     self.label_ygroup(self.map_ygroup(trace)))
                     
                 gmt.pstext(
@@ -265,6 +294,10 @@ class Tracy:
                     *(left_widget.JXY() + left_scaler.R()) )
                 
                 yhave[iywidget] = True
+                
+                for ixauxwidget in range(self.nxauxwidgets):
+                    widget = self.xauxwidgets[ixauxwidget, iywidget]
+                    self.draw_xaux(gmt, widget, trace)
             
             if ixwidget not in xhave:
                 top_widget = self.widgets[ixwidget,0]
@@ -273,7 +306,7 @@ class Tracy:
                 mtop = self.margins[3]
                 smtop = self.subplot_margins[3]
                 x,y,size,angle,fontno,justify,text = (
-                    0.0, top_widget.height()+0.5*mtop+smtop, 10., 0., 0, 'MC',
+                    0.0, top_widget.height()+0.5*mtop+smtop, 10., 0., 1, 'MC',
                     self.label_xgroup(self.map_xgroup(trace)))
                     
                 gmt.pstext(
@@ -285,6 +318,8 @@ class Tracy:
             
     def save(self, filename_tmpl):
         self.gmtconfig['PAPER_MEDIA'] = 'Custom_%ix%i' % (self.width,self.height)
+        self.gmtconfig['FRAME_PEN'] = '1p/150/150/150'
+        self.gmtconfig['FRAME_WIDTH'] = '0.5p'
         fns = []
         for ipage in range(self.npages()):
             gmt = gmtpy.GMT(config=self.gmtconfig)
@@ -316,17 +351,38 @@ class PileTracy(Tracy):
 
 class MyTracy(Tracy):
     
+    def __init__(self, source_location=(0.,0.,0.), *args, **kwargs):
+        Tracy.__init__(self, *args, **kwargs)
+        self.mode = 3.
+        self.percentile = 10.
+        self.nxauxwidgets = 1
+        self.slat, self.slon, self.stime = source_location
+    
     def map_xgroup(self, trace):
         return trace.channel
     
     def map_ygroup(self, trace):
         return trace.station, trace.network, trace.azimuth, trace.distance_deg
     
+    def map_yscaling(self, trace):
+        return None #self.map_xgroup(trace)
+    
     def order_xgroup(self, a,b):
         return cmp(b,a)
     
     def order_ygroup(self, a,b):
-        return cmp((round(a[3]/30.),a[2]),(round(a[3]/30.),b[2]))
+        return cmp((math.floor(a[2]/30.),a[3]),(math.floor(b[2]/30.),b[3]))
+    
+    def yminmax1(self, trace):
+        mean = trace.ydata.mean()
+        std = trace.ydata.std()
+        mi, ma = mean-std*self.mode, mean+std*self.mode
+        return mi, ma
+    
+    def yminmax(self, traces):
+        return minmax(traces, self.yminmax1, key=self.map_yscaling, 
+                mincombine = lambda mins: scipy.stats.scoreatpercentile(mins,self.percentile),
+                maxcombine = lambda maxs: scipy.stats.scoreatpercentile(maxs, 100.-self.percentile) )
     
     def map_color(self, trace):
         if trace.set == 'references':
@@ -337,9 +393,9 @@ class MyTracy(Tracy):
     def colors(self, color_key):
         ind = self.color_index[color_key]
         if ind == 0:
-            return gmtpy.color('black')
+            return '1p,%s,6_4:2p' % gmtpy.color('black')
         else:
-            return gmtpy.color(ind)
+            return '1p,%s' % gmtpy.color(ind)
 
     def label_xgroup(self, a):
         return a
@@ -347,17 +403,51 @@ class MyTracy(Tracy):
     def label_ygroup(self, a):
         return '.'.join(a[:2]).rstrip('.')
     
+    def draw_xstuff(self, gmt, widget, xscaler, trace, ivisit):
+        if ivisit == 0:
+            p = xscaler.get_params()
+            ma, mi = p['xmax'], p['xmin']
+            span = ma - mi
+            beg = mi, 0., 10., 0., 1, 'LM', '%g s' % mi
+            end = ma, 0., 10., 0., 1, 'RM', '+ %g s' % span
+            eps = span/10000.
+            gmt.pstext(in_rows=[beg,end], N=True, *(widget.JXY() + xscaler.R()))
+            gmt.psxy(W='1p', in_rows=[(mi+eps,0.3),(mi+eps,0.7)], *(widget.JXY() + xscaler.R()))
+            gmt.psxy(W='1p', in_rows=[(ma-eps,0.3),(ma-eps,0.7)], *(widget.JXY() + xscaler.R()))
+            
     def draw_trace(self, gmt, widget, scaler, trace, ivisit):
-        
         Tracy.draw_trace(self, gmt, widget, scaler, trace, ivisit)
         
+    def draw_xaux(self, gmt, widget, trace):
+        p = self.azidist_scaler.get_params()
+        
+        widget['J'] = '-JE%g/%g/%g' % (self.slon, self.slat, min(p['ymax'],180.)) + '/%(width)gp'
+
+        phi = num.arange(361, dtype=num.float)
+        circle = phi, num.ones(361)*trace.distance_deg
+        direction = num.array([[trace.azimuth, trace.azimuth], [0., p['ymax']]], dtype=num.float)
+        
+        circle = orthodrome.azidist_to_latlon(self.slat, self.slon, *circle)
+        direction = orthodrome.azidist_to_latlon(self.slat, self.slon, *direction)
+        
+        #gmt.pscoast( R='g', B=True, D='c', A=10000, G=(200,200,200), *widget.JXY())
+        gmt.psxy('-:', in_columns=circle, R='g', W='1p', *widget.JXY())
+        gmt.psxy('-:', in_columns=direction, R='g', W='1p', *widget.JXY())
+        
+    def set_traces(self, traces):
+        Tracy.set_traces(self, traces)
+        dists = [ tr.distance_deg for tr in traces ]
+        azimuths = [ tr.azimuth for tr in traces ]
+        conf = dict(xmode='off', xlimits=(0.,360.), xinc=45., ymode='0-max', yspace=0.1)
+        axes = [ gmtpy.simpleconf_to_ax(conf,x) for x in 'xy' ]
+        self.azidist_scaler = gmtpy.ScaleGuru([(azimuths, dists)], axes)
         
 class UTrace:
     def __init__(self, **kwargs):
         for k,v in kwargs.iteritems():
             self.__dict__[k] = v
 
-def multi_seismogram_plot2(snapshots, plotdir):
+def multi_seismogram_plot2(snapshots, source_locations, plotdir):
     
     plural = { 'seismogram': 'seismograms',
                 'spectrum': 'spectra' }
@@ -366,7 +456,9 @@ def multi_seismogram_plot2(snapshots, plotdir):
                     ('references', 'spectrum'): 'ref_spectra',
                     ('synthetics', 'seismogram'): 'syn_seismograms',
                     ('references', 'seismogram'): 'ref_seismograms' }
-                
+    
+    source_location = source_locations[0]
+    
     fns_all = []
     for typ in 'seismogram', 'spectrum':
         traces = []
@@ -388,14 +480,17 @@ def multi_seismogram_plot2(snapshots, plotdir):
                             channel = config.component_names[comp],
                             distance_deg = rec.distance_deg,
                             azimuth = rec.azimuth,
+                            lat = rec.lat,
+                            lon = rec.lon,
                             misfit = rec.misfits[icomp],
                             misfit_norm_factor = rec.misfit_norm_factors[icomp],
-                            xdata = data[0], ydata = data[1])
+                            weight = rec.weight,
+                            xdata = data[0], ydata = data[1]*rec.weight)
                         
                         traces.append(trace)
                     
         plotter = MyTracy(width=20*gmtpy.cm, height=20*gmtpy.cm,
-        margins=(3*gmtpy.cm,0.5*gmtpy.cm, 1*gmtpy.cm, 1*gmtpy.cm))
+        margins=(3*gmtpy.cm,0.5*gmtpy.cm, 1*gmtpy.cm, 1*gmtpy.cm), source_location=source_location)
         
         plotter.set_traces(traces)
         

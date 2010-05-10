@@ -7,6 +7,7 @@ import shutil
 import numpy as num
 import scipy
 import tempfile
+import sys
 
 pjoin = os.path.join
 
@@ -22,7 +23,10 @@ class Gfdb:
         gfdb_infos_str = {}
         cmd = [ config.gfdb_info_prog, gfdbpath ]
         
-        self.string = Popen( cmd, stdout=PIPE).communicate()[0]
+        gfdb_info_process = Popen( cmd, stdout=PIPE)
+        self.string = gfdb_info_process.communicate()[0]
+        if gfdb_info_process.poll():
+            sys.exit('fatal: could not get get gfdb information')
         
         for line in self.string.splitlines():
             k,v = line.split('=')

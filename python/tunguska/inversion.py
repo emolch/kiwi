@@ -389,15 +389,22 @@ class Step:
             oc.reference_time = self.ref_time
         
 
-    def snapshot(self, source, ident):
+    def snapshot(self, source, ident, mm_conf):
         
         if not self.seismosizer:
             logging.warn('Cannot create snapshot, because no seismosizers are running')
             return
         
         self.seismosizer.set_source( source )
-        receivers = self.seismosizer.get_receivers_snapshot(which_processing=self.dump_processing)
+        receivers = self.seismosizer.get_receivers_snapshot(which_processing=self.dump_processing )
+        for irec, rec in enumerate(receivers):
+            if 'receiver_weights' in mm_conf:
+                rec.weight = mm_conf['receiver_weights'][irec]
+            else:
+                rec.weight = 1.0
+            
         self.dump( receivers, 'snapshot_%s' % ident )
+        self.dump( self.seismosizer.get_source_location(), 'snapshot_source_location_%s' % ident )
         
         self.dump( self.seismosizer.get_psm_infos(), 'source_infos_%s' % ident )
         rundir = self.make_rundir_path('incomplete')
@@ -411,6 +418,9 @@ class Step:
         
     def get_snapshot(self, ident, run_id='current'):
         return self.load( ident='snapshot_%s' % ident, run_id=run_id )
+
+    def get_snapshot_source_location(self, ident, run_id='current'):
+        return self.load( ident='snapshot_source_location_%s' % ident, run_id=run_id )
 
     def get_snapshot_source_infos(self, ident, run_id='current'):
         return self.load( ident='source_infos_%s' % ident, run_id=run_id)
@@ -903,7 +913,7 @@ class ParamTuner(Step):
             self.out_config.xblacklist = sorted(list(xblacklist))
                     
         if forward:
-            self.snapshot( base_source, 'best' )
+            self.snapshot( base_source, 'best', mm_conf )
             
         self.post_work(search or forward)
         
@@ -999,7 +1009,7 @@ class EnduringPointSource(Step):
         self.out_config.best_point_source = base_source
         
         if forward:
-            self.snapshot( base_source, 'best' )
+            self.snapshot( base_source, 'best', mm_conf )
             
         self.post_work(search or forward)
         
@@ -1032,6 +1042,8 @@ class TracePlotter(Step):
             snapshot = step.get_snapshot(ident, run_id='current')
             loaded_snapshots.append(snapshot)
             self.dump( snapshot, 'snapshot_%s_%s' % (step.stepname, ident) )
+            sloc = step.get_snapshot_source_location(ident, run_id='current')
+            self.dump( sloc, 'snapshot_source_location_%s_%s' % (step.stepname, ident) )
         
         nsets = conf['nsets']
         set_names = conf['set_names']
@@ -1056,10 +1068,12 @@ class TracePlotter(Step):
         plotdir = self.make_plotdir_path(run_id)
         
         loaded_snapshots = []
+        loaded_snapshots_source_locations = []
         for step, ident in self.snapshots:
             loaded_snapshots.append(self.get_snapshot("%s_%s" % (step.stepname, ident)))
+            loaded_snapshots_source_locations.append(self.get_snapshot_source_location("%s_%s" % (step.stepname, ident)))
         
-        allfilez = plotting.multi_seismogram_plot2( loaded_snapshots, plotdir )
+        allfilez = plotting.multi_seismogram_plot2( loaded_snapshots, loaded_snapshots_source_locations,  plotdir )
         
         return [ os.path.basename(fn) for fn in allfilez ]
 
@@ -1265,7 +1279,7 @@ class Greeper(Step):
         self.out_config.__dict__['greeper_ngood'] = ngood
            
         if forward:
-            self.snapshot( base_source, 'best' )
+            self.snapshot( base_source, 'best', mm_conf )
             
         self.post_work(search or forward)
     
