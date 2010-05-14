@@ -131,7 +131,7 @@ def load_table( filename, set_components=None ):
     for line in file:        
         if line.lstrip().startswith('#') or line.strip() == '': continue
         if set_components is not None:
-            r = Receiver( from_string=line, components=components[irec%len(set_components)] )
+            r = Receiver( from_string=line, components=set_components[irec%len(set_components)] )
         else:
             r = Receiver( from_string=line )
         receivers.append(r)
