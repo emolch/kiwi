@@ -164,7 +164,7 @@ def standard_setup( datadir,
         seis.set_source_constraints( *values )
     
     # setup receivers
-    receivers = receiver.load_table(receivers_file, components=components)
+    receivers = receiver.load_table(receivers_file, set_components=components)
     
     if len(receivers) == 0: sys.exit('no receivers')
     
