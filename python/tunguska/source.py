@@ -9,8 +9,16 @@ import moment_tensor
 import math
 import numpy as num
 
+def d2u(s):
+    if '_' in s: raise Exception('uuups, found underscore in param name where not expected: %s' % s)
+    return s.replace('-','_')
+
+def u2d(s):
+    if '-' in s: raise Exception('uuups, found dash in param name where not expected: %s' % s)
+    return s.replace('_','-')
+
 class Source:
-    def __init__(self, sourcetype='bilateral', sourceparams=None, sourceparams_str=None):
+    def __init__(self, sourcetype='bilateral', sourceparams=None, sourceparams_str=None, **sourceparams_alt):
         '''Create parameterized earthquake source.
         
         Creates earthquake source with given parameters. Any parameters not specified,
@@ -18,6 +26,9 @@ class Source:
         
            sourcetype: Type of the source (bilateral, circular, eikonal, ...)
            sourceparams: dict with source parameters defining the source.
+           sourceparams_alt: convinience input of source parameters. use
+                             underscores instead of dashes. these
+                             take precedence over sourceparams
            
         The object returned can be used almost like a dict.'''
     
@@ -33,6 +44,9 @@ class Source:
                 self._params[sparam] = source_infos(self._sourcetype)[sparam].default
         if sourceparams is None:
             sourceparams = {}
+            
+        for p in sourceparams_alt:
+            sourceparams[u2d(p)] = sourceparams_alt[p]
             
         self.update( sourceparams )
     
@@ -190,8 +204,7 @@ class Source:
         else:
             raise Exception( "Cannot get moment tensor representation of this source type." )
         
-        return mt
-            
+        return mt    
 
 class SourceInfo:
     info = None

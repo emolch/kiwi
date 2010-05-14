@@ -1,4 +1,4 @@
-from pyrocko import util, io, trace, moment_tensor, rdseed
+from pyrocko import util, io, trace, moment_tensor, rdseed, model
 
 from tunguska import phase, gfdb, edump_access
 
@@ -85,12 +85,17 @@ def save_kiwi_dataset(acc, stations, traces, event, config):
     
     # gather traces by station
     dataset = []
+    used_channels = {}
     for station in dstations:
         station_traces = []
         for tr in traces:
             if get_nsl(tr) == get_nsl(station):
-                if tr.channel in config.wanted_components:
+                if tr.channel in config.wanted_channels:
                     station_traces.append(tr)
+                    if get_nsl(tr) not in used_channels:
+                        used_channels[get_nsl(tr)] = []
+                    
+                    used_channels[get_nsl(tr)].append(station.get_channel(tr.channel))
                         
         station_traces.sort(lambda a,b: cmp(a.channel, b.channel))
         kiwi_components = ''
@@ -99,17 +104,31 @@ def save_kiwi_dataset(acc, stations, traces, event, config):
         if station_traces:
             dataset.append( (station, kiwi_components, station_traces) )
     
-    fpath = config.path('receivers_path')
-    util.ensuredirs(fpath)
-    f = open(fpath, 'w')
+    if config.has('stations_path'):
+        fpath = config.path('stations_path')
+        util.ensuredirs(fpath)
+        ddstations = copy.deepcopy(dstations)
+        for sta in ddstations:
+            sta.set_channels(used_channels[get_nsl(tr)])
+        model.dump_stations(ddstations, fpath)
+    
+    if config.has('receivers_path'):
+        fpath = config.path('receivers_path')
+        util.ensuredirs(fpath)
+        f = open(fpath, 'w')
+        
     iref = 1
+    nsets = 1
+    if config.has('nsets'):
+        nsets = config.nsets
     for station, components, traces in dataset:
         nsl = '.'.join((get_nsl(station)))
-        for i in range(config.nsets):
+        for i in range(nsets):
             depth = 0.0
             if station.depth is not None:
                 depth = station.depth
-            f.write('%15.8e %15.8e %15.8e %3s %-15s\n' % (station.lat, station.lon, depth, components, nsl) )
+            if config.has('receivers_path'):
+                f.write('%15.8e %15.8e %15.8e %3s %-15s\n' % (station.lat, station.lon, depth, components, nsl) )
             for tr in traces:
                 tr = tr.copy()
                 if config.trace_time_zero == 'event':
@@ -118,25 +137,31 @@ def save_kiwi_dataset(acc, stations, traces, event, config):
                 ydata *= config.trace_factor
                 fn = config.path('displacement_trace_path', {
                     'ireceiver': iref, 
-                    'component': config.kiwi_component_map[tr.channel]})
+                    'component': config.kiwi_component_map[tr.channel],
+                    'network': tr.network,
+                    'station': tr.station,
+                    'location': tr.location,
+                    'channel': tr.channel})
                 io.save([tr], fn)
                 
             iref += 1
+    if config.has('receivers_path'):
+        f.close()
     
-    f.close()
+    if config.has('reference_time_path'):
+        fpath = config.path('reference_time_path')
+        f = open(fpath, 'w')
+        f.write('%i %s\n' % (event.time, 
+                        time.strftime('%Y/%m/%d %H:%M:%S', 
+                                        time.gmtime(event.time))))
+        f.close()
     
-    fpath = config.path('reference_time_path')
-    f = open(fpath, 'w')
-    f.write('%i %s\n' % (event.time, 
-                    time.strftime('%Y/%m/%d %H:%M:%S', 
-                                    time.gmtime(event.time))))
-    f.close()
-    
-    fpath = config.path('source_origin_path')
-    f = open(fpath, 'w')
-    f.write('%e %e 0\n' % (event.lat, event.lon))
-    f.close()
-        
+    if config.has('source_origin_path'):
+        fpath = config.path('source_origin_path')
+        f = open(fpath, 'w')
+        f.write('%e %e 0\n' % (event.lat, event.lon))
+        f.close()
+            
 
     
 def save_rapid_dataset(acc, stations, traces, event, config):
@@ -243,17 +268,9 @@ def prepare(config, kiwi_config, rapid_config, event_names):
         
         stations = acc.get_stations(relative_event=event)
         
-        get_angle = lambda tr: stations[tr.network, tr.station, tr.location].backazimuth + 180.
-        
-        
         chan_count = {}
         
         processed_traces = []
-        
-        if config.has('rotation_table'):
-            rotate = (get_angle, config.rotation_table)
-        else:
-            rotate = None
         
         displacement_limit = None
         if config.has('displacement_limit'):
@@ -267,9 +284,13 @@ def prepare(config, kiwi_config, rapid_config, event_names):
         if config.has('restitution_crop'):
             crop = config.restitution_crop
         
-        project = None
-        if config.has('projection_function'):
-            project = config.projection_function
+        projections = None
+        if config.has('projection_functions'):
+            projections = config.projection_functions
+            
+        rotations = None
+        if config.has('rotation_functions'):
+            rotations = config.rotation_functions
         
         whitelist = lambda tr: True
         if config.has('streams_badness_dir') and config.has('streams_badness_limit'):
@@ -283,18 +304,21 @@ def prepare(config, kiwi_config, rapid_config, event_names):
             station_filter = lambda tr: config.station_filter(stations[get_nsl(tr)])
             
         trace_selector = lambda tr: station_filter(tr) and whitelist(tr)
-        
+        out_stations = {}
         for traces in acc.iter_displacement_traces(
                 config.restitution_fade_time, 
                 config.restitution_frequencyband,
                 deltat=deltat,
-                rotate=rotate,
-                project=project,
+                rotations=rotations,
+                projections=projections,
+                relative_event=event,
                 maxdisplacement=displacement_limit,
                 allowed_methods=config.restitution_methods,
                 trace_selector=trace_selector,
                 extend=extend,
-                crop=crop):
+                crop=crop,
+                out_stations=out_stations):
+            
             for tr in traces:
                 
                 station = stations[get_nsl(tr)]
@@ -344,9 +368,9 @@ def prepare(config, kiwi_config, rapid_config, event_names):
                     chan_count[tr.channel] = 0
                     
                 chan_count[tr.channel] += 1
-        
+                
         # use only one sensor at each station; use lexically first
-        sstations = stations.values()
+        sstations = out_stations.values()
         sstations.sort( lambda a,b: cmp(get_nsl(a),  get_nsl(b)) )
         xstations = {}
         have = {}
@@ -354,7 +378,6 @@ def prepare(config, kiwi_config, rapid_config, event_names):
             if get_ns(station) not in have:
                 have[get_ns(station)] = 1
                 xstations[get_nsl(station)] = station
-        
         
         if kiwi_config is not None:
             save_kiwi_dataset(acc, xstations, processed_traces, event, kiwi_config)

@@ -623,7 +623,6 @@ class WeightMaker(Step):
         seis = self.seismosizer
         conf = self.in_config.get_config()
         
-        
         sourcetype = 'eikonal'
         base_source = source_model.Source( sourcetype, 
                                {"time": float(conf['time']),

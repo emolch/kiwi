@@ -4,7 +4,7 @@ class Receiver:
     
     def __init__(self, lat=0.0, lon=0.0, depth=0.0, components=None, name=None, from_string=None ):
         
-        # treat as immutable, although it would be possible to change the attributes
+        # treat as immutable
         
         if not from_string:
             if components is None: components = 'ned'
@@ -119,22 +119,25 @@ class Receiver:
         i = self.comp_ind[component]
         return self.misfits[i], self.misfit_norm_factors[i]
 
-def load_table( filename, components=None ):
+def load_table( filename, set_components=None ):
+    
+    # set_components is array with wanted components per set e.g. [ 'u', 'ar' ]
+    # set_components was used for an ugly hack and should not be used anymore.
+    
     receivers = []
     
     file = open(filename, "r")
     irec = 0
     for line in file:        
         if line.lstrip().startswith('#') or line.strip() == '': continue
-        if components is not None:
-            r = Receiver( from_string=line, components=components[irec%len(components)] )
+        if set_components is not None:
+            r = Receiver( from_string=line, components=components[irec%len(set_components)] )
         else:
             r = Receiver( from_string=line )
         receivers.append(r)
         irec += 1
     
     file.close()
-    
     return receivers
 
     

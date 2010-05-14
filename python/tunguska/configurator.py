@@ -1,5 +1,5 @@
 
-import time, calendar
+import time, calendar, os
 
 class ConfigAttributeError(AttributeError):
     pass
@@ -31,8 +31,27 @@ class Config:
     def has(self, k):
         return hasattr(self,k) and getattr(self,k) is not None
     
+    def get_or_none(self, k):
+        if self.has(k):
+            return getattr(self,k)
+        else:
+            return None
+        
+    def get_avail(self, *keys):
+        d = {}
+        for k in keys:
+            if self.has(k):
+                d[k] = getattr(self,k)
+        return d
+            
     def path(self, name, additional=None):
         return self.mkpath(getattr(self, name), additional)
+    
+    def path_check_file(self, name, additional=None):
+        p = self.mkpath(getattr(self, name), additional)
+        if not os.path.isfile(p):
+            raise Exception('No such file: %s' % p)
+        return p
     
     def mkpath(self, template, additional=None):
         last = None

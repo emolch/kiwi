@@ -93,7 +93,7 @@ class SeismosizerBase:
 
     def __del__(self):
         self.close()
-        #shutil.rmtree(self.tempdir)
+        shutil.rmtree(self.tempdir)
         
     def sighandler(self, *args):
         logging.warn('Caught signal %s, license to kill' % getsigdict()[args[0]])
@@ -782,8 +782,7 @@ class Seismosizer(SeismosizerBase):
         
         return misfits_by_src, norms_by_src, failings
     
-    
-    def best_source(self, sources, return_failings=False, **outer_misfit_config):
+    def make_global_misfits_for_sources(self, sources, **outer_misfit_config):
         receiver_mask = num.array([ rec.enabled for rec in self.receivers ], dtype=num.bool)
 
         misfits_by_src, norms_by_src, failings = self.make_misfits_for_sources(sources)
@@ -791,6 +790,11 @@ class Seismosizer(SeismosizerBase):
             reveiver_mask=receiver_mask, **outer_misfit_config)
             
         misfits_by_s = num.where( misfits_by_s > 0, misfits_by_s, num.NaN)
+        
+        return misfits_by_s, failings
+    
+    def best_source(self, sources, return_failings=False, **outer_misfit_config):
+        misfits_by_s, failings = self.make_global_misfits_for_sources( sources, **outer_misfit_config)
         ibest = num.nanargmin(misfits_by_s)
         if num.isnan(ibest) or num.isnan(misfits_by_s[ibest]): raise NoValidSources()
         if return_failings:
