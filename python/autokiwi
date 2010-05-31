@@ -221,15 +221,21 @@ def edump_pull(config, which='first', force=False, onlylist=False):
         if config.has('nwanted_stations'):
             station_weeder = lambda stations: weeding.weed_stations(stations, nwanted=config.nwanted_stations, stream_badnesses=badness)[0]
         
-        dumper = sc_edump.EventDumper( ['edump'] + config.argv, 
-            trace_selector = trace_selector,
-            station_selector = station_selector,
-            station_weeder = station_weeder,
-            time_range = config.time_window,
-            event_path = config.path('edump_data_dir'),
-            events = events)
+        if events:
+            dumper = sc_edump.EventDumper( ['edump'] + config.argv, 
+                trace_selector = trace_selector,
+                station_selector = station_selector,
+                station_weeder = station_weeder,
+                redundant_channel_priorities = config.get_or_none('redundant_channel_priorities'),
+                time_range = config.time_window,
+                skip_responseless = config.skip_responseless,
+                event_path = config.path('edump_data_dir'),
+                events = events)
+            dumper()
+
+        else:
+            logger.warn('No events to download or already have all')
             
-        dumper()
         ok = []
         for event in events:
             edump_data_dir = config.path('edump_data_dir') % { 'event_name': event.name }
