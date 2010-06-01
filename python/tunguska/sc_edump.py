@@ -241,13 +241,9 @@ try:
                 pyr_stations[nsl] = sta
 
             # reduce number of stations
-            print len(pyr_stations.values())
             pyr_stations_wanted = self._station_weeder(pyr_stations.values())
             
-            print len(pyr_stations_wanted)
             stations_wanted_nsl = [ get_nsl(s) for s in pyr_stations_wanted ]
-            print len(stations_wanted_nsl)
-            print len(used_stations)
             
             stream_to_timewindow = {}
             for nslc in streams.keys():
