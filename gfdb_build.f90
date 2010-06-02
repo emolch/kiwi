@@ -64,8 +64,10 @@ module gfdb_build_
         
         character(len=len(buffer)), dimension(max(1,(count_words(buffer)-3))) :: filename
         
-        real, dimension(:,:), allocatable :: field
-        integer :: iunit, ig, ifile, nfiles, ioffset, iostat, ix, iz
+        real, dimension(:), allocatable :: seismogram
+        real(kind=8) :: toffset
+        real :: deltat
+        integer :: iunit, ig, ifile, nfiles, ioffset, iostat, ix, iz, nerr
         real :: x, z
         type(t_strip) :: conti
         type(t_trace) :: tr, trold, tr2
@@ -79,26 +81,22 @@ module gfdb_build_
             ok = .true.
             
             do ifile=1,nfiles
-              ! suck file into table 'field'
-                call claim_unit(iunit)
-                open( unit=iunit, file=filename(ifile), status='old', iostat=iostat )
-                if (iostat /= 0) call die( "gfdb_build: can't open file '" &
+                call readseismogram(filename(ifile), "*", seismogram, toffset, deltat, nerr )
+
+                if (nerr /= 0) call die( "gfdb_build: can't read file '" &
                                                 // var_str(filename(ifile)) // "'" )
-                call readtable( field, iunit=iunit )
-                close( iunit ) 
-                call release_unit(iunit)
                 
-                if (size(field,1) /= 2) then
-                    call die("gfdb_build: expected exactly two columns in file '" & 
-                                            // var_str(filename(ifile)) // "'" )
+                if (abs(deltat - db%dt) > db%dt / 10000.) then
+                    call die( "gfdb_build: sampling rate of file does not match sampling rate of gfdb: '" &
+                                               // var_str(filename(ifile)) // "'" )
                 end if
                 
-              ! convert field => strip
-                ioffset = floor(field(1,1)/db%dt) + 1
+              ! convert seismogram => strip
+                ioffset = floor(toffset/db%dt) + 1
               
                 span(1) = ioffset
-                span(2) = ioffset+size(field,2)-1
-                call strip_init( span, field(2,:), conti )
+                span(2) = ioffset+size(seismogram)-1
+                call strip_init( span, seismogram, conti )
                 
               ! pack strip => sparse trace
                 if (ifile == 1) then
@@ -117,7 +115,6 @@ module gfdb_build_
                     call trace_join( trold, tr2, tr )
                 end if
                 
-                if (allocated(field)) deallocate(field)
             end do
             
           ! put in database
