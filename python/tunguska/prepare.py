@@ -109,7 +109,8 @@ def save_kiwi_dataset(acc, stations, traces, event, config):
         util.ensuredirs(fpath)
         ddstations = copy.deepcopy(dstations)
         for sta in ddstations:
-            sta.set_channels(used_channels[get_nsl(tr)])
+            if get_nsl(sta) in used_channels:
+               sta.set_channels(used_channels[get_nsl(sta)])
         model.dump_stations(ddstations, fpath)
     
     if config.has('receivers_path'):

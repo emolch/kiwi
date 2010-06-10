@@ -420,7 +420,6 @@ class MyTracy(Tracy):
         
     def draw_xaux(self, gmt, widget, trace):
         p = self.azidist_scaler.get_params()
-        
         widget['J'] = '-JE%g/%g/%g' % (self.slon, self.slat, min(p['ymax'],180.)) + '/%(width)gp'
 
         phi = num.arange(361, dtype=num.float)
@@ -430,7 +429,7 @@ class MyTracy(Tracy):
         circle = orthodrome.azidist_to_latlon(self.slat, self.slon, *circle)
         direction = orthodrome.azidist_to_latlon(self.slat, self.slon, *direction)
         
-        #gmt.pscoast( R='g', B=True, D='c', A=10000, G=(200,200,200), *widget.JXY())
+        gmt.pscoast( R='g', B=True, D='c', A=10000, G=(200,200,200), *widget.JXY())
         gmt.psxy('-:', in_columns=circle, R='g', W='1p', *widget.JXY())
         gmt.psxy('-:', in_columns=direction, R='g', W='1p', *widget.JXY())
         
@@ -438,7 +437,7 @@ class MyTracy(Tracy):
         Tracy.set_traces(self, traces)
         dists = [ tr.distance_deg for tr in traces ]
         azimuths = [ tr.azimuth for tr in traces ]
-        conf = dict(xmode='off', xlimits=(0.,360.), xinc=45., ymode='0-max', yspace=0.1)
+        conf = dict(xmode='off', xlimits=(0.,360.), xinc=45., masking=False, ymode='0-max', yspace=0.1)
         axes = [ gmtpy.simpleconf_to_ax(conf,x) for x in 'xy' ]
         self.azidist_scaler = gmtpy.ScaleGuru([(azimuths, dists)], axes)
         
