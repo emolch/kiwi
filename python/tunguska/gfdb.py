@@ -2,13 +2,14 @@
 import config
 from subprocess import Popen, PIPE
 from util import gform
+import math
 import os
 import shutil
 import numpy as num
 import scipy
 import tempfile
 import sys
-
+from pyrocko import io, util
 pjoin = os.path.join
 
 class Gfdb:
@@ -38,8 +39,7 @@ class Gfdb:
         for k in [ 'nchunks', 'nx', 'nz', 'ng' ]:
             setattr(self, k, int( gfdb_infos_str[k] ))    
     
-    def get_traces_slow( self, x, z ):
-        
+    def dump_traces(self, x, z, format='table'):
         if not self.extractor:
             self.extractor = Popen( [config.gfdb_extract_prog, self.path], stdin=PIPE, stdout=PIPE, close_fds=True)
             self.tempdir = tempfile.mkdtemp("","gfdb_extract-")
@@ -48,7 +48,7 @@ class Gfdb:
         
         fns = []
         for ig in range(self.ng):
-            fn = '%s-%i.table' % (self.tempfilebase, ig)
+            fn = '%s-%i.%s' % (self.tempfilebase, ig, format)
             self.extractor.stdin.write("%f %f %i '%s'\n" % (x,z,ig+1,fn))
             self.extractor.stdin.flush()
             answer = self.extractor.stdout.readline()
@@ -57,7 +57,10 @@ class Gfdb:
             else:
                 fns.append(None)
         
-        
+        return fns
+    
+    def get_traces_slow( self, x, z ):
+        fns = self.dump_traces(x,z)
         traces = []
         for fn in fns:
             if fn:
@@ -77,6 +80,22 @@ class Gfdb:
         
         return traces
     
+    def get_traces_pyrocko(self, x,z):
+        fns = self.dump_traces(x,z, format='mseed')
+        traces = []
+        for igm, fn in enumerate(fns):
+            ig = igm+1
+            print fn
+            if fn:
+                for tr in io.load(fn):
+                    sx = util.base36encode(int(round(x)))
+                    sz = util.base36encode(int(round(z)))
+                    tr.meta = {'x':x, 'z':z, 'ig':ig}
+                    tr.set_codes(network=sz, station=sx, channel='%i' % ig)
+                    traces.append(tr)
+                    
+        return traces
+                
     def put_traces_slow( self, x,z, traces):
         assert len(traces) == self.ng
         if not self.builder:
