@@ -81,13 +81,13 @@ module gfdb_build_
             ok = .true.
             
             do ifile=1,nfiles
-                call readseismogram(filename(ifile), "*", seismogram, toffset, deltat, nerr )
+                call readseismogram(trim(filename(ifile)), "*", seismogram, toffset, deltat, nerr )
 
-                if (nerr /= 0) call die( "gfdb_build: can't read file '" &
+                if (nerr /= 0) call die( "can't read file '" &
                                                 // var_str(filename(ifile)) // "'" )
                 
                 if (abs(deltat - db%dt) > db%dt / 10000.) then
-                    call die( "gfdb_build: sampling rate of file does not match sampling rate of gfdb: '" &
+                    call die( "sampling rate of file does not match sampling rate of gfdb: '" &
                                                // var_str(filename(ifile)) // "'" )
                 end if
                 
