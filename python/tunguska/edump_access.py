@@ -2,16 +2,10 @@ from pyrocko import pile, trace, eventdata, util, model, pz
 import os, calendar, time
 from os.path import join as pjoin
 
+from pyrocko.eventdata import FileNotFound
+
 class BadEventFile(Exception):
     pass
-
-class FileNotFound(Exception):
-    
-    def __init__(self, s):
-        self.s = s
-        
-    def __str__(self):
-        return 'File not found: %s' % self.s
 
 st_nslc = '%(network)s_%(station)s_%(location)s_%(channel)s'
 
@@ -37,6 +31,9 @@ class EventDumpAccess(eventdata.EventDataAccess):
         if 'integration' in allowed_methods:
             try:
                 cha = self.get_channel(tr)
+                if cha is None:
+                    raise eventdata.NoRestitution('No gain information available')
+                
                 return trace.IntegrationResponse(1./cha.gain)
             
             except FileNotFound, e:
