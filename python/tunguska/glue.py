@@ -49,7 +49,11 @@ def station_to_receiver(station, wanted_components=None, kiwi_component_map=None
             components += cname
     
     rname = '%s.%s.%s' % (station.network, station.station, station.location)
-    r = receiver.Receiver(station.lat, station.lon, depth=station.depth, components=components, name=rname)
+    depth = station.depth
+    if station.depth is None:
+        depth = 0.0
+    
+    r = receiver.Receiver(station.lat, station.lon, depth=depth, components=components, name=rname)
     return r
     
 def receiver_to_station(rec):
@@ -60,7 +64,45 @@ def receiver_to_station(rec):
     sta = model.Station(rec.get_network(), rec.get_station(), rec.get_location(), rec.lat, rec.lon, 0.0, depth=rec.depth, channels=channels)
     return sta
     
-    
+def start_seismosizer( gfdb_path, event, stations=None, receivers=None,
+                    local_interpolation     = 'bilinear',
+                    spacial_undersampling   = [ 1, 1 ],
+                    effective_dt            = 1,
+                    crustal_thickness_limit = None,
+                    constraining_planes     = None,
+                    hosts                   = ['localhost'],
+                    balance_method          = '123321',
+                    verbose                 = False):
+        
+        assert stations==None or receivers==None
+        
+        database = gfdb.Gfdb(gfdb_path)
+        seis = seismosizer.Seismosizer(hosts, balance_method)
+        if verbose: seis.set_verbose('T')
+        seis.set_database(database)
+        seis.set_effective_dt(effective_dt)
+        seis.set_local_interpolation(local_interpolation)
+        seis.set_spacial_undersampling(*spacial_undersampling)
+        seis.set_source_location(event.lat, event.lon, event.time)
+        
+        if crustal_thickness_limit is not None:
+            seis.set_source_crustal_thickness_limit( crustal_thickness_limit )
+        
+        if constraining_planes is not None:
+            values = []
+            for plane in constraining_planes:
+                for vect in plane:
+                    values.extend(vect)
+                    
+            seis.set_source_constraints( *values )
+        
+        if stations is not None:
+            receivers = [ station_to_receiver(station) for station in stations ]
+        
+        seis.set_receivers(receivers)
+     
+        return seis
+
     
 class EventDataToKiwi:
     '''Interface to convert from pyrocko-style eventdata accessor to kiwi structures'''
