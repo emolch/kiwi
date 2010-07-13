@@ -72,7 +72,7 @@ class EventDumpAccess(eventdata.EventDataAccess):
             net,sta,loc = toks[0].split('.')
             lat, lon, elevation, depth  =  [ float(x) for x in toks[1:] ]
             
-            station = model.Station(net, sta, loc, lat, lon, elevation)
+            station = model.Station(net, sta, loc, lat, lon, elevation, depth=depth)
             stations.append(station)
             
         f.close()
