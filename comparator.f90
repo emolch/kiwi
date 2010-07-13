@@ -105,6 +105,9 @@ module comparator
     public probes_max_vecnorm_d2_1
     public probes_max_vecnorm_d2_2
     public probes_max_vecnorm_d2_3
+    public probes_arias_intensity_1
+    public probes_arias_intensity_2
+    public probes_arias_intensity_3
 
     public cleanup_comparator
   
@@ -511,6 +514,42 @@ module comparator
     end subroutine
 
 
+    pure function max_vecnorm_d1_1( a, dt, fa ) result(amp)
+        real, dimension(:), intent(in) :: a
+        real, intent(in) :: dt, fa
+        real :: amp
+        integer :: n
+        
+        n = size(a)
+        amp = real(sqrt(maxval( fa**2*real(a(1:n-1) - a(2:n), 8)**2 )) / dt)
+       
+    end function
+
+    pure function max_vecnorm_d1_2( a, b, dt, fa, fb ) result(amp)
+        real, dimension(:), intent(in) :: a, b
+        real, intent(in) :: dt, fa, fb
+        real :: amp
+        integer :: n
+        
+        n = size(a)
+        amp = real(sqrt(maxval( fa**2*real(a(1:n-1) - a(2:n), 8)**2 + &
+                                fb**2*real(b(1:n-1) - b(2:n), 8)**2 )) / dt)
+       
+    end function
+
+    pure function max_vecnorm_d1_3( a, b, c, dt, fa, fb, fc ) result(amp)
+        real, dimension(:), intent(in) :: a, b, c
+        real, intent(in) :: dt, fa, fb, fc
+        real :: amp
+        integer :: n
+        
+        n = size(a)
+        amp = real(sqrt(maxval( fa**2*real(a(1:n-1) - a(2:n), 8)**2 + &
+                                fb**2*real(b(1:n-1) - b(2:n), 8)**2 + &
+                                fc**2*real(c(1:n-1) - c(2:n), 8)**2 )) / dt)
+       
+    end function   
+
     pure function max_vecnorm_d2_1( a, dt, fa ) result(amp)
         real, dimension(:), intent(in) :: a
         real, intent(in) :: dt, fa
@@ -518,7 +557,7 @@ module comparator
         integer :: n
         
         n = size(a)
-        amp = real(sqrt(maxval( fa**2*real(a(1:n-2) - 2.0*a(2:n-1) + a(3:n),8)**2 )) / dt)
+        amp = real(sqrt(maxval( fa**2*real(a(1:n-2) - 2.0*a(2:n-1) + a(3:n),8)**2 )) / dt**2)
        
     end function
 
@@ -530,7 +569,7 @@ module comparator
         
         n = size(a)
         amp = real(sqrt(maxval( fa**2*real(a(1:n-2) - 2.0*a(2:n-1) + a(3:n),8)**2 + &
-                                fb**2*real(b(1:n-2) - 2.0*b(2:n-1) + b(3:n),8)**2 )) / dt)
+                                fb**2*real(b(1:n-2) - 2.0*b(2:n-1) + b(3:n),8)**2 )) / dt**2)
        
     end function
 
@@ -543,7 +582,43 @@ module comparator
         n = size(a)
         amp = real(sqrt(maxval( fa**2*real(a(1:n-2) - 2.0*a(2:n-1) + a(3:n),8)**2 + &
                                 fb**2*real(b(1:n-2) - 2.0*b(2:n-1) + b(3:n),8)**2 + &
-                                fc**2*real(c(1:n-2) - 2.0*c(2:n-1) + c(3:n),8)**2 )) / dt)
+                                fc**2*real(c(1:n-2) - 2.0*c(2:n-1) + c(3:n),8)**2 )) / dt**2)
+       
+    end function   
+
+    pure function arias_intensity_1( a, dt, fa ) result(amp)
+        real, dimension(:), intent(in) :: a
+        real, intent(in) :: dt, fa
+        real :: amp
+        integer :: n
+        
+        n = size(a)
+        amp = real(pi/(2.*9.81)*dt*sum(( fa**2*real(a(1:n-2) - 2.0*a(2:n-1) + a(3:n),8)**2 )) / dt**2)
+       
+    end function   
+
+    pure function arias_intensity_2( a, b, dt, fa, fb ) result(amp)
+        real, dimension(:), intent(in) :: a, b
+        real, intent(in) :: dt, fa, fb
+        real :: amp
+        integer :: n
+        
+        n = size(a)
+        amp = real(pi/(2.*9.81)*dt*sum(( fa**2*real(a(1:n-2) - 2.0*a(2:n-1) + a(3:n),8)**2 + &
+                                         fb**2*real(b(1:n-2) - 2.0*b(2:n-1) + b(3:n),8)**2 )) / dt**2)
+       
+    end function   
+
+    pure function arias_intensity_3( a, b, c, dt, fa, fb, fc ) result(amp)
+        real, dimension(:), intent(in) :: a, b, c
+        real, intent(in) :: dt, fa, fb, fc
+        real :: amp
+        integer :: n
+        
+        n = size(a)
+        amp = real(pi/(2.*9.81)*dt*sum(( fa**2*real(a(1:n-2) - 2.0*a(2:n-1) + a(3:n),8)**2 + &
+                                         fb**2*real(b(1:n-2) - 2.0*b(2:n-1) + b(3:n),8)**2 + &
+                                         fc**2*real(c(1:n-2) - 2.0*c(2:n-1) + c(3:n),8)**2 )) / dt**2)
        
     end function   
 
@@ -924,23 +999,44 @@ module comparator
         prod = probes_norm_timedomain( a, b, scalar_product_2 )
     end function
     
+
     function probes_max_vecnorm_d2_1( a ) result(amp)
         type(t_probe), intent(inout) :: a
         real :: amp
-        amp = probe_norm_timedomain( a, max_vecnorm_d2_1 )
+        amp = probe_norm_timedomain( a, max_vecnorm_d1_1 )
     end function
 
     function probes_max_vecnorm_d2_2( a,b ) result(amp)
         type(t_probe), intent(inout) :: a, b
         real :: amp
-        amp = probes_norm_timedomain( a, b, max_vecnorm_d2_2 )
+        amp = probes_norm_timedomain( a, b, max_vecnorm_d1_2 )
     end function
 
     function probes_max_vecnorm_d2_3( a,b,c ) result(amp)
         type(t_probe), intent(inout) :: a, b, c
         real :: amp
-        amp = probes_norm_timedomain_3( a, b, c, max_vecnorm_d2_3 )
+        amp = probes_norm_timedomain_3( a, b, c, max_vecnorm_d1_3 )
     end function
+
+
+    function probes_arias_intensity_1( a ) result(amp)
+        type(t_probe), intent(inout) :: a
+        real :: amp
+        amp = probe_norm_timedomain( a, arias_intensity_1 )
+    end function
+
+    function probes_arias_intensity_2( a,b ) result(amp)
+        type(t_probe), intent(inout) :: a, b
+        real :: amp
+        amp = probes_norm_timedomain( a, b, arias_intensity_2 )
+    end function
+
+    function probes_arias_intensity_3( a,b,c ) result(amp)
+        type(t_probe), intent(inout) :: a, b, c
+        real :: amp
+        amp = probes_norm_timedomain_3( a, b, c, arias_intensity_3 )
+    end function
+
 
     subroutine probes_windowed_cross_corr( a, b, shiftrange, cross_corr )
 

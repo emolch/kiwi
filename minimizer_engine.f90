@@ -65,6 +65,7 @@ module minimizer_engine
     public get_global_misfit
     public get_misfits
     public get_peak_amplitudes
+    public get_arias_intensities
     public get_principal_axes
     public output_cross_correlations
     public shift_ref_seismogram
@@ -1083,12 +1084,43 @@ module minimizer_engine
         imaxabs = 1
         do ireceiver=1,nreceivers
             if (receivers(ireceiver)%enabled) then
-                !call receiver_get_maxabs_hor_ver(receivers(ireceiver), max_hor, max_ver)
-                !maxabs_(1,imaxabs) = max_hor
-                !maxabs_(2,imaxabs) = max_ver
                 call receiver_get_maxabs_accel(receivers(ireceiver), max_accel)
                 maxabs_(1,imaxabs) = max_accel
                 imaxabs = imaxabs + 1
+            end if
+        end do
+        
+    end subroutine
+
+    subroutine get_arias_intensities( intensities, ok )
+    
+        real, dimension(:), allocatable, intent(inout) :: intensities
+        logical, intent(out)  :: ok
+        
+        integer :: iintens, nintens, ireceiver, nreceivers
+        real :: intensity
+        
+        call update_syn_probes( ok )
+        if (.not. ok) return
+        
+        ! how many are needed?
+        nreceivers = size(receivers)
+        nintens = 0
+        do ireceiver=1,nreceivers
+            if (receivers(ireceiver)%enabled) then
+                nintens = nintens + 1
+            end if
+        end do
+
+        if ( allocated(intensities) ) deallocate(intensities)
+        allocate( intensities(nintens) )
+        
+        iintens = 1
+        do ireceiver=1,nreceivers
+            if (receivers(ireceiver)%enabled) then
+                call receiver_get_arias_intensity(receivers(ireceiver), intensity)
+                intensities(iintens) = intensity
+                iintens = iintens + 1
             end if
         end do
         

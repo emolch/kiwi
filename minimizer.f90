@@ -1092,6 +1092,20 @@ module minimizer_wrappers
         
     end subroutine
     
+    subroutine array_to_string( array, string )
+    
+        real, dimension(:), intent(in) :: array
+        type(varying_string), intent(out) :: string
+        
+        character(len=size(array)*32) :: buffer
+        integer :: ix
+        
+        write (buffer,*) (array(ix), ix=1,size(array,1))
+                
+        string = var_str(trim(buffer))
+    
+    end subroutine
+
     subroutine array2d_to_string( array, string )
     
         real, dimension(:,:), intent(in) :: array
@@ -1138,11 +1152,11 @@ module minimizer_wrappers
     
      !! === {{{get_peak_amplitudes}}} ===
       ! 
-      ! Get the horizonal and vertical peak amplitudes of the synthetic traces. 
+      ! Get peak acceleration at each receiver.
       !
       ! Disabled stations are omitted in output list.
       !
-      ! Returns: {{{maxabs_receiver_1_horizontal maxabs_receiver_1_vertical ...}}}
+      ! Returns: {{{peak_accel_receiver_1 peak_accel_receiver_2 ...}}}
       
         type(varying_string), intent(in)  :: line
         type(varying_string), intent(out) :: answer
@@ -1158,6 +1172,35 @@ module minimizer_wrappers
      
         call array2d_to_string( maxabs_, answer )
         if (allocated(maxabs_)) deallocate(maxabs_)
+        
+    end subroutine
+
+    subroutine do_get_arias_intensities( line, answer, ok )
+    
+     !! === {{{get_arias_intensities}}} ===
+      ! 
+      ! Get arias intensity at each receiver.
+      !
+      ! Arias intensities are defined as pi/(2*g)*integrate( accel(t)**2, dt ).
+      !
+      ! Disabled stations are omitted in output list.
+      !
+      ! Returns: {{{arias_intensity_receiver_1 arias_intensity_receiver_2 ...}}}
+      
+        type(varying_string), intent(in)  :: line
+        type(varying_string), intent(out) :: answer
+        logical, intent(out)              :: ok
+        
+        real, dimension(:), allocatable :: intensities
+        
+        ok = line /= '' ! get rid of warning, that line is not used
+        answer = ""
+        
+        call get_arias_intensities( intensities, ok )
+        if (.not. ok) return
+     
+        call array_to_string( intensities, answer )
+        if (allocated(intensities)) deallocate(intensities)
         
     end subroutine
 
@@ -1536,6 +1579,8 @@ program minimizer
             call do_get_misfits( arguments, answer, ok )
         else if (command == 'get_peak_amplitudes') then
             call do_get_peak_amplitudes( arguments, answer, ok )
+        else if (command == 'get_arias_intensities') then
+            call do_get_arias_intensities( arguments, answer, ok )
         else if (command == 'get_principal_axes') then
             call do_get_principal_axes( arguments, answer, ok )
         else if (command == 'output_distances') then

@@ -106,8 +106,8 @@ module receiver
     public receiver_calculate_misfits
     public receiver_calculate_cross_correlations
     public receiver_output_cross_correlations
-    public receiver_get_maxabs_hor_ver
     public receiver_get_maxabs_accel
+    public receiver_get_arias_intensity
 
     public character_to_id
     
@@ -424,26 +424,6 @@ module receiver
 
     end subroutine
 
-    subroutine receiver_get_maxabs_hor_ver( self, max_hor, max_ver )
-    
-        type(t_receiver), intent(inout) :: self
-        real, intent(out) :: max_hor, max_ver
-        
-        integer iver, ihor1, ihor2
-        
-        max_hor = 0.
-        max_ver = 0.
-        if (self%enabled) then 
-            call get_component_ids( self, iver, ihor1, ihor2 )
-            if (iver /= 0) then
-                max_ver = probe_norm( self%syn_probes(iver), PEAK )
-            end if
-            if (ihor1 /= 0 .and. ihor2 /= 0) then
-                max_hor = probes_norm( self%syn_probes(ihor1), self%syn_probes(ihor2), PEAK )
-            end if
-        end if
-    end subroutine
-
     subroutine receiver_get_maxabs_accel( self, val )
     
         type(t_receiver), intent(inout) :: self
@@ -463,6 +443,27 @@ module receiver
             end if
         end if
     end subroutine
+
+    subroutine receiver_get_arias_intensity( self, val )
+    
+        type(t_receiver), intent(inout) :: self
+        real, intent(out) :: val
+        
+        integer iver, ihor1, ihor2
+        
+        val = 0.
+        if (self%enabled) then 
+            call get_component_ids( self, iver, ihor1, ihor2 )
+            if (iver /= 0 .and. ihor1 /= 0 .and. ihor2 /= 0) then
+                val = probes_arias_intensity_3( self%syn_probes(iver), self%syn_probes(ihor1), self%syn_probes(ihor2) )
+            else if (ihor1 /= 0 .and. ihor2 /= 0) then
+                val = probes_arias_intensity_2( self%syn_probes(ihor1), self%syn_probes(ihor2) )
+            else if (iver /= 0) then
+                val = probes_arias_intensity_1( self%syn_probes(iver) )
+            end if
+        end if
+    end subroutine
+ 
 
     subroutine receiver_calculate_cross_correlations( self, shiftrange )
     
@@ -622,6 +623,8 @@ module receiver
         
         ok = .true.
         
+        if (.not. self%enabled) return
+
         do icomponent=1,self%ncomponents
             reffn = reffnbase // "-" // component_names(self%components(icomponent)) // "." // refformat
             call readseismogram( char(reffn), "*", temp_seismogram, toffset, &
