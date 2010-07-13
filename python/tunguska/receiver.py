@@ -87,9 +87,12 @@ class Receiver:
         s = ' '.join( (str(self.lat), str(self.lon), str(self.depth), self.components) )
         return s
     
-    def save_traces_mseed(self, filename_tmpl='%{whichset}s_%(network)s_%(station)s_%(location)s_%(channel)s.mseed' ):
+    def save_traces_mseed(self, filename_tmpl='%(whichset)s_%(network)s_%(station)s_%(location)s_%(channel)s.mseed',
+                          overwrite_network=None ):
         
         station, network = self.get_station(), self.get_network()
+        if overwrite_network is not None:
+            network = overwrite_network
         for icomp, comp in enumerate(self.components):
             channel = comp
             for (whichset, sgram) in zip(('references', 'synthetics'), 

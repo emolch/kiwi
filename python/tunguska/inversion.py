@@ -566,8 +566,8 @@ class Informer(Step):
 
         self.post_work(True)
         
-        if nsta < 3:
-            sys.exit('too few stations')
+        #if nsta < 3:
+        #    sys.exit('too few stations')
     
 
     def _plot(self, run_id='current'):

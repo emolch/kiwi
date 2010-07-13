@@ -374,7 +374,7 @@ try:
                     die('Command defined more than once: "%s" (in plugin "%s")' % (command, plugin_name))
                 available_commands.append(command)
             
-            usage_str += plugin.__autokiwi_usage__[command]+'\n'
+                usage_str += plugin.__autokiwi_usage__[command]+'\n'
             plugins.append(plugin)
             
         parser.set_usage(usage_str)

@@ -264,7 +264,10 @@ class ValControlPan(QScrollArea):
         for i in range(n):
             valc = ValControl(self.frame)
             grid.addWidget(valc,i,1)
+            
             valc.setup( names[i], mins[i], maxs[i], curs[i], i)
+            
+            
             self.connect( valc, SIGNAL("valchange(float,int)"), self.valchange )
         self.frame.show()
             
@@ -287,19 +290,19 @@ class MyWindow(QMainWindow):
         
         self.sourcemenu = self.menuBar().addMenu( "Source&type" )
         
-        if (len(clargs) != 6): 
-            sys.exit("usage: snufflek database effective-dt origin-lat origin-lon receiver-lat receiver-lon")
+        if (len(clargs) < 6): 
+            sys.exit("usage: snufflek database effective-dt origin-lat origin-lon receiver-lat receiver-lon files ...")
             
         gfdb_path = clargs[0]
-        effective_dt, origin_lat, origin_lon, rec_lat, rec_lon = [ float(x) for x in clargs[1:] ]
+        effective_dt, origin_lat, origin_lon, rec_lat, rec_lon = [ float(x) for x in clargs[1:6] ]
         
         event = pyrocko.model.Event(lat=origin_lat, lon=origin_lon, time=0.0)
         station = pyrocko.model.Station('','','', lat=rec_lat, lon=rec_lon, elevation=0.0)
-        station.add_channel(glue.kiwi_channels['n'])
-        station.add_channel(glue.kiwi_channels['e'])
+        station.add_channel(glue.kiwi_channels['a'])
+        station.add_channel(glue.kiwi_channels['r'])
         station.add_channel(glue.kiwi_channels['u'])
         
-        seis = glue.start_seismosizer(gfdb_path, effective_dt, event=event, stations=[station])
+        seis = glue.start_seismosizer(gfdb_path, event, stations=[station], effective_dt=effective_dt, local_interpolation='nearest_neighbor')
         self.trace_consumer = None
 
         self.vis = None
@@ -308,7 +311,8 @@ class MyWindow(QMainWindow):
         
         
         defaultsource = "bilateral"
-        self.setSourceType( defaultsource )
+        params = (0.00E+00,  0.00E+00,  0.00E+00,  2.00E+03,  7.00E+13,  0.00E+00,  8.00E+01,  0.00E+00, 0.00E+00,  0.00E+00,  0.00E+00,  0.00E+00,  3.50E+03,  0.10E+00)
+        self.setSourceType( defaultsource, params=params)
         
         self.dockwin = QDockWidget('Source Model Parameters')
         self.dockwin.setWidget( self.valpan )
@@ -316,8 +320,6 @@ class MyWindow(QMainWindow):
         self.connect( self.valpan, SIGNAL("valchange(PyQt_PyObject)"),
                       self.calculate )
                               
-                
-                
         self.vis = Visualization(self.tempfilebase)
 
         #visdockwin = QDockWidget('Source Model View')
@@ -351,6 +353,13 @@ class MyWindow(QMainWindow):
         if params != None:
             for iparam in range(min(len(params),len(para['default']))):
                 para['default'][iparam] = params[iparam]
+                
+                #if para['soft_min'][iparam] < para['default'][iparam]:
+                #    para['soft_min'][iparam] = para['default'][iparam] *0.001
+                
+        
+        print para['soft_min']
+                
         self.valpan.setup( para['name'], para['soft_min'], para['soft_max'], para['default'] )
         self.calculate( para['default'] )
         

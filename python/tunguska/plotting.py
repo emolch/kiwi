@@ -386,9 +386,9 @@ def draw_coastlines(gmt, JXY, region, coastline_resolution, rivers):
     
     gmt.pscoast( D=coastline_resolution, W='thinnest/black', A=10., *(rivers+JXY+R))
 
-def draw_shakemap( gmt, widget, scaler, axes, shakemap_range, lat, lon, *datasets):
+def draw_shakemap( gmt, widget, scaler, axes, shakemap_range, shakemap_cpt, lat, lon, *datasets):
     
-    zax = gmtpy.Ax(mode='0-max', limits=shakemap_range, scaled_unit_factor=1000., scaled_unit='mm/s@+2@+', label='Peak Acceleration' )
+    zax = gmtpy.Ax(mode='0-max', limits=shakemap_range, scaled_unit_factor=1000., scaled_unit='mm/s@+2@+', label='Peak Acceleration', masking=False )
     
     zscaler = gmtpy.ScaleGuru([ (lat,lon,dataset) for dataset in datasets ],
         axes=(axes[0],axes[1],zax), 
@@ -405,10 +405,11 @@ def draw_shakemap( gmt, widget, scaler, axes, shakemap_range, lat, lon, *dataset
     colors = gmtpy.color(0), gmtpy.color(1)
 
     zpar = zscaler.get_params()
-    clip = (zpar['zinc']/2., zpar['zmax'])
     
+    clip = (zpar['zinc']/2., zpar['zmax'])
+        
     fn_cpt = gmt.tempfilename()
-    gmt.makecpt( C='shakemap.cpt', out_filename=fn_cpt, *zscaler.T() )
+    gmt.makecpt( C=shakemap_cpt, out_filename=fn_cpt, *zscaler.T() )
     
     if len(datasets[0]) > 3:
         for dataset, color in zip(datasets, colors):
@@ -421,7 +422,7 @@ def draw_shakemap( gmt, widget, scaler, axes, shakemap_range, lat, lon, *dataset
                 out_discard=True, 
                 *R )
         
-            gmt.grdimage( 
+            gmt.grdcontour( 
                 grdfile,
                 C=fn_cpt,
                 #W='2p,%s' % color, 
@@ -431,7 +432,9 @@ def draw_shakemap( gmt, widget, scaler, axes, shakemap_range, lat, lon, *dataset
                 
     return fn_cpt, zscaler
         
-def location_map( filename, lat, lon, lat_delta, conf_overrides, source=None, source_model_infos=None, receivers=None, with_palette=False, shakemap_data=None, shakemap_range=None, show_topo=True):
+def location_map( filename, lat, lon, lat_delta, conf_overrides, source=None, 
+                source_model_infos=None, receivers=None, 
+                with_palette=False, shakemap_data=None, shakemap_range=None, shakemap_cpt=None, show_topo=True):
 
     conf = dict(**config.location_map_config)
     conf.update( conf_overrides )
@@ -512,7 +515,8 @@ def location_map( filename, lat, lon, lat_delta, conf_overrides, source=None, so
     
     zscaler = scaler
     if shakemap_data is not None:
-        cptfile, zscaler = draw_shakemap( gmt, widget, scaler, (xax,yax,zax), shakemap_range, *shakemap_data)
+        cptfile, zscaler = draw_shakemap( gmt, widget, scaler, (xax,yax,zax), 
+                shakemap_range, shakemap_cpt, *shakemap_data)
         draw_coastlines(gmt, widget.JXY(), (west,east,south,north),  coastline_resolution, rivers)
     
     if source_model_infos and source:
@@ -563,8 +567,14 @@ def draw_rupture(gmt, widget, source_infos, axes, view='rupture-plane', source_l
     rupture_cpt = conf.pop('rupture_cpt')
 
     if 'outline' not in source_infos: raise NoOutlineFound()
-    
+     
     sec_outline = source_infos['outline']
+    
+    if (num.all(sec_outline[1][:,0] == sec_outline[1][0,0]) and
+        num.all(sec_outline[1][:,1] == sec_outline[1][0,1]) and
+        num.all(sec_outline[1][:,2] == sec_outline[1][0,2])):
+        raise NoOutlineFound()
+    
     if view == 'rupture-plane':
         outline = sec_outline[1][:,3], sec_outline[1][:,4]
     elif view == 'from-top':
