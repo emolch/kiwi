@@ -1,4 +1,4 @@
-import pymseed
+from pyrocko import io, trace
 
 class Receiver:
     
@@ -93,6 +93,8 @@ class Receiver:
         station, network = self.get_station(), self.get_network()
         if overwrite_network is not None:
             network = overwrite_network
+            
+        fns = []
         for icomp, comp in enumerate(self.components):
             channel = comp
             for (whichset, sgram) in zip(('references', 'synthetics'), 
@@ -103,14 +105,18 @@ class Receiver:
                     deltat = (endtime-starttime)/(len(sgram[0])-1)
                     data = sgram[1]
                     location = whichset
-                    trace = (network, station, location, channel, starttime*pymseed.HPTMODULUS, endtime*pymseed.HPTMODULUS, 1.0/deltat, data)
+                    tr = trace.Trace(network, station, location, channel, 
+                        tmin = starttime, tmax=endtime, deltat=deltat, ydata=data)
+                        
                     fn = filename_tmpl % { 'whichset': whichset,
                                            'network': network,
                                            'station': station,
                                            'location': location,
                                            'channel': channel }
                                            
-                    pymseed.store_traces([trace], fn)
+                    io.save([tr], fn)
+                    fns.append(fn)
+        return fns
 
     def get_misfit(self, component):
         return self.misfits[self.comp_ind[component]]
