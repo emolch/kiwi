@@ -112,8 +112,9 @@ module gfdb_redeploy_
                             call gfdb_save_trace( out, ixo, izo, ig, tracep )
                             last_span = tracep%span
                         else 
-                            span(1) = floor(tbeg/out%dt)
-                            span(2) = ceiling(tend/out%dt)
+                            
+                            span(1) = max(floor(tbeg/out%dt), tracep%span(1))
+                            span(2) = min(ceiling(tend/out%dt), tracep%span(2))
                             
                             call resize( strip%data, span(1), span(2)-span(1)+1 )
                             strip%data = 0.

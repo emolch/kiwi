@@ -318,8 +318,9 @@ def prepare(config, kiwi_config, rapid_config, event_names):
                 trace_selector=trace_selector,
                 extend=extend,
                 crop=crop,
-                out_stations=out_stations):
-            
+                out_stations=out_stations,
+                redundant_channel_priorities=config.get_or_none('redundant_channel_priorities')):
+                        
             for tr in traces:
                 
                 station = stations[get_nsl(tr)]

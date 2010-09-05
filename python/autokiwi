@@ -77,6 +77,7 @@ class GlobalDataRequest(wilber.IrisWilber):
         events.sort(sorting)
         xevents = []
         for event in events:
+            event.set_name(self.event_name(event))
             seed_volume = self.seed_volume_tmpl % { 'event_name' : self.event_name(event) }
             if not os.path.exists(seed_volume) or force:
                 xevents.append(event)
@@ -85,6 +86,9 @@ class GlobalDataRequest(wilber.IrisWilber):
         
     def download_next_event_in_range(self, time_range, sorting, force=False, which=None):
         events = self.get_events(time_range=time_range)
+        for event in events:
+            event.set_name(self.event_name(event))
+        
         events.sort(sorting)
         for event in events:
             if which is not None and event.name != which:
