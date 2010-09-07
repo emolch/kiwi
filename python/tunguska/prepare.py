@@ -237,9 +237,14 @@ def prepare(config, kiwi_config, rapid_config, event_names):
             except rdseed.SeedVolumeNotFound:
                 logger.error('SEED volume not found for event %s' % event_name)
                 continue
+            
+            fne = config.path('seed_volume') + '.event'
+            if os.path.exists(fne):
+                override_event = model.Event(load=fne)
                
         elif config.has('edump_data_dir'):
             acc = edump_access.EventDumpAccess(config.path('edump_data_dir'))
+            
             
         elif config.has('custom_accessor'):
             gargs = []
@@ -259,12 +264,16 @@ def prepare(config, kiwi_config, rapid_config, event_names):
             sys.exit('config has neither entry "seed_volume" nor "edump_data_dir" nor "custom_data_accessor"')
             
        
-        events = acc.get_events()
-        if not events:
-            logger.error('No event metainformation found for %s\n' % event_name)
-            continue
+        if override_event:
+            event = override_event
+        else:
+            events = acc.get_events()
+            if not events:
+                logger.error('No event metainformation found for %s\n' % event_name)
+                continue
+       
+            event = events[0]
         
-        event = events[0]
         event.name = event_name
         
         stations = acc.get_stations(relative_event=event)

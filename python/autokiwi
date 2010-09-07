@@ -101,6 +101,9 @@ class GlobalDataRequest(wilber.IrisWilber):
                                  before=self.before_p, after=self.after_p,
                                  wanted_channels=self.wanted_channels)
                     os.rename(seed_volume+'.incomplete', seed_volume)
+                    eventfn = self.seed_volume_tmpl % { 'event_name' : self.event_name(event) } + '.event'
+                    event.dump(eventfn)
+                    
                     return self.event_name(event)
                 except wilber.WilberNoStations, e:
                     logger.warn("%s (%s)" % (e, self.event_name(event)))
@@ -155,13 +158,13 @@ def wilber_pull(config, which='first', force=False, onlylist=False):
                 sorting,
                 force=force,
                 which=xwhich)
-                
-        if not which == 'all' or ev is None:
-            break
         
         seed_volume = config.path('seed_volume') % { 'event_name': ev }
         if os.path.exists(seed_volume):
             events.append(ev)
+                
+        if not which == 'all' or ev is None:
+            break
         
     return events 
 
