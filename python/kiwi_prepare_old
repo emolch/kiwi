@@ -402,6 +402,8 @@ write %s
                     d = (5, 5)
                 elif abs(new_delta_t/s.delta - 5.) < 5./10000.:
                     d = (5,)
+                elif abs(new_delta_t/s.delta - 4.) < 4./10000.:
+                    d = (4,)
                 elif abs(new_delta_t/s.delta - 2.) < 2./10000.:
                     d = (2,)
                 else:
