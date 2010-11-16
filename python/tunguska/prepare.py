@@ -332,7 +332,7 @@ def prepare(config, kiwi_config, rapid_config, event_names):
                 extend=extend,
                 crop=crop,
                 out_stations=out_stations,
-                restitution_off_hack=restitution_off_hack):
+                restitution_off_hack=restitution_off_hack,
                 redundant_channel_priorities=config.get_or_none('redundant_channel_priorities')):
                         
             for tr in traces:
