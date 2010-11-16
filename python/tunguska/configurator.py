@@ -37,6 +37,12 @@ class Config:
         else:
             return None
         
+    def get(self, k, default=None):
+        if self.has(k):
+            return getattr(self,k)
+        else:
+            return default
+        
     def get_avail(self, *keys):
         d = {}
         for k in keys:

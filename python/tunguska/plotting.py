@@ -49,7 +49,7 @@ def km_hack(conf):
         conf.pop('yunit')
         conf['yfunit'] = 'km'
         conf['yexp'] = 3
-        
+
 def subst(conf, param, oldvalue, newvalue):
     if param in conf and conf[param].lower() == oldvalue:
             conf[param] = newvalue
@@ -388,7 +388,7 @@ def draw_coastlines(gmt, JXY, region, coastline_resolution, rivers):
 
 def draw_shakemap( gmt, widget, scaler, axes, shakemap_range, shakemap_cpt, lat, lon, *datasets):
     
-    zax = gmtpy.Ax(mode='0-max', limits=shakemap_range, scaled_unit_factor=1000., scaled_unit='mm/s@+2@+', label='Peak Acceleration', masking=False )
+    zax = gmtpy.Ax(mode='0-max', limits=shakemap_range, scaled_unit_factor=100., scaled_unit='cm/s^2', label='Peak Ground Acceleration', masking=False )
     
     zscaler = gmtpy.ScaleGuru([ (lat,lon,dataset) for dataset in datasets ],
         axes=(axes[0],axes[1],zax), 
@@ -409,7 +409,7 @@ def draw_shakemap( gmt, widget, scaler, axes, shakemap_range, shakemap_cpt, lat,
     clip = (zpar['zinc']/2., zpar['zmax'])
         
     fn_cpt = gmt.tempfilename()
-    gmt.makecpt( C=shakemap_cpt, out_filename=fn_cpt, *zscaler.T() )
+    gmt.makecpt( C=shakemap_cpt, out_filename=fn_cpt,  suppress_defaults=True, *zscaler.T())
     
     if len(datasets[0]) > 3:
         for dataset, color in zip(datasets, colors):
@@ -422,7 +422,7 @@ def draw_shakemap( gmt, widget, scaler, axes, shakemap_range, shakemap_cpt, lat,
                 out_discard=True, 
                 *R )
         
-            gmt.grdcontour( 
+            gmt.grdimage( 
                 grdfile,
                 C=fn_cpt,
                 #W='2p,%s' % color, 
@@ -713,7 +713,7 @@ def moment_to_magnitude_hack( conf, data, xy ):
             data[i] = list(dset)
             data[i][icomp] = moment_to_magnitude(num.asarray(dset[icomp]))
             
-        conf[xy+'label'] = 'Magnitude'
+        conf[xy+'label'] = 'M@-W@-'
         if xy+'unit' in conf: del conf[xy+'unit']
         if xy+'inc' in conf:  del conf[xy+'inc']
         if xy+'limits' in conf:

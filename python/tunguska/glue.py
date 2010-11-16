@@ -43,7 +43,11 @@ def station_to_receiver(station, wanted_components=None, kiwi_component_map=None
     for channel in station.get_channels():
         cname = channel.name
         if kiwi_component_map is not None:
+            if cname not in kiwi_component_map:
+                continue
+            
             cname = kiwi_component_map[cname]
+            
         assert len(cname) == 1
         if wanted_components is None or cname in wanted_components:
             components += cname
@@ -109,6 +113,7 @@ class EventDataToKiwi:
     
     def __init__(self, accessor, 
                  station_order      = lambda a,b: cmp(a.dist_deg, b.dist_deg),
+                 station_filter     = lambda sta: True,
                  station_splitting  = ['nsewudacrl'],
                  kiwi_component_map = kiwi_component_map_default,
                  trace_factor       = 1.0,
@@ -117,6 +122,7 @@ class EventDataToKiwi:
         self._acc = accessor
         self._station_splitting = station_splitting
         self._station_order = station_order
+        self._station_filter = station_filter
         self._kiwi_component_map = kiwi_component_map
         self._trace_factor = trace_factor
         self._update()
@@ -252,6 +258,9 @@ class EventDataToKiwi:
         
         dataset = []
         for station in stations:
+            if not self._station_filter(station):
+                continue
+            
             dataset_station = []
             anydata = False
             for set_components in self._station_splitting:

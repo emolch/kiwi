@@ -584,11 +584,11 @@ class Informer(Step):
         lats = num.array( [ r.lat for r in receivers ], dtype='float' )
         lons = num.array( [ r.lon for r in receivers ], dtype='float' )
         dists = num.array( [ r.distance_deg for r in receivers ], dtype='float' )
-        rnames = [ re.sub(r'\..*$', '', r.name) for r in receivers ]
+        rnames = [ ' '.join(r.name.split('.')) for r in receivers ]
         slat, slon = source_location[:2]
         
         station_size = [ 0.05 ] * len(receivers)
-        station_color = [ 1. ] * len(receivers)
+        station_color = [ (0.,1.)[r.enabled] for r in receivers ]
         
         plotdir = self.make_plotdir_path(run_id)
         source = None
@@ -758,7 +758,7 @@ class Shifter(Step):
         lats = num.array( [ r.lat for r in receivers ], dtype='float' )
         lons = num.array( [ r.lon for r in receivers ], dtype='float' )
         dists = num.array( [ r.distance_deg for r in receivers ], dtype='float' )
-        rnames = [ re.sub(r'\..*$', '', r.name) for r in receivers ]
+        rnames = [ ' '.join(r.name.split('.')) for r in receivers ]
         slat, slon = source_location[:2]
         station_color = []
         for s,f in zip(shifts,fails):

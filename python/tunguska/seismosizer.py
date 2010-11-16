@@ -802,24 +802,22 @@ class Seismosizer(SeismosizerBase):
             return sources[ibest], misfits_by_s[ibest], failings
         return sources[ibest], misfits_by_s[ibest]
     
-    def get_peak_amplitudes_for_source( self, source ):
+    def get_peak_amplitudes_for_source( self, ndiff, source ):
         """Calculate peak amplitudes at receivers for given source."""
         
         self.set_source(source)
-        results = self.do_get_peak_amplitudes()
+        results = self.do_get_peak_amplitudes(ndiff)
         values = [[ float(x) for x in result.split() ] for result in results ]
         
-        #maxabs_horizontal = [ 0.0 ] * len(self.receivers)
-        #maxabs_vertical = [ 0.0 ] * len(self.receivers)
-        maxabs_accel = [ 0.0 ] * len(self.receivers)
+        maxabs = [ 0.0 ] * len(self.receivers)
         
         ipos = [ 0 ] * len(results)
         for irec, rec in enumerate(self.receivers):
             iproc = rec.proc_id
-            maxabs_accel[irec] = values[iproc][ipos[iproc]]
+            maxabs[irec] = values[iproc][ipos[iproc]]
             ipos[iproc] += 1
     
-        return maxabs_accel
+        return maxabs
         
     def get_arias_intensities_for_source( self, source ):
         """Calculate peak amplitudes at receivers for given source."""

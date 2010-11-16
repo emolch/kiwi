@@ -2,6 +2,8 @@ from pyrocko import pile, trace, eventdata, util, model, pz
 import os, calendar, time
 from os.path import join as pjoin
 
+import numpy as num
+
 from pyrocko.eventdata import FileNotFound
 
 class BadEventFile(Exception):
@@ -28,11 +30,21 @@ class EventDumpAccess(eventdata.EventDataAccess):
             except FileNotFound:
                 pass
         
+        if 'sampled' in allowed_methods:
+            try:
+                freqs, values = self._get_sampledresponse(tr)
+                return trace.SampledResponse( freqs, 1.0/values )
+            except FileNotFound:
+                pass
+        
         if 'integration' in allowed_methods:
             try:
                 cha = self.get_channel(tr)
                 if cha is None:
                     raise eventdata.NoRestitution('No gain information available')
+                
+                if cha.gain == 0.0:
+                    raise eventdata.NoRestitution('Gain is zero')
                 
                 return trace.IntegrationResponse(1./cha.gain)
             
@@ -61,6 +73,15 @@ class EventDumpAccess(eventdata.EventDataAccess):
         else:
             raise FileNotFound(fn)
     
+    def _get_sampledresponse(self, tr):
+        fnt = pjoin(self._dirpath, 'sampled-%s.txt' % st_nslc)
+        fn = tr.fill_template(fnt)
+        if os.path.exists(fn):
+            f, treal, timag = num.loadtxt(fn).T
+            return f, treal+ 1.0j*timag
+        else:
+            raise FileNotFound(fn)
+        
     def _get_stations_from_file(self):
         fn = pjoin(self._dirpath, 'stations.txt')
         f = open(fn, 'r')

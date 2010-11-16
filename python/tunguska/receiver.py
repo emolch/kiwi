@@ -118,6 +118,28 @@ class Receiver:
                     fns.append(fn)
         return fns
 
+    def get_traces(self):
+        
+        station, network = self.get_station(), self.get_network()
+            
+        traces = []
+        for icomp, comp in enumerate(self.components):
+            channel = comp
+            for (whichset, sgram) in zip(('references', 'synthetics'), 
+                             (self.ref_seismograms[icomp], self.syn_seismograms[icomp])):
+                if sgram and len(sgram[0]) > 1:
+                    starttime = sgram[0][0]
+                    endtime = sgram[0][-1]
+                    deltat = (endtime-starttime)/(len(sgram[0])-1)
+                    data = sgram[1]
+                    location = whichset
+                    tr = trace.Trace(network, station, location, channel, 
+                        tmin = starttime, tmax=endtime, deltat=deltat, ydata=data)
+                    
+                    
+                    traces.append(tr)
+        return traces
+        
     def get_misfit(self, component):
         return self.misfits[self.comp_ind[component]]
     

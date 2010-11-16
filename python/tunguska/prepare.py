@@ -313,6 +313,10 @@ def prepare(config, kiwi_config, rapid_config, event_names):
         if config.has('station_filter'):
             station_filter = lambda tr: config.station_filter(stations[get_nsl(tr)])
             
+        restitution_off_hack = False
+        if config.has('restitution_off_hack'):
+            restitution_off_hack = config.restitution_off_hack
+            
         trace_selector = lambda tr: station_filter(tr) and whitelist(tr)
         out_stations = {}
         for traces in acc.iter_displacement_traces(
@@ -328,6 +332,7 @@ def prepare(config, kiwi_config, rapid_config, event_names):
                 extend=extend,
                 crop=crop,
                 out_stations=out_stations,
+                restitution_off_hack=restitution_off_hack):
                 redundant_channel_priorities=config.get_or_none('redundant_channel_priorities')):
                         
             for tr in traces:
