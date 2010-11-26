@@ -1150,24 +1150,37 @@ module minimizer_wrappers
     
     subroutine do_get_peak_amplitudes( line, answer, ok )
     
-     !! === {{{get_peak_amplitudes}}} ===
+     !! === {{{get_peak_amplitudes differentiate}}} ===
       ! 
-      ! Get peak acceleration at each receiver.
+      ! Get peak velocity or acceleration at each receiver.
       !
+      ! If differentiate is 1, maximum velocities are returned, if it is 2,
+      ! maximum acceleration is returned.
       ! Disabled stations are omitted in output list.
       !
-      ! Returns: {{{peak_accel_receiver_1 peak_accel_receiver_2 ...}}}
+      ! Returns: {{{peak_receiver_1 peak_receiver_2 ...}}}
       
         type(varying_string), intent(in)  :: line
         type(varying_string), intent(out) :: answer
         logical, intent(out)              :: ok
         
+        integer :: differentiate
         real, dimension(:,:), allocatable :: maxabs_
+        integer :: iostat
+        character(len=len(line)) :: buffer
         
-        ok = line /= '' ! get rid of warning, that line is not used
-        answer = ""
-        
-        call get_peak_amplitudes( maxabs_, ok )
+        answer = ''
+        ok = .true.
+       
+        buffer = char(line)
+        read (unit=buffer,fmt=*,iostat=iostat) differentiate
+        if (iostat > 0) then
+            ok = .false.
+            call error( "failed to parse number" )
+            return
+        end if
+
+        call get_peak_amplitudes( differentiate, maxabs_, ok )
         if (.not. ok) return
      
         call array2d_to_string( maxabs_, answer )

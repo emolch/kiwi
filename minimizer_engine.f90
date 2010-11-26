@@ -1056,17 +1056,22 @@ module minimizer_engine
         
     end subroutine
     
-    subroutine get_peak_amplitudes( maxabs_, ok )
-    
+    subroutine get_peak_amplitudes( differentiate, maxabs_, ok )
+        integer, intent(in) :: differentiate
         real, dimension(:,:), allocatable, intent(inout) :: maxabs_
         logical, intent(out)  :: ok
         
         integer :: imaxabs, nmaxabs, ireceiver, nreceivers
-        !real :: max_hor, max_ver
-        real :: max_accel
+        real :: m
         
         call update_syn_probes( ok )
         if (.not. ok) return
+
+        if (differentiate .ne. 1 .and. differentiate .ne. 2) then
+            call error("differentiate argument must be 1 for velocity or 2 for acceleration")
+            ok = .false.
+            return
+        end if
         
         ! how many are needed?
         nreceivers = size(receivers)
@@ -1078,14 +1083,13 @@ module minimizer_engine
         end do
 
         if ( allocated(maxabs_) ) deallocate(maxabs_)
-        !allocate( maxabs_(2,nmaxabs) )
         allocate( maxabs_(1,nmaxabs) )
         
         imaxabs = 1
         do ireceiver=1,nreceivers
             if (receivers(ireceiver)%enabled) then
-                call receiver_get_maxabs_accel(receivers(ireceiver), max_accel)
-                maxabs_(1,imaxabs) = max_accel
+                call receiver_get_maxabs(receivers(ireceiver), differentiate, m)
+                maxabs_(1,imaxabs) = m
                 imaxabs = imaxabs + 1
             end if
         end do

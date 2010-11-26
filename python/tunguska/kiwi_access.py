@@ -26,7 +26,7 @@ class KiwiDataAccessOld(eventdata.EventDataAccess):
                     fns.append(fn)
             
             self._pile = pile.Pile()
-            self._pile.add_files(fns)
+            self._pile.load_files(fns)
             
         return self._pile
         
@@ -78,7 +78,7 @@ class KiwiDataAccessNew(eventdata.EventDataAccess):
                         fns.append(fn)
                     
             self._pile = pile.Pile()
-            self._pile.add_files(fns)
+            self._pile.load_files(fns)
             
         return self._pile
         

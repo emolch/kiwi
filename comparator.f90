@@ -102,9 +102,9 @@ module comparator
     public probes_norm
     public probe_norm
     public probes_windowed_cross_corr
-    public probes_max_vecnorm_d2_1
-    public probes_max_vecnorm_d2_2
-    public probes_max_vecnorm_d2_3
+    public probes_max_vecnorm_1
+    public probes_max_vecnorm_2
+    public probes_max_vecnorm_3
     public probes_arias_intensity_1
     public probes_arias_intensity_2
     public probes_arias_intensity_3
@@ -1000,22 +1000,40 @@ module comparator
     end function
     
 
-    function probes_max_vecnorm_d2_1( a ) result(amp)
+    function probes_max_vecnorm_1( differentiate, a ) result(amp)
+        integer, intent(in) :: differentiate
         type(t_probe), intent(inout) :: a
         real :: amp
-        amp = probe_norm_timedomain( a, max_vecnorm_d1_1 )
+
+        if (differentiate .eq. 1) then
+            amp = probe_norm_timedomain( a, max_vecnorm_d1_1 )
+        else if (differentiate .eq. 2) then
+            amp = probe_norm_timedomain( a, max_vecnorm_d2_1 )
+        end if
+
     end function
 
-    function probes_max_vecnorm_d2_2( a,b ) result(amp)
+    function probes_max_vecnorm_2( differentiate, a,b ) result(amp)
+        integer, intent(in) :: differentiate
         type(t_probe), intent(inout) :: a, b
         real :: amp
-        amp = probes_norm_timedomain( a, b, max_vecnorm_d1_2 )
+        if (differentiate .eq. 1) then
+            amp = probes_norm_timedomain( a, b, max_vecnorm_d1_2 )
+        else if (differentiate .eq. 2) then
+            amp = probes_norm_timedomain( a, b, max_vecnorm_d2_2 )
+        end if
+
     end function
 
-    function probes_max_vecnorm_d2_3( a,b,c ) result(amp)
+    function probes_max_vecnorm_3( differentiate, a,b,c ) result(amp)
+        integer, intent(in) :: differentiate
         type(t_probe), intent(inout) :: a, b, c
         real :: amp
-        amp = probes_norm_timedomain_3( a, b, c, max_vecnorm_d1_3 )
+        if (differentiate .eq. 1) then
+            amp = probes_norm_timedomain_3( a, b, c, max_vecnorm_d1_3 )
+        else if (differentiate .eq. 2) then
+            amp = probes_norm_timedomain_3( a, b, c, max_vecnorm_d2_3 )
+        end if
     end function
 
 

@@ -106,7 +106,7 @@ module receiver
     public receiver_calculate_misfits
     public receiver_calculate_cross_correlations
     public receiver_output_cross_correlations
-    public receiver_get_maxabs_accel
+    public receiver_get_maxabs
     public receiver_get_arias_intensity
 
     public character_to_id
@@ -424,9 +424,10 @@ module receiver
 
     end subroutine
 
-    subroutine receiver_get_maxabs_accel( self, val )
+    subroutine receiver_get_maxabs( self, differentiate, val )
     
         type(t_receiver), intent(inout) :: self
+        integer, intent(in) :: differentiate     ! 1, or 2 ; zero is not implemented yet.
         real, intent(out) :: val
         
         integer iver, ihor1, ihor2
@@ -435,11 +436,11 @@ module receiver
         if (self%enabled) then 
             call get_component_ids( self, iver, ihor1, ihor2 )
             if (iver /= 0 .and. ihor1 /= 0 .and. ihor2 /= 0) then
-                val = probes_max_vecnorm_d2_3( self%syn_probes(iver), self%syn_probes(ihor1), self%syn_probes(ihor2) )
+                val = probes_max_vecnorm_3( differentiate, self%syn_probes(iver), self%syn_probes(ihor1), self%syn_probes(ihor2) )
             else if (ihor1 /= 0 .and. ihor2 /= 0) then
-                val = probes_max_vecnorm_d2_2( self%syn_probes(ihor1), self%syn_probes(ihor2) )
+                val = probes_max_vecnorm_2( differentiate, self%syn_probes(ihor1), self%syn_probes(ihor2) )
             else if (iver /= 0) then
-                val = probes_max_vecnorm_d2_1( self%syn_probes(iver) )
+                val = probes_max_vecnorm_1( differentiate, self%syn_probes(iver) )
             end if
         end if
     end subroutine
