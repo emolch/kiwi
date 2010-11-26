@@ -45,7 +45,7 @@ def station_to_receiver(station, wanted_components=None, kiwi_component_map=None
         if kiwi_component_map is not None:
             if cname not in kiwi_component_map:
                 continue
-            
+
             cname = kiwi_component_map[cname]
             
         assert len(cname) == 1
