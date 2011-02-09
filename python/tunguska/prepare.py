@@ -230,6 +230,8 @@ def prepare(config, kiwi_config, rapid_config, event_names):
         
         config.event_name = event_name
         
+        override_event = None
+
         sw = util.Stopwatch()
         if config.has('seed_volume'):
             try:
@@ -239,6 +241,7 @@ def prepare(config, kiwi_config, rapid_config, event_names):
                 continue
             
             fne = config.path('seed_volume') + '.event'
+            
             if os.path.exists(fne):
                 override_event = model.Event(load=fne)
                

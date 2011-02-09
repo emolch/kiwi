@@ -18,7 +18,7 @@ class EventDumpAccess(eventdata.EventDataAccess):
         
         self._dirpath = dirpath
         self._pile = pile.Pile()
-        self._pile.add_files(util.select_files([self._dirpath], regex=r'raw-[^/]+\.mseed$'))
+        self._pile.load_files(util.select_files([self._dirpath], regex=r'raw-[^/]+\.mseed$'))
         
     def get_restitution(self, tr, allowed_methods):
         
