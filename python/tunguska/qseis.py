@@ -1,15 +1,17 @@
 
 from StringIO import StringIO
 import numpy as num
-import subprocess, logging, shutil, os, copy, sys, math, datetime, time
+import logging, shutil, os, copy, sys, math, datetime, time
 import gmtpy
 
 from tempfile import mkdtemp
+from subprocess import Popen, PIPE
 from os.path import join as pjoin
 from pyrocko import trace, io, util
 from tunguska.phase import Phase
 from tunguska.gfdb import Gfdb
 from pyrocko.moment_tensor import MomentTensor, symmat6
+
 
 km = 1000.
 
@@ -40,7 +42,7 @@ def gfdb_redeploy(in_db_path, out_db_path):
     out_db = Gfdb( out_db_path )
     
     cmd = [str(x) for x in ['gfdb_redeploy', in_db_path, out_db_path ]]
-    p = subprocess.Popen( cmd, stdin=subprocess.PIPE )
+    p = Popen( cmd, stdin=PIPE )
     
     for ix in xrange(in_db.nx):
         x = in_db.firstx + ix * in_db.dx
@@ -375,14 +377,15 @@ class QSeisConfig:
 
         return template % d
         
+class QSeisError(Exception):
+    pass
         
 class QSeisRunner:
     
-    def __init__(self, tmp=None, ignore_output=True):
+    def __init__(self, tmp=None):
         self.tempdir = mkdtemp(prefix='qseisrun', dir=tmp)
         self.program = program_bins['qseis']
         self.config = None
-        self.ignore_output = ignore_output
     
     
     def run(self, config):
@@ -392,26 +395,38 @@ class QSeisRunner:
                 
         f = open(input_fn, 'w')
         
-        f.write( str(config) % { 'tempdir': self.tempdir } )
+        qseis_input = str(config) % { 'tempdir': self.tempdir }
+        f.write( qseis_input )
         f.close()
         program = self.program
         
         old_wd = os.getcwd()
         os.chdir(self.tempdir)
         
-        if self.ignore_output:
-            ignore = open('/dev/null','w')
-        else:
-            ignore = None
-        proc = subprocess.Popen(program, stdin=subprocess.PIPE, stdout=ignore)
-        proc.stdin.write('%s\n' % input_fn)
-        proc.stdin.close()
-        proc.wait()
-        if ignore is not None:
-            ignore.close()
-        if proc.returncode != 0:
-            raise Exception('%s crashed!' % program)
-            
+        try:
+            proc = Popen(program, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+        except OSError:
+            os.chdir(old_wd)
+            raise QSeisError('could not start qseis: "%s"' % program)
+        
+        (qseis_output, qseis_error) = proc.communicate('input\n')
+        
+        if proc.returncode != 0 or qseis_error:
+            os.chdir(old_wd)
+            raise QSeisError('''===== qseis input =====
+%s
+
+==== qseis output ====
+%s
+ 
+==== qseis error ====
+%s
+
+non-zero exit status from qseis (called as "%s")''' % (qseis_input, qseis_output, qseis_error, program))
+        
+        self.qseis_output = qseis_output
+        self.qseis_error = qseis_error
+        
         os.chdir(old_wd)
         
     def get_traces(self):
@@ -502,7 +517,7 @@ class GFDBBuilder:
             args = [ str(config[k]) for k in 'nchunks nx nz ng dt dx dz firstx firstz'.split() ]
         ignore = open('/dev/null','w')
         fns = []
-        proc = subprocess.Popen([self.gfdb_build_program, database]+args, stdin=subprocess.PIPE, stdout=ignore)
+        proc = Popen([self.gfdb_build_program, database]+args, stdin=PIPE, stdout=ignore)
         if traces is not None:
             for itr, tr in enumerate(traces):
                 fn = pjoin(self.tempdir, '%i.mseed' % itr)
@@ -535,7 +550,7 @@ class GFDBBuilder:
         if self.extra_traces_dir is None: return
         
         for tr in traces:
-            fn = pjoin(self.extra_traces_dir, 'x%08i.z%08i.g%i.mseed' % (int(tr.x),int(tr.z),tr.ig) )
+            fn = pjoin(self.extra_traces_dir, 'x%08i.z%08i.g%02i.mseed' % (int(tr.x),int(tr.z),tr.ig) )
             tr.save(fn)
     
     def all_depths(self):
@@ -620,6 +635,12 @@ class QSeisGFDBBuilder(GFDBBuilder):
             (MomentTensor( m=symmat6(0,0,0,0,1,1) ), {'r': (2, +1), 't': (5, +1), 'z': (7, +1) }),
             (MomentTensor( m=symmat6(0,0,1,0,0,0) ), {'r': (3, +1),               'z': (8, +1) }),
         ]
+        
+        if gfdb_config.ng == 10:
+            self.gfmapping.append(
+                (MomentTensor( m=symmat6(0,1,0,0,0,0) ), {'r': (9, +1),               'z': (10, +1) }),
+            )
+        
         self.ignore_output = ignore_output
 
     def work_block(self, firstx, lastx, nx, z):

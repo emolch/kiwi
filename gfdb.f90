@@ -56,7 +56,7 @@ module gfdb
         integer :: ichunk ! this chunks number
         integer :: nxc = 0 ! number of receiver-distances in this chunk
         integer :: nz = 0  ! number of source depths
-        integer :: ng = 0  ! number of greens functions (or elementary seismograms) (=8)
+        integer :: ng = 0  ! number of greens functions (or elementary seismograms) (8/10 ff/nf)
         
         integer :: nipx = 1       ! total traces / real traces
                                   ! (increment between 2 non-interpolated traces)
@@ -113,7 +113,7 @@ module gfdb
         integer :: nxc = 0     ! wanted number of receiver-distances per chunk
                                ! (nxc of last chunk differs!)
         integer :: nz  = 0     ! number of source depths 
-        integer :: ng  = 0     ! number of greens functions (= 8)
+        integer :: ng  = 0     ! number of greens functions (= 8 or 10)
         
         integer :: nipx = 1    ! total traces / real traces
                                ! (increment between 2 non-interpolated traces)

@@ -52,7 +52,7 @@ module seismogram
         real*8 :: azi_orig, bazi_orig, dist_orig, lambda
         real :: dnorth, deast
         real, dimension(6) :: m
-        real, dimension(5) :: f
+        real, dimension(6) :: f
         integer :: icentroid, i
         integer, dimension(2) :: ix,iz
         real :: depth, time
@@ -180,7 +180,12 @@ module seismogram
                     call gfdb_get_trace_bilin( greensf,ix,iz,3, dix, diz, tracep )
                     if (.not. associated(tracep)) cycle
                     call trace_multiply_add( tracep, displacement_temp(1), f(3), rtraceshift_=rshift )
-                    
+                    if (greensf%ng == 10) then
+                        call gfdb_get_trace_bilin( greensf,ix,iz,9, dix, diz, tracep )
+                        if (.not. associated(tracep)) cycle
+                        call trace_multiply_add( tracep, displacement_temp(1), f(6), rtraceshift_=rshift )
+                    end if
+
                     if (allocated(displacement_temp(2)%data) ) &
                         displacement_temp(2)%data(:) = 0.
                     call gfdb_get_trace_bilin( greensf,ix,iz,4, dix, diz, tracep )
@@ -214,6 +219,11 @@ module seismogram
                     call gfdb_get_trace_bilin( greensf,ix,iz,3, dix, diz, tracep )
                     if (.not. associated(tracep)) cycle
                     call trace_multiply_add( tracep, displacement_ar(1), f(3), rtraceshift_=rshift )
+                    if (greensf%ng == 10) then
+                        call gfdb_get_trace_bilin( greensf,ix,iz,9, dix, diz, tracep )
+                        if (.not. associated(tracep)) cycle
+                        call trace_multiply_add( tracep, displacement_ar(1), f(6), rtraceshift_=rshift )
+                    end if
                     
                     call gfdb_get_trace_bilin( greensf,ix,iz,4, dix, diz, tracep )
                     if (.not. associated(tracep)) cycle
@@ -236,6 +246,13 @@ module seismogram
                 call gfdb_get_trace_bilin( greensf,ix,iz,8, dix, diz, tracep )
                 if (.not. associated(tracep)) cycle
                 call trace_multiply_add( tracep, receiver%displacement(jd), f(3)*sd, rtraceshift_=rshift )
+                
+                if (greensf%ng == 10) then
+                    call gfdb_get_trace_bilin( greensf,ix,iz,10, dix, diz, tracep )
+                    if (.not. associated(tracep)) cycle
+                    call trace_multiply_add( tracep, receiver%displacement(jd), f(6)*sd, rtraceshift_=rshift )
+                end if
+
             end if
         end do
 
@@ -303,7 +320,7 @@ module seismogram
     
         real, intent(in) :: azimuth
         real, intent(in), dimension(:) :: m    ! (6)
-        real, intent(out), dimension(:) :: f   ! (5)
+        real, intent(out), dimension(:) :: f   ! (6)
         
         real :: sa, ca, s2a, c2a
         
@@ -317,6 +334,7 @@ module seismogram
         f(3) = m(3)
         f(4) = 0.5*(m(2)-m(1))*s2a + m(4)*c2a
         f(5) = m(6)*ca - m(5)*sa
+        f(6) = m(1)*sa**2 + m(2)*ca**2 - m(4)*s2a   ! needed by near field terms
     
     end subroutine 
     

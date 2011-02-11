@@ -56,7 +56,7 @@ OBJECTS = $(SRCS:.f90=.o)
 
 TARGETS = eulermt source_info minimizer \
           gfdb_build gfdb_extract gfdb_redeploy gfdb_info gfdb_specialextract \
-          gfdb_build_ahfull differential_azidist eikonal_benchmark
+          gfdb_build_ahfull differential_azidist eikonal_benchmark crust
 
 TESTS_SRCS := $(shell ls test_*.f90)
 TESTS = $(TESTS_SRCS:.f90=)
@@ -154,6 +154,9 @@ differential_azidist : $(OBJECTS) differential_azidist.o
 	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
 
 eikonal_benchmark : $(OBJECTS) eikonal_benchmark.o
+	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
+
+crust : $(OBJECTS) crust.o
 	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
 
 
