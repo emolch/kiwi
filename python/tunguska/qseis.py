@@ -81,8 +81,8 @@ class QSeisLayeredModel:
             
     def set_model(self, depth, vp,vs, density, qp, qs):
         
-        self.data = num.array((len(depth),6), dtype=num.float)
-        self.data[:,0] = depths
+        self.data = num.zeros((len(depth),6), dtype=num.float)
+        self.data[:,0] = depth
         self.data[:,1] = vp
         self.data[:,2] = vs
         self.data[:,3] = density
@@ -625,7 +625,7 @@ class GFDBBuilder:
 
 
 class QSeisGFDBBuilder(GFDBBuilder):
-    def __init__(self, partial_db_path, output_db_path, gfdb_config, block_nx, qseis_config, cutting=None, extra_traces_dir=None, tag='', tmp=None, ignore_output=True):
+    def __init__(self, partial_db_path, output_db_path, gfdb_config, block_nx, qseis_config, cutting=None, extra_traces_dir=None, tag='', tmp=None ):
         GFDBBuilder.__init__(self, partial_db_path, output_db_path, gfdb_config, block_nx, extra_traces_dir=extra_traces_dir, tmp=tmp)
         self.qseis_config = qseis_config
         self.tag = tag
@@ -636,17 +636,15 @@ class QSeisGFDBBuilder(GFDBBuilder):
             (MomentTensor( m=symmat6(0,0,1,0,0,0) ), {'r': (3, +1),               'z': (8, +1) }),
         ]
         
-        if gfdb_config.ng == 10:
+        if gfdb_config['ng'] == 10:
             self.gfmapping.append(
                 (MomentTensor( m=symmat6(0,1,0,0,0,0) ), {'r': (9, +1),               'z': (10, +1) }),
             )
         
-        self.ignore_output = ignore_output
-
     def work_block(self, firstx, lastx, nx, z):
         traces = []
         have_gfs = False
-        runner = QSeisRunner(tmp=self.tmp, ignore_output=self.ignore_output)
+        runner = QSeisRunner(tmp=self.tmp)
         for mt, gfmap in self.gfmapping:
             
             conf = self.qseis_config.copy()
@@ -702,7 +700,7 @@ class QSeisGFDBBuilder(GFDBBuilder):
                 nzdig = int(math.log(self.gfdb_config['nz'])/math.log(10.))+1
                 xtemp = '%%0%ii' % nxdig
                 ztemp = '%%0%ii' % nzdig
-                tr.set_codes(network=ztemp % iz, station=xtemp % ix, location=self.tag, channel='%i' % ig)
+                tr.set_codes(network=ztemp % iz, station=xtemp % ix, location=self.tag, channel='%02i' % ig)
                 if ix < self.gfdb_config['nx']:
                     traces.append( GFTrace(x,z,ig, tr) )
             
