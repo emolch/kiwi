@@ -124,7 +124,7 @@ def event_names_from_pathes(base_config):
             event_names.append(m.group(1))
     return event_names
             
-def wilber_pull(config, which='first', force=False, onlylist=False):
+def wilber_pull(config, which='first', force=False, onlylist=False, specific=None):
     
     r = GlobalDataRequest(
         seed_volume_tmpl    = config.path('seed_volume'),
@@ -138,14 +138,22 @@ def wilber_pull(config, which='first', force=False, onlylist=False):
         email               = config.email,
         wanted_channels     = config.channels)
         
-    if config.has('event_sorting'):
-        sorting = config.event_sorting
+    tmin, tmax = config.timerange('time_range')
+        
+    if specific:
+        tev = util.ctimegm(specific)
+        tmin = tev - 3600
+        tmax = tev + 3600
+        sorting = lambda a,b: cmp( abs(a.time-tev), abs(b.time-tev) )
     else:
-        # by default get newest event first
-        sorting = lambda a,b: cmp(b.time, a.time)
+        if config.has('event_sorting'):
+            sorting = config.event_sorting
+        else:
+            # by default get newest event first
+            sorting = lambda a,b: cmp(b.time, a.time)
         
     if onlylist:
-        return r.pending_events(config.timerange('time_range'), sorting, force=force)
+        return r.pending_events((tmin,tmax), sorting, force=force)
     
     events = []
     while True:
@@ -154,7 +162,7 @@ def wilber_pull(config, which='first', force=False, onlylist=False):
             xwhich = which
         
         ev = r.download_next_event_in_range(
-                config.timerange('time_range'), 
+                (tmin, tmax), 
                 sorting,
                 force=force,
                 which=xwhich)
@@ -330,6 +338,12 @@ parser.add_option('--pending',
     default=False,
     help='list events to be pulled')
     
+parser.add_option('--specific',
+    action='store',
+    dest='specific',
+    help='pull specific event, closest to "YYYY-MM-DD HH:MM:SS"'
+)
+
 (options, args) = parser.parse_args()
 
 util.setup_logging('autokiwi', options.loglevel)
@@ -406,7 +420,7 @@ try:
             die('No wilber nor edump configuration found\n(using config from file "%s".)' % (e, config_filename))
             
         if wilber_config:
-            event_names = wilber_pull(wilber_config, which=pullwhich, force=options.force, onlylist=options.pending)
+            event_names = wilber_pull(wilber_config, which=pullwhich, force=options.force, onlylist=options.pending, specific=options.specific)
             
         elif edump_config:
             event_names = edump_pull(edump_config, which=pullwhich, force=options.force, onlylist=options.pending)

@@ -402,7 +402,8 @@ class Step:
                 rec.weight = mm_conf['receiver_weights'][irec]
             else:
                 rec.weight = 1.0
-            
+        
+        self.dump( source, 'snapshot_source_%s' % ident )
         self.dump( receivers, 'snapshot_%s' % ident )
         self.dump( self.seismosizer.get_source_location(), 'snapshot_source_location_%s' % ident )
         
@@ -424,6 +425,9 @@ class Step:
 
     def get_snapshot_source_infos(self, ident, run_id='current'):
         return self.load( ident='source_infos_%s' % ident, run_id=run_id)
+
+    def get_snapshot_source(self, ident, run_id='current'):
+        return self.load( ident='snapshot_source_%s' % ident, run_id=run_id)
 
     def dump(self, object, ident, run_id='incomplete'):
         rundir = self.make_rundir_path(run_id)
@@ -781,11 +785,12 @@ class Shifter(Step):
 class ExtConfigurator(Step):
     
     def __init__(self, workdir, name, generate=('filter', 'constraining_planes', 
-                    'bord_radius_range', 'nukl_shift_x_range', 'nukl_shift_y_range' ), size_factor=4000.):
+                    'bord_radius_range', 'nukl_shift_x_range', 'nukl_shift_y_range' ), size_factor=4000., steps=5.):
         Step.__init__(self, workdir, name)
         self.required |= Step.inner_misfit_method_params | set(('depth', 'rise_time'))
         self.generate = generate
         self.size_factor = size_factor
+        self.steps = steps
         
     def work(self, **kwargs):
         self.pre_work(False)
@@ -803,13 +808,13 @@ class ExtConfigurator(Step):
 
         maxradius = self.size_factor*rise_time
         if 'bord_radius_range' in self.generate:
-            oc.bord_radius_range     = 0., maxradius, maxradius/5.
+            oc.bord_radius_range     = 0., maxradius, maxradius/self.steps
         
         if 'nukl_shift_x_range' in self.generate:
-            oc.nukl_shift_x_range    = -maxradius, maxradius, maxradius/5.
+            oc.nukl_shift_x_range    = -maxradius, maxradius, maxradius/self.steps
         
         if 'nukl_shift_y_range' in self.generate:
-            oc.nukl_shift_y_range    = -maxradius, maxradius, maxradius/5.
+            oc.nukl_shift_y_range    = -maxradius, maxradius, maxradius/self.steps
 
         if 'constraining_planes' in self.generate:
             cp = ic['constraining_planes']
@@ -821,12 +826,14 @@ class ExtConfigurator(Step):
 
 class ParamTuner(Step):
      
-    def __init__(self, workdir, sourcetype='eikonal', params=['time'], name=None, xblacklist_level=None, dump_processing='filtered'):
+    def __init__(self, workdir, sourcetype='eikonal', params=['time'], name=None, 
+            xblacklist_level=None, dump_processing='filtered', ref_source_from=None):
         if name is None: name = '-'.join(params)+'-tuner'
         Step.__init__(self, workdir, name, dump_processing)
         self.sourcetype = sourcetype
         self.params = params
         self.xblacklist_level = xblacklist_level
+        self.ref_source_from = ref_source_from
         
         self.required |= Step.outer_misfit_method_params | Step.inner_misfit_method_params \
                         | set([param+'_range' for param in self.params]) \
@@ -866,8 +873,14 @@ class ParamTuner(Step):
             
         if search or forward: self.setup_inner_misfit_method()
         if search:
+            if self.ref_source_from is not None:
+                step, ident = self.ref_source_from
+                ref_source = step.get_snapshot_source(ident)
+            else:
+                ref_source = None
+            
             self.setup_inner_misfit_method()
-            finder = gridsearch.MisfitGrid( base_source, param_values=grid_def )
+            finder = gridsearch.MisfitGrid( base_source, param_values=grid_def, ref_source=ref_source)
             finder.compute(seis)
         else:
             finder = self.load(self.stepname, run_id=run_id)

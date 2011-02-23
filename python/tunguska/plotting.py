@@ -631,8 +631,7 @@ def draw_rupture(gmt, widget, source_infos, axes, view='rupture-plane', source_l
         
     dark_color = '%g/%g/%g' % gmtpy.tango_colors['aluminium6']
     gmt.makecpt( I=True, C=rupture_cpt, Z=True, out_filename=cptfile, *scaler.T())
-
-    if len(ruptime[0]) > 3:
+    if len(ruptime[0]) > 4:
         gmt.triangulate(in_columns=ruptime, G=grdfile, I=inc_interpol, out_discard=True, *R )
         gmt.surface(in_columns=ruptime, G=grdfile_extra, I=inc_interpol_extra, T=0.3, out_discard=True, *R )
         #gmt.triangulate(in_columns=ruptime, G=grdfile_extra, I=inc_interpol_extra, out_discard=True, *R )
