@@ -8,7 +8,7 @@ import progressbar
 import math
 from os.path import join as pjoin
 import orthodrome
-import moment_tensor
+import pyrocko.moment_tensor as moment_tensor
 from pyrocko.moment_tensor import moment_to_magnitude
 from plotting_traces import multi_seismogram_plot2
 
