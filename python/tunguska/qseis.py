@@ -495,7 +495,6 @@ class GFDBBuilder:
         self.block_nx = block_nx
         self.gfdb_build_program = program_bins['gfdb_build']
         self.tmp = tmp
-        self.tempdir = mkdtemp(prefix='gfdbbuilder', dir=tmp)
         self.extra_traces_dir = extra_traces_dir
         
         
@@ -515,12 +514,14 @@ class GFDBBuilder:
         args = []
         if config is not None:
             args = [ str(config[k]) for k in 'nchunks nx nz ng dt dx dz firstx firstz'.split() ]
+            
+        tempdir = mkdtemp(prefix='gfdbbuilder', dir=self.tmp)
+
         ignore = open('/dev/null','w')
-        fns = []
         proc = Popen([self.gfdb_build_program, database]+args, stdin=PIPE, stdout=ignore)
         if traces is not None:
             for itr, tr in enumerate(traces):
-                fn = pjoin(self.tempdir, '%i.mseed' % itr)
+                fn = pjoin(tempdir, '%i.mseed' % itr)
                 tr.save(fn)
                 proc.stdin.write("%e %e %i '%s'\n" % (tr.x, tr.z, tr.ig, fn))
             
@@ -528,11 +529,10 @@ class GFDBBuilder:
         proc.wait()
         ignore.close()
         
-        for fn in fns:
-            os.remove(fn)
+        shutil.rmtree(tempdir)
         
         if proc.returncode != 0:
-            raise Exception('failed to create gfdb')
+            raise Exception('running gfdb_build failed.')
         
     def create_partial_db(self, z):
         config = self.gfdb_config.copy()
@@ -589,7 +589,6 @@ class GFDBBuilder:
             logging.info( 'Block processing time: %s' % str(datetime.timedelta(seconds=time.time()-tstart)))
             
         logging.info( 'Done with work for source depth at %g km' % (z/km) )
-
             
     def work_block(self, firstx, lastx, nx, z):
         # dummy implementation, should be overloaded in subclass
@@ -621,7 +620,7 @@ class GFDBBuilder:
     
     def __del__(self):
         import shutil
-        shutil.rmtree(self.tempdir)
+       
 
 
 class QSeisGFDBBuilder(GFDBBuilder):
