@@ -9,7 +9,7 @@ svn export $repos/kiwi/trunk kiwi > exportlog || exit 1
 tail -n 1 exportlog > kiwi/VERSION
 date >> kiwi/VERSION
 version=`cat exportlog | tail -n 1 | tr -d -c '[0-9]'`
-svn log $repos/kinherd/kiwi/trunk > kiwi/CHANGES
+svn log $repos/kiwi/trunk > kiwi/CHANGES
 mv kiwi kiwi-r$version
 tar -czvf kiwi-r$version.tar.gz kiwi-r$version
 
