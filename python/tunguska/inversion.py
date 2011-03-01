@@ -6,7 +6,7 @@ import config
 import source as source_model
 import util
 import plotting
-import moment_tensor
+from pyrocko import moment_tensor
 import orthodrome
 import gridsearch
 import filtering

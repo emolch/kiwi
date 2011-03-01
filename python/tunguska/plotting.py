@@ -9,7 +9,7 @@ import math
 from os.path import join as pjoin
 import orthodrome
 import moment_tensor
-from moment_tensor import moment_to_magnitude
+from pyrocko.moment_tensor import moment_to_magnitude
 from plotting_traces import multi_seismogram_plot2
 
 

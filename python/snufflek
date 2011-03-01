@@ -7,7 +7,7 @@ from optparse import OptionParser
 from struct import pack
 
 import vtk
-from QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
+from tunguska.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 
 import pyrocko.model
 import pyrocko.pile

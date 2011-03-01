@@ -21,11 +21,11 @@ import sys
 import vtk
 import time
 import signal
-import ugly_minimizer as minimizer
+from tunguska import ugly_minimizer as minimizer
 
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
-from QVTKRenderWindowInteractor import *
+from tunguska.QVTKRenderWindowInteractor import *
 
 class MyValueEdit(QLineEdit):
 

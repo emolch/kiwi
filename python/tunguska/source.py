@@ -5,7 +5,7 @@ import re
 from subprocess import Popen, PIPE
 from util import gform
 import config
-import moment_tensor
+from pyrocko import moment_tensor
 import math
 import numpy as num
 
