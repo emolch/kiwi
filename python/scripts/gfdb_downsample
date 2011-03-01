@@ -74,7 +74,6 @@ if not os.path.isfile( out_db_path + '.index' ):
 
 out_db = Gfdb( out_db_path )
 
-n = 8
 (b, a) = signal.cheby1(n, 0.05, 0.8/tratio)
 
 for ix in xrange(out_db.nx):
