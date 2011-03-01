@@ -36,7 +36,11 @@ def convert_graph(in_filename, out_filename):
     if backticks(['which', 'pdftoppm']).strip():
         inter_filename = out_filename.replace('.png','.oversized')
         call(['pdftoppm', in_filename, inter_filename])
-        call(['convert', inter_filename+'-1.ppm', '-resize', '50%', out_filename])
+        for candidate in ('-000001.ppm', '-1.ppm'):   # version-dependent grrr.
+            fn = inter_filename+candidate
+            if os.path.exists(fn):
+                call(['convert', fn, '-resize', '50%', out_filename])
+                break
     else:
         logging.info("Using convert; install pdftoppm from poppler for better quality PNG output.")
         call(['convert', in_filename, out_filename])
