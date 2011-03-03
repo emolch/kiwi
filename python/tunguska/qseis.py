@@ -659,7 +659,6 @@ class QSeisGFDBBuilder(GFDBBuilder):
             conf.source_type = 1
             conf.source_vals = [m[0,0], m[1,1], m[2,2], m[0,1], m[1,2], m[0,2]]
             conf.source_depth_km = z/km
-            conf.receiver_depth_km = 0.0
             conf.sw_equidistant = 0                # 1 is eqdist, 0 if not
             conf.sw_d_unit = 1                     # 1 is km,  0 is deg
             conf.no_distances = nx+1
