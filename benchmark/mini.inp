@@ -1,0 +1,27 @@
+
+
+
+
+
+set_database            /s3/gfdb/gemini-iasp91-20000km/db
+set_effective_dt        0.5
+set_local_interpolation bilinear
+set_receivers           izmit-receivers.table
+set_source_location     40.75 29.86 0
+set_source_params       bilateral 0 0 0 10000 2e20  91 87 164  0  20000 10000 9000  3500 2
+output_seismograms      izmit-seismogram  mseed synthetics plain
+set_source_params       bilateral 0 0 0 10000 2e20  92 87 164  0  20000 10000 9000  3500 2
+output_seismograms      izmit-seismogram  mseed synthetics plain
+set_source_params       bilateral 0 0 0 10000 2e20  91 87 164  0  20000 10000 9000  3500 2
+output_seismograms      izmit-seismogram  mseed synthetics plain
+set_source_params       bilateral 0 0 0 10000 2e20  92 87 164  0  20000 10000 9000  3500 2
+output_seismograms      izmit-seismogram  mseed synthetics plain
+set_source_params       bilateral 0 0 0 10000 2e20  91 87 164  0  20000 10000 9000  3500 2
+output_seismograms      izmit-seismogram  mseed synthetics plain
+set_source_params       bilateral 0 0 0 10000 2e20  92 87 164  0  20000 10000 9000  3500 2
+output_seismograms      izmit-seismogram  mseed synthetics plain
+set_source_params       bilateral 0 0 0 10000 2e20  91 87 164  0  20000 10000 9000  3500 2
+output_seismograms      izmit-seismogram  mseed synthetics plain
+set_source_params       bilateral 0 0 0 10000 2e20  92 87 164  0  20000 10000 9000  3500 2
+output_seismograms      izmit-seismogram  mseed synthetics plain
+
