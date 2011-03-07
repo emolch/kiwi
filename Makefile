@@ -1,10 +1,13 @@
 # makefile for kiwi core tools
 
 SHELL = /bin/sh
-MAKEDEPEND = ./fdepend.pl -g -d -i hdf5.mod
-
+MAKEDEPEND = ./fdepend.pl -g -d -i hdf5.mod -i omp_lib.mod
+OBJDEPEND = ./objdepend.pl
 # compiler
 FORTRANC := g95
+
+# preset (use 'fast' or 'debug')
+PROFILE := fast
 
 # host infos
 MACHINE := $(shell ./hostinfo.pl --machine)
@@ -32,45 +35,47 @@ LIBFFTW = -lfftw3f
 
 LIBSMINPACK = -Lsminpack -lsminpack
 
-# compiler and linker flag defaults
-CFLAGS =  $(INCMSEED) $(INCHDF) $(INCSAC) $(INCFFTW)
-LDFLAGS =  $(LIBMSEED) $(LIBSAC)  $(LIBHDF) $(LIBSMINPACK) $(LIBFFTW)
 
-# use the Makefile.local if you want to append to FORTRANC, CFLAGS or LDFLAGS
-# some abbreviations that can be used to append to cflags
-# put CFLAGS += $(CDEBUG) or CFLAGS += $(CFAST) to Makefile.local
-CFAST = -O3
-CDEBUG_IFORT = -g -warn all -ftrapuv -debug all
-CDEBUG_G95 = -g -Wall  -fbounds-check -ftrace=full
-CDEBUG = $(if $(filter ifort, $(FORTRANC)), \
-    $(CDEBUG_IFORT), \
-    $(CDEBUG_G95) )
+#### Compiler and linker flag defaults -----------------------------------------
+
+CFLAGS =  $(INCMSEED) $(INCHDF) $(INCSAC) $(INCFFTW) \
+	      $(CFLAGS_$(FORTRANC)_$(PROFILE))  #
+LDFLAGS = $(LIBMSEED) $(LIBSAC)  $(LIBHDF) $(LIBSMINPACK) $(LIBFFTW) \
+          $(LDFLAGS_$(FORTRANC)_$(PROFILE)) #
+
+
+#### Compiler specific settings ------------------------------------------------
+
+OMPLIB_ifort        = 
+CFLAGS_ifort_fast   = -openmp -fast -parallel
+LDFLAGS_ifort_fast  = -openmp
+
+CFLAGS_ifort_debug  = -openmp -g -warn all -ftrapuv -debug all
+LDFLAGS_ifort_debug = -openmp
+
+
+OMPLIB_g95 	        = dummy_omp_lib/omp_lib.o
+CFLAGS_g95_fast     = -Idummy_omp_lib -O3
+LDFLAGS_g95_fast    = 
+
+CFLAGS_g95_debug    = -g -warn all -ftrapuv -debug all
+LDFLAGS_g95_debug   = 
+
+#### ---------------------------------------------------------------------------
 
 -include Makefile.local
 
 # communicate compiler settings to submake (for sminpack)
-export CFLAGS FORTRANC
+export FORTRANC
 
 SRCS := $(shell ls *.f90)
-OBJECTS = $(SRCS:.f90=.o)
 
-TARGETS = eulermt source_info minimizer \
-          gfdb_build gfdb_extract gfdb_redeploy gfdb_info gfdb_specialextract \
-          gfdb_build_ahfull differential_azidist eikonal_benchmark crust
+TARGETS := eulermt source_info minimizer gfdb_build gfdb_extract gfdb_redeploy \
+		  gfdb_info gfdb_specialextract gfdb_build_ahfull differential_azidist \
+		  eikonal_benchmark crust
 
 TESTS_SRCS := $(shell ls test_*.f90)
 TESTS = $(TESTS_SRCS:.f90=)
-
-OBJECTS = better_varying_string.o varying_string_getarg.o constants.o util.o \
-          geometry.o crust2x2.o \
-          heap.o eikonal.o euler.o orthodrome.o discrete_source.o gfdb.o receiver.o \
-          piecewise_linear_function.o parameterized_source.o source.o source_moment_tensor.o \
-          source_bilat.o source_circular.o source_point_lp.o source_eikonal.o \
-          source_all.o sparse_trace.o \
-          seismogram_io.o unit.o seismogram.o read_line.o read_table.o \
-          comparator.o elseis_oo.o elseis.o differentiation.o integration.o interpolation.o \
-          minimizer_engine.o
-          
 
 .PHONY : clean clean-deps tests targets all check install uninstall
 
@@ -78,7 +83,7 @@ OBJECTS = better_varying_string.o varying_string_getarg.o constants.o util.o \
 .SUFFIXES :
 .SUFFIXES : .f90 .o .d .mod
 
-all : check targets 
+all : targets 
 
 $(TARGETS) $(TESTS) : .sminpackdone .mseedsimple
 
@@ -88,7 +93,11 @@ $(TARGETS) $(TESTS) : .sminpackdone .mseedsimple
 .mseedsimple :
 	$(MAKE) -C mseed/ && touch .mseedsimple
 
+dummy_omp_lib/omp_lib.mod dummy_omp_lib/omp_lib.o : Makefile.local Makefile dummy_omp_lib/omp_lib.f90
+	cd dummy_omp_lib ; $(FORTRANC) -c omp_lib.f90 -o omp_lib.o 
+
 targets : $(TARGETS)
+
 
 install : targets
 	install -d $(bindir)
@@ -117,65 +126,36 @@ uninstall :
 
 tests : $(TESTS)
 
+printvars :
+	@echo FORTRANC = $(FORTRANC)
+	@echo CFLAGS = $(CFLAGS)
+	@echo LDFLAGS = $(LDFLAGS)
+
 check : tests
 	@for t in $(TESTS); do ./$$t ; done
 
-seismosizer : $(OBJECTS) seismosizer.o
-	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
 
-minimizer : $(OBJECTS) minimizer.o
-	$(FORTRANC) -o $@ $(OBJECTS) $@.o $(LDFLAGS)
-
-eulermt : $(OBJECTS) eulermt.o
-	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
-
-source_info : $(OBJECTS) source_info.o
-	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
-
-gfdb_build : $(OBJECTS) gfdb_build.o
-	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
-
-gfdb_build_ahfull : $(OBJECTS) gfdb_build_ahfull.o
-	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
-
-gfdb_extract : $(OBJECTS) gfdb_extract.o
-	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
-
-gfdb_specialextract : $(OBJECTS) gfdb_specialextract.o
-	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
-
-gfdb_redeploy : $(OBJECTS) gfdb_redeploy.o
-	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
-
-gfdb_info : $(OBJECTS) gfdb_info.o
-	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
-
-differential_azidist : $(OBJECTS) differential_azidist.o
-	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
-
-eikonal_benchmark : $(OBJECTS) eikonal_benchmark.o
-	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
-
-crust : $(OBJECTS) crust.o
-	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
+$(TARGETS) $(TESTS) : 
+	$(FORTRANC) $^ $(OMPLIB_$(FORTRANC)) $(LDFLAGS) -o $@
 
 
-# simple implicit link rule for the tests
-test_% : $(OBJECTS) test_%.o
-	$(FORTRANC) $(OBJECTS) $@.o $(LDFLAGS) -o $@
-
-# implicit rule for generating depfiles
+# implicit rules for generating depfiles
 %.d : %.f90
-	$(MAKEDEPEND) $<
-    
+	@$(MAKEDEPEND) $<
+	@echo determining dependencies for $<...
+
+progobjects.do : $(SRCS:.f90=.d)
+	@$(OBJDEPEND) $(TARGETS) $(TESTS) -- $(SRCS:.f90=.d) > $@
+	@echo determining dependencies for executables...
 
 # implicit rule for compiling
 %.o : %.f90
 	$(FORTRANC) -c $(CFLAGS) $<
 
-
 # include auto-created dependencies
--include $(SRCS:.f90=.d)
+
+-include progobjects.do
+-include $(SRCS:.f90=.d) 
 
 clean :
 	rm -f *.o *.mod $(TESTS) $(TARGETS) .sminpackdone .mseedsimple
@@ -183,4 +163,4 @@ clean :
 	$(MAKE) -C mseed/ clean
     
 clean-deps : clean
-	rm -f *.d
+	rm -f *.d *.do

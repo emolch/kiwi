@@ -33,7 +33,8 @@ module minimizer_engine
     use read_table
     use comparator
     use piecewise_linear_function
-    
+    use omp_lib
+
     implicit none
 
     private
@@ -767,13 +768,19 @@ module minimizer_engine
         
         call inform("calculating seismograms")
         nreceivers = size(receivers)
-        
+        !$omp parallel shared(tdsm, db, receivers) private(ireceiver)
+
+        !$omp do schedule(dynamic)
         do ireceiver=1,nreceivers
+            print *, omp_get_thread_num(), '/', omp_get_num_threads()   
             if (receivers(ireceiver)%enabled) then
                 call make_seismogram( tdsm, receivers(ireceiver), db, interpolate, xundersample, zundersample )
             end if
         end do
-        
+        !$omp end do
+
+        !$omp end parallel        
+
         seismograms_inited = .true.
         
     end subroutine

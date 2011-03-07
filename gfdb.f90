@@ -23,7 +23,7 @@ module gfdb
     use better_varying_string
     use hdf5
     use interpolation
-    
+    use omp_lib
     implicit none
 
     public
@@ -140,7 +140,7 @@ module gfdb
         
         type(t_chunk), dimension(:), allocatable :: chunks
         
-        type(t_trace), pointer :: interpolated_trace => null()
+        type(t_trace_p), dimension(:), allocatable :: interpolated_traces
 
         integer :: accessed_latest = 0
         integer :: accessed_earliest = 0
@@ -1074,10 +1074,13 @@ module gfdb
                       "("//ix//","//iz//","//ig//")")
             return
         end if
+        
         call gfdb_index_to_chunk( db, ix, ichunk, ixc )
         
+        !$omp critical
         call chunk_get_trace( db, db%chunks(ichunk), ixc,iz,ig, tracep )
-    
+        !$omp end critical
+
     end subroutine
     
     subroutine gfdb_get_trace_bilin( db, ix, iz, ig, dix, diz, tracep )
@@ -1096,6 +1099,7 @@ module gfdb
         
         type(t_trace), pointer  :: t00, t01, t10, t11
         integer, dimension(2)   :: span
+        integer                 :: iipt, nipt
 
         tracep => null()
         t00 => null()
@@ -1126,29 +1130,44 @@ module gfdb
         span(1) = min( t00%span(1), t01%span(1), t10%span(1), t11%span(1) )
         span(2) = max( t00%span(2), t01%span(2), t10%span(2), t11%span(2) )
       
-      ! prepare the global buffer trace which will be reused on first invocation
-        if (.not. associated( db%interpolated_trace ) ) then
-            allocate( db%interpolated_trace )
+      ! prepare the global buffer traces which will be reused on first invocation
+        if (.not. allocated( db%interpolated_traces )) then
+            nipt = omp_get_max_threads()
+            allocate( db%interpolated_traces(nipt) )
+            do iipt=1,nipt
+                db%interpolated_traces(iipt)%p => null()
+            end do
         end if
 
-        if ( trace_is_empty( db%interpolated_trace ) ) then
-            call trace_create_simple_nodata( db%interpolated_trace, span )
+        if (omp_get_num_threads() > size(db%interpolated_traces)) then
+            call die("number of threads exceeds assumed maximum number of threads")
+        end if
+
+        iipt = omp_get_thread_num()+1
+        
+        if (.not. associated( db%interpolated_traces(iipt)%p ) ) then
+            allocate( db%interpolated_traces(iipt)%p )
+        end if
+
+        tracep => db%interpolated_traces(iipt)%p
+
+        if ( trace_is_empty( tracep ) ) then
+            call trace_create_simple_nodata( tracep, span )
         else ! resize the contained buffer
             !!! relying on internals of trace_t here...
-            call resize( db%interpolated_trace%strips(1)%data, span(1), span(2)-span(1)+1 ) !!! relying on internals of trace_t ....
-            db%interpolated_trace%span(:) = span(:)
+            call resize( tracep%strips(1)%data, span(1), span(2)-span(1)+1 )
+            tracep%span(:) = span(:)
         end if
         
+
       ! summation
-        db%interpolated_trace%strips(1)%data(:) = 0.
+        tracep%strips(1)%data(:) = 0.
         
-        call trace_multiply_add_nogrow( t00, db%interpolated_trace%strips(1)%data, span, (1.-dix)*(1.-diz) )
-        call trace_multiply_add_nogrow( t01, db%interpolated_trace%strips(1)%data, span, (1.-dix)*diz )
-        call trace_multiply_add_nogrow( t10, db%interpolated_trace%strips(1)%data, span, dix*(1.-diz) )
-        call trace_multiply_add_nogrow( t11, db%interpolated_trace%strips(1)%data, span, dix*diz )
-        
-        tracep => db%interpolated_trace
-        
+        call trace_multiply_add_nogrow( t00, tracep%strips(1)%data, span, (1.-dix)*(1.-diz) )
+        call trace_multiply_add_nogrow( t01, tracep%strips(1)%data, span, (1.-dix)*diz )
+        call trace_multiply_add_nogrow( t10, tracep%strips(1)%data, span, dix*(1.-diz) )
+        call trace_multiply_add_nogrow( t11, tracep%strips(1)%data, span, dix*diz )
+          
     end subroutine
     
     subroutine chunk_get_trace( db, c, ixc,iz,ig, tracep )
@@ -1679,19 +1698,23 @@ module gfdb
     subroutine gfdb_close( db )
         
         type(t_gfdb), intent(inout) :: db
-        integer :: ichunk
+        integer :: ichunk, iipt
 
         if (.not. allocated(db%chunks)) return
         
         do ichunk=1,db%nchunks     
             call chunk_close(db, db%chunks(ichunk))
         end do
-
-        if (associated( db%interpolated_trace )) then
-            call trace_destroy( db%interpolated_trace )
-            deallocate( db%interpolated_trace )
+        if (allocated(db%interpolated_traces)) then
+            do iipt=1,size(db%interpolated_traces)
+                if (associated( db%interpolated_traces(iipt)%p )) then
+                    call trace_destroy( db%interpolated_traces(iipt)%p )
+                    deallocate( db%interpolated_traces(iipt)%p )
+                end if
+            end do
+            deallocate( db%interpolated_traces )
         end if
-
+       
     end subroutine
     
     subroutine chunk_open_read( db, c )
