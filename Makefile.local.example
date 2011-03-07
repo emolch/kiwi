@@ -1,19 +1,24 @@
 # Fortran 95 compiler:
-FORTRANC = g95
+FORTRANC = gfortran
 
 # Select compilation flag preset, or specify your own compilation flags
 PROFILE = fast
 
 
-# the following could be used to create a custom profile:
+# The following could be used to create a custom profile:
 #  PROFILE = custom
 #  CFLAGS_g95_custom = ...
 #  LDFLAGS_g95_custom = ...
 
 
-# Adjust to where HDF5 is installed
-INCHDF = -I/bonus/hdf5-$(FORTRANC)/include
-LIBHDF = -L/bonus/hdf5-$(FORTRANC)/lib -lhdf5_fortran -lhdf5 -lz
+# Adjust if HDF5 is installed at a custom location
+#INCHDF = -I/bonus/hdf5-$(FORTRANC)/include
+#LIBHDF = -L/bonus/hdf5-$(FORTRANC)/lib -lhdf5_fortran -lhdf5 -lz
+
+# Adjust if FFTW is installed at a custom location
+#INCFFTW = -I/usr/include
+#LIBFFTW = -L/usr -lfftw3f
+
 
 # Uncomment to disable SAC IO support to not depend on libsacio,
 # which currently is not available on 64 bit systems:

@@ -58,7 +58,6 @@ module seismogram
         real :: depth, time
         real :: cl, sl
         real :: rshift
-        real, dimension(:), allocatable :: rshifts
         type(t_trace), pointer :: tracep
         type(t_strip), dimension(2) :: displacement_temp
         type(t_strip), dimension(2) :: displacement_ar

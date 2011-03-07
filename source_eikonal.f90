@@ -293,7 +293,7 @@ module source_eikonal
       ! solve eikonal equation on a fine and rectangular grid
         call polygon_box( rupture_poly_rc, min_rc, max_rc )
         deltagrid = min(100.*shortest_doi/2.,4000.)
-        call psm_make_eikonal_grid( psm, min_rc, max_rc, deltagrid, rupture_poly, psm%egrid, ok )
+        call psm_make_eikonal_grid( psm, min_rc, max_rc, deltagrid, psm%egrid, ok )
         if (.not. ok) return
         
       ! determine optimal grid size  
@@ -401,14 +401,13 @@ module source_eikonal
         
     end function
 
-    function psm_initial_point_intolerant_rc( psm, borderline, ok )
+    function psm_initial_point_intolerant_rc( psm, ok )
 
       ! Get nucleation point.
       ! Indicates point outside of rupture area with ok=false.
       ! Coordinates returned are in rupture coordinates.
     
         type(t_psm), intent(in)     :: psm
-        type(t_polygon), intent(in) :: borderline
         logical, intent(out)        :: ok
         real, dimension(3)          :: psm_initial_point_intolerant_rc
         
@@ -435,12 +434,11 @@ module source_eikonal
     end function
     
     
-    subroutine psm_make_eikonal_grid( psm, min_rc, max_rc, approx_delta, borderline, grid, ok )
+    subroutine psm_make_eikonal_grid( psm, min_rc, max_rc, approx_delta, grid, ok )
     
         type(t_psm), intent(in) :: psm
         real, dimension(3), intent(in) :: min_rc, max_rc
         real, intent(in) :: approx_delta
-        type(t_polygon), intent(in) :: borderline
         type(t_eikonal_grid), intent(inout) :: grid
         logical, intent(out) :: ok
 
@@ -478,7 +476,7 @@ module source_eikonal
         
         !initial_point_rc = psm_initial_point_rc( psm, borderline )
         ! XXX
-        initial_point_rc = psm_initial_point_intolerant_rc( psm, borderline, ok )
+        initial_point_rc = psm_initial_point_intolerant_rc( psm, ok )
         if (.not. ok) return
         ! XXX
 
@@ -803,7 +801,7 @@ module source_eikonal
         write (unit,*) north, east, depth
         write (unit,*)
                 
-        initial_point_rc = psm_initial_point_intolerant_rc( psm, rupture_poly, ok )
+        initial_point_rc = psm_initial_point_intolerant_rc( psm, ok )
         initial_point = psm_rc_to_ned( psm, initial_point_rc )
         write (unit,"(a)") "nucleation-point"
         write (unit,*) initial_point, initial_point_rc(1:2)

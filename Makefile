@@ -61,6 +61,13 @@ LDFLAGS_g95_fast    =
 CFLAGS_g95_debug    = -g -warn all -ftrapuv -debug all
 LDFLAGS_g95_debug   = 
 
+OMPLIB_gfortran        =
+CFLAGS_gfortran_fast   = -fopenmp -O3
+LDFLAGS_gfortran_fast  = -fopenmp
+
+CFLAGS_gfortran_debug  = -fopenmp -g -Wall
+LDFLAGS_gfortran_debug = -fopenmp
+
 #### ---------------------------------------------------------------------------
 
 -include Makefile.local
@@ -136,7 +143,7 @@ check : tests
 
 
 $(TARGETS) $(TESTS) : 
-	$(FORTRANC) $^ $(OMPLIB_$(FORTRANC)) $(LDFLAGS) -o $@
+	$(FORTRANC) $(filter %.o,$^) $(OMPLIB_$(FORTRANC)) $(LDFLAGS) -o $@
 
 
 # implicit rules for generating depfiles

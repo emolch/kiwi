@@ -78,14 +78,12 @@ module gfdb_build_ahfull_
         real :: x, z
        
         real, dimension(3) :: r_location, s_location, rel_location
-        real*8 :: epiangle
         real :: tbegin_total, tend_total, d, tstf
         real, dimension(2)  :: tbegin, tend
         logical :: nfflag, ffflag
         real, dimension(:,:), allocatable :: seismograms
-        real, dimension(3,3) :: rotmat
         real :: firstarrival_p, lastarrival_p, firstarrival_s, lastarrival_s 
-        integer :: n,p,q, nsamples, itbegin, itend, nsamples2, jm,jp, i
+        integer :: n,p,q, nsamples, itbegin, itend
         integer :: nwindows, iwindow
                   
         read (unit=buffer,fmt=*,iostat=iostat) x, z,  nfflag, ffflag
@@ -281,7 +279,7 @@ program gfdb_build_ahfull
     
     implicit none
     
-    type(varying_string) :: basefn, string
+    type(varying_string) :: basefn
     integer              :: iostat, iline
     logical              :: ok
     character, parameter :: eol = char(10)

@@ -67,7 +67,7 @@ module gfdb_build_
         real, dimension(:), allocatable :: seismogram
         real(kind=8) :: toffset
         real :: deltat
-        integer :: iunit, ig, ifile, nfiles, ioffset, iostat, ix, iz, nerr
+        integer :: ig, ifile, nfiles, ioffset, iostat, ix, iz, nerr
         real :: x, z
         type(t_strip) :: conti
         type(t_trace) :: tr, trold, tr2

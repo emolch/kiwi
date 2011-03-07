@@ -561,6 +561,8 @@ module minimizer_wrappers
 
         real :: thickness
 
+        ok = line /= '' ! get rid of warning, that line is not used
+        
         answer = ''
         ok = .false.
         

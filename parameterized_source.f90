@@ -87,7 +87,7 @@ module parameterized_source
       ! caches last used grid dimensions; for example: (nx,ny,nt) for bilat source
         integer, dimension(:),allocatable :: grid_size
         
-        real 							  :: crustal_thickness_limit
+        real                              :: crustal_thickness_limit
         type(t_halfspace), dimension(:), allocatable :: constraints  ! not all source models respect these
         
         type(t_eikonal_grid)                         :: egrid         ! not all source models set these
@@ -128,8 +128,6 @@ module parameterized_source
     subroutine psm_set_default_constraints( self )
         
         type(t_psm), intent(inout)  :: self
-        
-        type(t_crust2x2_1d_profile) :: profile
         real :: thickness
         
         if (allocated(self%constraints)) deallocate(self%constraints)
@@ -199,9 +197,9 @@ module parameterized_source
     end subroutine
     
     subroutine psm_set_crustal_thickness_limit( self, thickness_limit )
-    	type(t_psm), intent(inout)      :: self
-    	real, intent(in) 				:: thickness_limit
-    	self%crustal_thickness_limit = thickness_limit
+        type(t_psm), intent(inout)      :: self
+        real, intent(in)                :: thickness_limit
+        self%crustal_thickness_limit = thickness_limit
         if ( crust2x2_loaded ) then
             call psm_set_default_constraints( self )
         end if
@@ -209,8 +207,8 @@ module parameterized_source
 
     subroutine psm_get_crustal_thickness( self, thickness )
 
-    	type(t_psm), intent(in)      :: self
-    	real, intent(out) 		     :: thickness
+        type(t_psm), intent(in)      :: self
+        real, intent(out)            :: thickness
 
         real                         :: vp, vs, vrho
         type(t_crust2x2_1d_profile)  :: profile
@@ -220,7 +218,7 @@ module parameterized_source
         if (self%crustal_thickness_limit > 0) then
             thickness = min(self%crustal_thickness_limit, thickness)
         end if
-    	
+        
     end subroutine
     
     subroutine psm_get_params( psm, params, normalized_  )
