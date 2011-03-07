@@ -36,19 +36,18 @@ module gfdb_build_ahfull_
     real, dimension(3,3) :: source_a = reshape((/1,1,0,1,0,0,0,0,0/),(/3,3/))
     real, dimension(3,3) :: source_b = reshape((/0,0,1,0,0,1,1,1,0/),(/3,3/))
     real, dimension(3,3) :: source_c = reshape((/0,0,0,0,0,0,0,0,1/),(/3,3/))
+    real, dimension(3,3) :: source_d = reshape((/0,0,0,0,1,0,0,0,0/),(/3,3/))
     real                 :: rho, alpha, beta
     type(elseis_t), save :: es
-    integer :: oversample
     integer :: traces_added = 0
 
     
   contains
   
-    subroutine set_database_material_stf( basefn, material_tab, stf_tab, oversample_ )
+    subroutine set_database_material_stf( basefn, material_tab, stf_tab )
         
         type(varying_string), intent(in) :: basefn
         real, dimension(:,:), intent(in) :: material_tab, stf_tab
-        integer, intent(in) :: oversample_
                 
         call gfdb_init(db, basefn)
         
@@ -58,10 +57,8 @@ module gfdb_build_ahfull_
         beta = material_tab(3,1)        
         call set_material( es, rho, alpha, beta )
       
-        oversample = oversample_
-        
       ! prepare stf
-        call set_stf( es, stf_tab(2,:), db%dt/oversample )
+        call set_stf( es, stf_tab(2,:), db%dt )
     
     end subroutine
      
@@ -85,7 +82,7 @@ module gfdb_build_ahfull_
         real :: tbegin_total, tend_total, d, tstf
         real, dimension(2)  :: tbegin, tend
         logical :: nfflag, ffflag
-        real, dimension(:,:), allocatable :: seismograms, seismograms2
+        real, dimension(:,:), allocatable :: seismograms
         real, dimension(3,3) :: rotmat
         real :: firstarrival_p, lastarrival_p, firstarrival_s, lastarrival_s 
         integer :: n,p,q, nsamples, itbegin, itend, nsamples2, jm,jp, i
@@ -95,15 +92,6 @@ module gfdb_build_ahfull_
         
         if (iostat == 0) then
             ok = .true.
-            
-          ! det locations of source, receiver and relative location
-          !  s_location(1) = 0
-          !  s_location(2) = 0
-          !  r_location(2) = 0
-          !  s_location(3) = z
-          !  epiangle = x/earthradius
-          !  r_location(1) = real( sin(epiangle)*earthradius )
-          !  r_location(3) = real( (1.-cos(epiangle))*earthradius )
           
             s_location(1) = 0.
             s_location(2) = 0.
@@ -116,10 +104,6 @@ module gfdb_build_ahfull_
             rel_location = r_location - s_location
             d = dist(s_location, r_location)
 
-            rel_location(1) = x
-            rel_location(2) = 0.0
-            rel_location(3) = -z
-            d = dist(s_location, r_location)
           ! time window  
             
             tstf = (size(es%stf)-1)*es%dt
@@ -147,7 +131,7 @@ module gfdb_build_ahfull_
 
             nsamples = nint((tend_total - tbegin_total) / es%dt + 1) 
             
-            allocate( seismograms(9,nsamples) )
+            allocate( seismograms(12,nsamples) )
             seismograms(:,:) = 0.
             
             call set_coords( es, rel_location,  nfflag, ffflag )
@@ -171,69 +155,30 @@ module gfdb_build_ahfull_
                                                 tbegin(iwindow), &
                                                 source_c(p,q), &
                                                 seismograms(n+6,itbegin:itend) )
+                            call add_elseis_mt( es, &
+                                                tbegin(iwindow), &
+                                                source_d(p,q), &
+                                                seismograms(n+9,itbegin:itend) )
                         end do
                     end do
                 end do
             end do
             
-            
-          ! downsample 
-            nsamples2 = (nsamples-1)/oversample + 2
-            allocate( seismograms2(9,nsamples2) )
-            seismograms2(:,:) = 0.
-            
-            do i=1,nsamples
-                jm = (i-oversample/2-1)/oversample+1
-                jp = (i-oversample/2)/oversample+1
-                if (jm==jp) then
-                    seismograms2(:,jm) = seismograms2(:,jm) + seismograms(:,i)/oversample
-                else
-                    seismograms2(:,jm) = seismograms2(:,jm) + seismograms(:,i)/oversample*0.5
-                    seismograms2(:,jp) = seismograms2(:,jp) + seismograms(:,i)/oversample*0.5
-                end if
-            end do
-            ! to get the last sample(s) right... (repeating end point)
-            do i=nsamples+1,nsamples+1+oversample*3
-                jm = (i-oversample/2-1)/oversample+1
-                jp = (i-oversample/2)/oversample+1
-                if (jm==jp) then
-                    if (jm<=nsamples2) seismograms2(:,jm) = seismograms2(:,jm) + seismograms(:,nsamples)/oversample
-                else
-                    if (jm<=nsamples2) seismograms2(:,jm) = seismograms2(:,jm) + seismograms(:,nsamples)/oversample*0.5
-                    if (jp<=nsamples2) seismograms2(:,jp) = seismograms2(:,jp) + seismograms(:,nsamples)/oversample*0.5
-                end if
-            end do
-            
-            
-            
-            deallocate(seismograms)
-            
-          ! rotate to local receiver coordinates. here: (South,Right,Down) 
-          !  rotmat(:,:) = 0.
-          !  rotmat(1,1) = real(cos(epiangle))
-          !  rotmat(2,2) = 1.
-          !  rotmat(3,3) = real(cos(epiangle))
-          !  rotmat(1,3) = real(sin(epiangle))
-          !  rotmat(3,1) = real(-sin(epiangle))
-            
-          !  call rotate_seismogram( rotmat, seismograms2(1:3,:) )
-          !  call rotate_seismogram( rotmat, seismograms2(4:6,:) )
-          !  call rotate_seismogram( rotmat, seismograms2(7:9,:) )
-            
           ! put in database
             call gfdb_get_indices( db, x, z, ix, iz )
             
-            call gfdb_save_array( db, ix,iz ,1, tbegin_total, seismograms2(1,:) ) 
-            call gfdb_save_array( db, ix,iz ,2, tbegin_total, seismograms2(4,:) ) 
-            call gfdb_save_array( db, ix,iz ,3, tbegin_total, seismograms2(7,:) ) 
-            call gfdb_save_array( db, ix,iz ,4, tbegin_total, seismograms2(2,:) ) 
-            call gfdb_save_array( db, ix,iz ,5, tbegin_total, seismograms2(5,:) ) 
-            call gfdb_save_array( db, ix,iz ,6, tbegin_total, seismograms2(3,:) ) 
-            call gfdb_save_array( db, ix,iz ,7, tbegin_total, seismograms2(6,:) ) 
-            call gfdb_save_array( db, ix,iz ,8, tbegin_total, seismograms2(9,:) ) 
-            traces_added = traces_added + 8
-            
-            
+            call gfdb_save_array( db, ix,iz ,1, tbegin_total, seismograms(1,:) ) 
+            call gfdb_save_array( db, ix,iz ,2, tbegin_total, seismograms(4,:) ) 
+            call gfdb_save_array( db, ix,iz ,3, tbegin_total, seismograms(7,:) ) 
+            call gfdb_save_array( db, ix,iz ,4, tbegin_total, seismograms(2,:) ) 
+            call gfdb_save_array( db, ix,iz ,5, tbegin_total, seismograms(5,:) ) 
+            call gfdb_save_array( db, ix,iz ,6, tbegin_total, seismograms(3,:) ) 
+            call gfdb_save_array( db, ix,iz ,7, tbegin_total, seismograms(6,:) ) 
+            call gfdb_save_array( db, ix,iz ,8, tbegin_total, seismograms(9,:) ) 
+            call gfdb_save_array( db, ix,iz ,9, tbegin_total, seismograms(10,:) ) 
+            call gfdb_save_array( db, ix,iz ,10, tbegin_total, seismograms(12,:) ) 
+            traces_added = traces_added + 10
+                        
           ! periodically close the gfdb, so that hdf is forced to deallocate
           ! all it's memory
             if (traces_added > 30000) then
@@ -241,8 +186,10 @@ module gfdb_build_ahfull_
                 traces_added = 0
             end if
             
-            deallocate(seismograms2)
-            
+            deallocate(seismograms)
+        else
+            ok = .false.
+
         end if
               
     end subroutine 
@@ -339,7 +286,6 @@ program gfdb_build_ahfull
     logical              :: ok
     character, parameter :: eol = char(10)
     real, allocatable, dimension(:,:) :: material_tab, stf_tab
-    integer :: oversample
     
     g_pn = 'gfdb_build_ahfull'
     g_usage = 'usage: ' // g_pn // ' database material stf <<EOF' // eol // & 
@@ -349,15 +295,13 @@ program gfdb_build_ahfull
               "documentation:  " // &
               "http://kinherd.org/power/trac/wiki/GFDBBuildAhfullTool"
     
-    if (iargc() /= 4) call usage()
+    if (iargc() /= 3) call usage()
     
     call vs_getarg( 1, basefn )
     call readtable_arg( 2, 3, 1, material_tab )
     call readtable_arg( 3, 2, 2, stf_tab )
-    call vs_getarg( 4, string )
-    oversample = string
     
-    call set_database_material_stf( basefn, material_tab, stf_tab, oversample )
+    call set_database_material_stf( basefn, material_tab, stf_tab )
     
     iline = 1
     line_loop : do
