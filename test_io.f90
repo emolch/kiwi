@@ -37,12 +37,12 @@ program test_io
     call strip_init( (/1,5/), (/0.,0.,1.,0.,0./), strip1 )
     deltat = 0.5
     toffset = 0.
-    call writeseismogram("test.table", "*", strip1%data, toffset, deltat, nerr )
+    call writeseismogram("/tmp/test_io.table", "*", strip1%data, toffset, deltat, nerr )
     if (nerr /= 0) then
         call test_fail("write 1")
     end if
     
-    call readseismogram("test.table", "*", seismogram, toffset, deltat, nerr )
+    call readseismogram("/tmp/test_io.table", "*", seismogram, toffset, deltat, nerr )
     if (nerr /= 0) then
         call test_fail("read 1")
     end if
@@ -84,12 +84,12 @@ program test_io
 !         call test_fail("read 2b")
 !     end if 
 
-    call writeseismogram("test.mseed", "*", strip1%data, toffset, deltat, nerr )
+    call writeseismogram("/tmp/test_io.mseed", "*", strip1%data, toffset, deltat, nerr )
     if (nerr /= 0) then
         call test_fail("write 3")
     end if
     
-    call readseismogram("test.mseed", "*", seismogram, toffset, deltat, nerr )
+    call readseismogram("/tmp/test_io.mseed", "*", seismogram, toffset, deltat, nerr )
     if (nerr /= 0) then
         call test_fail("read  3")
     end if
