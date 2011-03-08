@@ -122,7 +122,7 @@ module elseis_oo
         real, intent(in)                  :: toffset, weight
         real, dimension(:), intent(inout) :: seismogram
         
-        call elseis_sf( es%factor_mt, es%r, es%alpha, es%beta, toffset, es%dt, &
+        call elseis_sf( es%factor_sf, es%r, es%alpha, es%beta, toffset, es%dt, &
                         es%stf, es%istf, es%istftau, &
                         es%nf_flag, es%ff_flag, seismogram, weight )
         
