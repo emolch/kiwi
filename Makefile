@@ -1,8 +1,8 @@
 #
 #                --- Makefile for Kiwi Core Tools ---
 #
-#          Override default settings in file: Makefile.local
-#                   (see Makefile.local.example)
+#          Override default settings in file 'Makefile.local'
+#                   (see 'Makefile.local.example')
 #
 
 #### Basic settings ------------------------------------------------------------

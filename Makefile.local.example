@@ -1,6 +1,8 @@
-#
-#           --- Local build settings for Kiwi Core Tools ---
-#
+##
+##            --- Local build settings for Kiwi Core Tools ---
+##
+##   Copy this file to 'Makefile.local', so that it is included by Makefile.
+##                
 
 ## Fortran 95 compiler:
 # FORTRANC = gfortran
