@@ -929,6 +929,7 @@ module minimizer_engine
             outfn = filenamebase // "-" // ireceiver
             call receiver_output_seismogram( receivers(ireceiver), outfn, fileformat, &
                 which_probe, which_processing, psm%ref_time, ok)
+            write (stderr,*)  ireceiver, ok
             if (.not. ok) return
         end do
         

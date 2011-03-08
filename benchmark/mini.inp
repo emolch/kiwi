@@ -25,3 +25,11 @@ output_seismograms      izmit-seismogram  mseed synthetics plain
 set_source_params       bilateral 0 0 0 10000 2e20  92 87 164  0  20000 10000 9000  3500 2
 output_seismograms      izmit-seismogram  mseed synthetics plain
 
+set_database benchdb
+set_effective_dt 0.1
+set_local_interpolation bilinear
+set_receivers receivers.table has_depth
+set_source_location 30.0 70.0 0.0
+set_source_params bilateral 0.0 0.0 0.0 5000.0 1.0 91.0 87.0 164.0 0.0 900.0 700.0 1000.0 2500.0 0.2
+output_seismograms seis table synthetics plain
+
