@@ -72,7 +72,9 @@ module gfdb_extract_
         call trace_unpack( tracep, continuous )
         span = strip_span( continuous )
         filename = trim(filenamebase)
-        call writeseismogram( filename, var_str("*"), continuous%data, dble(db%dt*(span(1)-1)),db%dt,nerr )
+        call writeseismogram( filename, var_str("*"), continuous%data, dble(db%dt*(span(1)-1)),db%dt, &
+            var_str(''), var_str(''), var_str(''), var_str(ig), &
+            nerr )
         if (nerr == 0) ok = .true.
 
         call gfdb_uncache_trace( db, ix,iz,ig )

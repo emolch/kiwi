@@ -69,7 +69,10 @@ module gfdb_specialextract_
         continuous%data = sqrt( continuous%data )
         span = strip_span( continuous )
         filename = trim(filenamebase)
-        call writeseismogram( filename, var_str("*"), continuous%data, dble( db%dt*(span(1)-1) ),db%dt,nerr )
+        call writeseismogram( filename, var_str("*"), continuous%data, &
+                    dble( db%dt*(span(1)-1) ),db%dt, &
+                    var_str(''), var_str(''), var_str(''), var_str(''), & 
+                    nerr )
                 
     end subroutine
     

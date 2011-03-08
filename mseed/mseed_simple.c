@@ -9,7 +9,8 @@ static void record_handler (char *record, int reclen, void *outfile) {
     }
 }
 
-int writemseed(char *filename, float *seismogram, int length, double toffset, double deltat ) {
+int writemseed(char *filename, float *seismogram, int length, double toffset, double deltat, 
+    char *network, char *station, char *location, char *channel  ) {
     MSTrace     *trace;
     char        srcname[50];
     int         psamples, precords;
@@ -25,10 +26,16 @@ int writemseed(char *filename, float *seismogram, int length, double toffset, do
     
     trace = mst_init (NULL);
 
-    strcpy( trace->network, "XX" );
-    strcpy( trace->station, "XXXX" );
-    strcpy( trace->channel, "XXX" );
-    
+    strncpy( trace->network, network, 2 );
+    strncpy( trace->station, station, 4 );
+    strncpy( trace->location, location, 2 );
+    strncpy( trace->channel, channel, 3 );
+    trace->network[3]  = '\0';
+    trace->station[5]  = '\0';
+    trace->location[3] = '\0';
+    trace->channel[4]  = '\0';
+
+
     /* double is only precise up to something slightly below 1e-5 s in this 
        century, so last digit in  hptime with HPTMODULUS==1000000 is not reliable.
        I try to set it to zero here... */
@@ -251,7 +258,8 @@ void readmseed2_( float *seismogram ) {
 */
    
 void writemseed_( char *filename, float *seismogram, int *length, double *toffset,
-                  double *deltat, int *nerr ) {
+                  double *deltat, 
+                char *network, char *station, char *location, char *channel, int *nerr ) {
 
     float *data;
     int i;
@@ -260,6 +268,6 @@ void writemseed_( char *filename, float *seismogram, int *length, double *toffse
     for (i=0;i<(*length); i++) {
         data[i] = seismogram[i];
     }
-    *nerr = writemseed( filename, data, *length,  *toffset, *deltat ); /* data is deallocated inside of this */
+    *nerr = writemseed( filename, data, *length,  *toffset, *deltat, network, station, location, channel ); /* data is deallocated inside of this */
 }
 

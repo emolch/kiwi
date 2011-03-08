@@ -45,26 +45,30 @@ module seismogram_io
     
   contains
   
-    subroutine writeseismogram_vs( filename, fileformat, seismogram, toffset, deltat, nerr )
+    subroutine writeseismogram_vs( filename, fileformat, seismogram, toffset, deltat, &
+        network, station, location, channel, nerr )
         
         type(varying_string), intent(in) :: filename, fileformat
         real, dimension(:), intent(in)   :: seismogram
         real(kind=8), intent(in)         :: toffset
         real, intent(in)                 :: deltat
+        type(varying_string), intent(in) :: network, station, location, channel
         integer, intent(out)             :: nerr
         
-        call writeseismogram_c( char(filename), char(fileformat), seismogram, toffset, deltat, nerr )
+        call writeseismogram_c( char(filename), char(fileformat), seismogram, toffset, deltat, &
+            char(network), char(station), char(location), char(channel), nerr )
         
     end subroutine
   
-    subroutine writeseismogram_c( filename, fileformat, seismogram, toffset, deltat, nerr )
+    subroutine writeseismogram_c( filename, fileformat, seismogram, toffset, deltat, &
+     network, station, location, channel, nerr )
     
         character(len=*), intent(in)     :: filename, fileformat
         real, dimension(:), intent(in)   :: seismogram
         real(kind=8), intent(in)         :: toffset
         real, intent(in)                 :: deltat
         integer, intent(out)             :: nerr
-
+        character(len=*), intent(in)     :: network, station, location, channel
         type(varying_string)             :: fileformat_
 
       ! dump 1-component seismogram to file
@@ -73,6 +77,10 @@ module seismogram_io
         real(kind=8) :: ddeltat
         real, dimension(size(seismogram)) :: seismogram_copy
         character(len=len(filename)+1) :: filename_cstr
+        character(len=len(network)+1) :: network_cstr
+        character(len=len(station)+1) :: station_cstr
+        character(len=len(location)+1) :: location_cstr
+        character(len=len(channel)+1) :: channel_cstr
              
       ! look at the filename extension what kind of output is wanted
         nerr = 0
@@ -103,10 +111,14 @@ module seismogram_io
             seismogram_copy(:) = seismogram(:)            
             
             ddeltat = deltat
-            filename_cstr = filename//char(0)
+            filename_cstr = trim(filename)//char(0)
+            network_cstr  = trim(network)//char(0)
+            station_cstr  = trim(station)//char(0)
+            location_cstr = trim(location)//char(0)
+            channel_cstr  = trim(channel)//char(0)
             nlen = size(seismogram_copy)
             call writemseed( filename_cstr, seismogram_copy, nlen, &
-                toffset, ddeltat, nerr )
+                toffset, ddeltat, network_cstr, station_cstr, location_cstr, channel_cstr, nerr )
             
         end if        
         

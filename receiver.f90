@@ -518,7 +518,9 @@ module receiver
             span = strip_span( strip )
             call writeseismogram( char(outfn), "*", &
                         strip%data, &
-                        reftime+(span(1)-1)*dt, dt, nerr )
+                        reftime+(span(1)-1)*dt, dt, &
+                        '', '', '', component_names(self%components(icomponent)), &
+                        nerr )
             
             if (nerr /= 0) then
                 ok = .false.
@@ -560,7 +562,9 @@ module receiver
                 
             call writeseismogram( char(outfn), "*", &
                                   strip%data, &
-                                  dble(0.0), df, nerr )
+                                  dble(0.0), df, &
+                                  '', '', '', component_names(self%components(icomponent)), &
+                                  nerr )
             if (nerr /= 0) then
                 ok = .false.
                 call error( "failed to write output file: " // outfn )
@@ -596,7 +600,9 @@ module receiver
             outfn = filenamebase // "-" // component_names(self%components(icomponent)) // ".table"
             call writeseismogram( char(outfn), "*", &
                                   self%cross_corr(:,icomponent), &
-                                  dble(lbound(self%cross_corr,1)*self%dt), self%dt, nerr )
+                                  dble(lbound(self%cross_corr,1)*self%dt), self%dt, &
+                                  '', '', '', component_names(self%components(icomponent)), &
+                                  nerr )
             if (nerr /= 0) then
                 ok = .false.
                 call error( "failed to write output file: " // outfn )

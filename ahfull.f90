@@ -202,7 +202,10 @@ program ahfull
                 iend = nsamples
                 
                 fn = basefn // '-' // ireceiver // '-' // xyz(n) // '-' // iwindow // '.' // offormat
-                call writeseismogram( fn, offormat, seismograms(n,ibeg:iend), real(tbegin(iwindow)+dt*(ibeg-1),8), dt, nerr )
+                
+                call writeseismogram( fn, offormat, seismograms(n,ibeg:iend), &
+                    real(tbegin(iwindow)+dt*(ibeg-1),8), dt, &
+                    var_str(''), var_str(ireceiver), var_str(''), var_str(xyz(n)), nerr )
                 if (nerr /= 0) call die('failed to save seismogram to file: ' // fn )
                 end do
         end do

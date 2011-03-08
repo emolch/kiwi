@@ -217,6 +217,7 @@ program seismosizer
                     outfn = outfnbase // "-" // ireceiver // "-" // icomponent // "." // outformat
                     call writeseismogram( char(outfn), "*", &
                                           displacement(icomponent)%data, &
+                                          '', '', '', '', &
                                           (span(1)-1)*db%dt, db%dt, nerr )
                     if (nerr /= 0) call die( "failed to write output file: " // outfn )
                 end if
