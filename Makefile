@@ -94,7 +94,7 @@ SRCS := $(shell ls *.f90)
 
 TARGETS := eulermt source_info minimizer gfdb_build gfdb_extract gfdb_redeploy \
 		  gfdb_info gfdb_specialextract gfdb_build_ahfull differential_azidist \
-		  eikonal_benchmark crust
+		  eikonal_benchmark crust ahfull
 
 TESTS_SRCS := $(shell ls test_*.f90)
 TESTS = $(TESTS_SRCS:.f90=)
