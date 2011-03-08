@@ -1415,6 +1415,40 @@ module minimizer_wrappers
         end if
 
     end subroutine
+
+    subroutine ignore_sig()
+    end subroutine
+
+    subroutine exit_sig()
+        call die('got sigint, exiting')
+    end subroutine
+
+    subroutine do_set_ignore_sigint( line, answer, ok )
+
+     !! === {{{set_ignore_sigint (T|F)}}} ===
+      !
+      ! Toggle ignoring of interupt signal.
+      !
+      ! T SIGINT is ignored
+      ! F SIGINT is handled normally (default)
+
+        type(varying_string), intent(in)  :: line
+        type(varying_string), intent(out) :: answer
+        logical, intent(out)              :: ok
+        
+        answer = ''
+        ok = .true.
+        
+        if (line == 'T') then
+            call signal(sig_int, ignore_sig)
+        else if (line == 'F') then
+            call signal(sig_int, exit_sig)
+        else 
+            call error("usage: set_ignore_sigint (T|F)")
+            ok = .false.
+        end if
+
+    end subroutine
     
    !! == Example ==
     ! 
@@ -1616,6 +1650,8 @@ program minimizer
             call do_set_cached_traces_memory_limit( arguments, answer, ok )
         else if (command == 'set_verbose') then
             call do_set_verbose( arguments, answer, ok )
+        else if (command == 'set_ignore_sigint') then
+            call do_set_ignore_sigint(arguments, answer, ok )
         else
             call error("unknown command: "//command)
         end if

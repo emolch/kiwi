@@ -73,7 +73,8 @@ class SeismosizerBase:
                 'autoshift_ref_seismogram',
                 'get_cached_traces_memory',
                 'set_cached_traces_memory_limit',
-                'set_verbose',]
+                'set_verbose',
+                'set_ignore_sigint',]
   
     def __init__(self, hosts):
         
@@ -419,14 +420,9 @@ class SeismosizerProcess(threading.Thread):
     
     def check_end(self):
         if self.the_end_has_come: 
-            mess = ["Do you smell that? I think it's time to leave.",
-                    "Damn, I'm so tired. I fuckin' hate to work.",
-                    "Yeah, let's give up.",
-                    "Your so right, let's blow this whole crap up and play something less boring.",
-                    "God, this stuff sucks so much... Let's go.",
-                    "Ah, aah, I'm hurt! I can no more." ]
+            mess = '"You gotta go when you gotta go!", says %i' % self.tid
                     
-            raise SeismosizerInsane(mess[self.tid%len(mess)])
+            raise SeismosizerInsane(mess)
         
     def push(self, cmd):
         '''Enqueue command for seismosizer.'''
@@ -467,7 +463,8 @@ class Seismosizer(SeismosizerBase):
                       'output_cross_correlations',
                       'get_cached_traces_memory',
                       'set_cached_traces_memory_limit',
-                      'set_verbose']
+                      'set_verbose',
+                      'set_ignore_sigint']
                       
     def __init__(self, hosts, balance_method='123321'):
         SeismosizerBase.__init__(self, hosts)

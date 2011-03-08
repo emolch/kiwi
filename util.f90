@@ -34,6 +34,10 @@ module util
   ! iostat conditions
     integer, public, parameter :: iostat_eof = -1
     integer, public, parameter :: iostat_eor = -2
+
+    integer, public, parameter :: sig_ignore = 1
+    integer, public, parameter :: sig_default = 0
+    integer, public, parameter :: sig_int = 2
     
   ! global variables
   

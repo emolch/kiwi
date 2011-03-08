@@ -1,17 +1,18 @@
 #!/usr/bin/env python
-from tunguska import gfdb, receiver, seismosizer, source
+from tunguska import gfdb, receiver, seismosizer, source, config
 from pyrocko import orthodrome
 
 from subprocess import call, Popen, PIPE
 import numpy as num
-import sys
+import sys, time, signal
 
 import logging
+from os.path import join as pj
 
 logformat =  '[%(asctime)s] %(levelname)-8s %(message)s'
 dateformat = '%Y-%m-%d %H:%M:%S'
 
-logging.basicConfig( level   = logging.DEBUG,
+logging.basicConfig( level   = logging.WARN,
                          format  = logformat,
                          datefmt = dateformat)
 
@@ -24,8 +25,22 @@ def dump(fn, s):
     f.write(s)
     f.close()
     
+    
+    
+bindir = sys.argv[1]
+command = sys.argv[2]
 
-command = sys.argv[1]
+
+
+def pbin(bin):
+    return pj(bindir, bin)
+
+
+config.source_info_prog = pbin('source_info')
+config.gfdb_info_prog = pbin('gfdb_info')
+config.gfdb_extract_prog = pbin('gfdb_extract')
+config.gfdb_build_prog = pbin('gfdb_build')
+config.seismosizer_prog =pbin('minimizer')
 
 if command == 'makedb':
 
@@ -56,12 +71,12 @@ if command == 'makedb':
     1.9 1
     ''')
 
-    feed([str(x) for x in '../gfdb_build', 'benchdb', 1, 
+    feed([str(x) for x in pbin('gfdb_build'), 'benchdb', 1, 
             200, 200, 10, 0.1, 50., 50., 50., 0. ])
 
     db = gfdb.Gfdb('benchdb')
 
-    p = Popen(['../gfdb_build_ahfull', 'benchdb', 'material.table',
+    p = Popen([ pbin('gfdb_build_ahfull'), 'benchdb', 'material.table',
                  'stf.table'], stdin=PIPE)
 
     for ix in xrange(db.nx):
@@ -80,13 +95,12 @@ elif command == 'syntheseis':
 
     olat, olon = 30., 70.
     receivers = []
-    distances = num.linspace(3000, 4000, 2)
+    distances = num.linspace(3000, 4000, 20)
     
     for dist in distances:
         lat, lon = orthodrome.ne_to_latlon(olat, olon, dist, 0.)
         r = receiver.Receiver(lat,lon, components='ned')
         receivers.append(r)
-        print r
     
     db = gfdb.Gfdb('benchdb')
     
@@ -98,10 +112,38 @@ elif command == 'syntheseis':
     seis.set_source_location( olat, olon, 0.0)
     
     s = source.Source('bilateral', 
-        sourceparams_str='0 0 0 5000 1.0  91 87 164 0 900 700 1000 2500 0.2')
-        
+        sourceparams_str='0 0 0 5000 1e12  91 87 164 0 900 700 2000 2500 0.2')
+    
     seis.set_source(s)
-    seis.output_seismograms('seis', 'table', 'synthetics', 'plain')
+    seis.set_synthetic_reference()
+    #seis.set_ignore_sigint('T')
+    
+    seis.output_seismograms( 'seis', 'mseed', 'synthetics', 'plain')
+    
+    done = []
+    def got_sigint(*args):
+        done.append(1)
+        
+    signal.signal(signal.SIGINT, got_sigint)
+    
+    start = time.time()
+    times = [ start ]
+    strikes = num.linspace(0.,360.,361)
+    for istrike, strike in enumerate(strikes):
+        s['strike'] = strike
+        seis.set_source(s)
+        seis.do_get_misfits()
+        now = time.time()
+        total_mps = float(istrike+1) / (now - start)
+        last_mps = 1. / (now - times[-1])
+        last_10_mps = min(10, len(times)) / (now-times[-min(10,len(times))])
+        
+        print 'MPS   total avg: %.3g   last 10 avg: %.3g   last: %.3g' % (total_mps, last_10_mps, last_mps)
+        
+        times.append(now)
+        if done:
+            break
+        
     seis.close()
     
 

@@ -257,6 +257,7 @@ module minimizer_engine
             if (ireceiver > nreceivers) exit line_loop
             
             call receiver_init(receivers(ireceiver), d2r(origin), depth, components, db%dt, ok )
+            call receiver_set_ids(receivers(ireceiver), var_str(''), var_str(ireceiver), var_str(''))
             if (.not. ok) then 
                 call error("initializing receiver failed: possibly a forbidden "// &
                            "combination of receiver components has been given at receiver no. "// ireceiver)
@@ -772,7 +773,6 @@ module minimizer_engine
 
         !$omp do schedule(dynamic)
         do ireceiver=1,nreceivers
-            print *, omp_get_thread_num(), '/', omp_get_num_threads()   
             if (receivers(ireceiver)%enabled) then
                 call make_seismogram( tdsm, receivers(ireceiver), db, interpolate, xundersample, zundersample )
             end if
@@ -929,7 +929,6 @@ module minimizer_engine
             outfn = filenamebase // "-" // ireceiver
             call receiver_output_seismogram( receivers(ireceiver), outfn, fileformat, &
                 which_probe, which_processing, psm%ref_time, ok)
-            write (stderr,*)  ireceiver, ok
             if (.not. ok) return
         end do
         

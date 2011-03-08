@@ -61,7 +61,7 @@ LDFLAGS = $(LIBMSEED) $(LIBSAC)  $(LIBHDF) $(LIBSMINPACK) $(LIBFFTW) \
 
 #### Compiler specific presets  ------------------------------------------------
 
-CFLAGS_ifort_fast   = -openmp -fast -parallel
+CFLAGS_ifort_fast   = -openmp 
 LDFLAGS_ifort_fast  = -openmp
 
 CFLAGS_ifort_debug  = -openmp -g -warn all -ftrapuv -debug all

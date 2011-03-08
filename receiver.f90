@@ -52,14 +52,18 @@ module receiver
   ! probe ids
     integer, parameter, public :: REFERENCES = 1
     integer, parameter, public :: SYNTHETICS = 2
-  
     
+    character, public, dimension(1:2) :: probe_names = (/ 'r', 's' /)
+
     character, public, dimension(-5:5) :: component_names = (/ 'w', 's', 'u', 'l', 'c', '?', 'a', 'r', 'd', 'n', 'e' /)
     
     type, public :: t_receiver
     
       ! flag true if this receiver is to be processed
         logical                                    :: enabled
+
+      ! ids to mark output files
+        type(varying_string)                       :: network, station, location
 
       ! sampling rate
         real                                       :: dt
@@ -92,6 +96,7 @@ module receiver
 
     public receiver_init
     public receiver_destroy
+    public receiver_set_ids
     public receiver_component_index
     public receiver_component_sign
     public receiver_set_enabled
@@ -131,6 +136,10 @@ module receiver
 
         self%enabled = .true.
         
+        self%network = ''
+        self%station = ''
+        self%location = ''
+
         self%dt = dt
         
       ! parse and check components string
@@ -184,6 +193,17 @@ module receiver
 
     end subroutine
     
+    subroutine receiver_set_ids(self, network, station, location)
+
+        type(t_receiver), intent(inout)  :: self
+        type(varying_string), intent(in) :: network, station, location
+
+        self%network = network
+        self%station = station
+        self%location = location
+
+    end subroutine
+
     subroutine receiver_destroy( self )
     
         type(t_receiver), intent(inout)  :: self
@@ -232,6 +252,10 @@ module receiver
         self%dt = 0.0
         self%enabled = .false.
         
+        call delete(self%network)
+        call delete(self%station)
+        call delete(self%location)
+
     end subroutine
 
     pure subroutine receiver_set_enabled( self, newstate )
@@ -519,7 +543,8 @@ module receiver
             call writeseismogram( char(outfn), "*", &
                         strip%data, &
                         reftime+(span(1)-1)*dt, dt, &
-                        '', '', '', component_names(self%components(icomponent)), &
+                        char(self%network), char(self%station), char(self%location), &
+                        component_names(self%components(icomponent))//probe_names(which_probe), &
                         nerr )
             
             if (nerr /= 0) then
@@ -563,7 +588,8 @@ module receiver
             call writeseismogram( char(outfn), "*", &
                                   strip%data, &
                                   dble(0.0), df, &
-                                  '', '', '', component_names(self%components(icomponent)), &
+                                  char(self%network), char(self%station), char(self%location), &
+                                  component_names(self%components(icomponent)), &
                                   nerr )
             if (nerr /= 0) then
                 ok = .false.
@@ -601,7 +627,8 @@ module receiver
             call writeseismogram( char(outfn), "*", &
                                   self%cross_corr(:,icomponent), &
                                   dble(lbound(self%cross_corr,1)*self%dt), self%dt, &
-                                  '', '', '', component_names(self%components(icomponent)), &
+                                  char(self%network), char(self%station), char(self%location), &
+                                  component_names(self%components(icomponent)), &
                                   nerr )
             if (nerr /= 0) then
                 ok = .false.
