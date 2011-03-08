@@ -1,25 +1,40 @@
-# makefile for kiwi core tools
+#
+#                --- Makefile for Kiwi Core Tools ---
+#
+#          Override default settings in file: Makefile.local
+#                   (see Makefile.local.example)
+#
+
+#### Basic settings ------------------------------------------------------------
 
 SHELL = /bin/sh
 MAKEDEPEND = ./fdepend.pl -g -d -i hdf5.mod -i omp_lib.mod
 OBJDEPEND = ./objdepend.pl
-# compiler
-FORTRANC := g95
+FORTRANC := gfortran
 
-# preset (use 'fast' or 'debug')
-PROFILE := fast
 
-# host infos
-MACHINE := $(shell ./hostinfo.pl --machine)
-OS := $(shell ./hostinfo.pl --os)
+#### Preset selection ----------------------------------------------------------
 
-# installation prefix
-prefix = .
+# Can use 'fast' or 'debug' with gfortran, g95 and ifort. You may have to create
+# a custom preset when using a different compiler (see below and example in
+# Makefile.local.example).
+
+PRESET := fast
+
+
+#### Installation prefixes -----------------------------------------------------
+
+prefix = /usr/local
 datarootdir = $(prefix)/share
 datadir = $(datarootdir)
 exec_prefix = $(prefix)
 bindir = $(exec_prefix)/bin
 
+
+#### Default library includes and linker settings ------------------------------
+
+INCDUMMYOMP = -Idummy_omp_lib
+LIBDUMMYOMP = dummy_omp_lib/omp_lib.o
 
 INCMSEED = 
 LIBMSEED = mseed/mseed_simple.o -lmseed
@@ -39,36 +54,36 @@ LIBSMINPACK = -Lsminpack -lsminpack
 #### Compiler and linker flag defaults -----------------------------------------
 
 CFLAGS =  $(INCMSEED) $(INCHDF) $(INCSAC) $(INCFFTW) \
-	      $(CFLAGS_$(FORTRANC)_$(PROFILE))  #
+	      $(CFLAGS_$(FORTRANC)_$(PRESET))  #
 LDFLAGS = $(LIBMSEED) $(LIBSAC)  $(LIBHDF) $(LIBSMINPACK) $(LIBFFTW) \
-          $(LDFLAGS_$(FORTRANC)_$(PROFILE)) #
+          $(LDFLAGS_$(FORTRANC)_$(PRESET)) #
 
 
-#### Compiler specific settings ------------------------------------------------
+#### Compiler specific presets  ------------------------------------------------
 
-OMPLIB_ifort        = 
 CFLAGS_ifort_fast   = -openmp -fast -parallel
 LDFLAGS_ifort_fast  = -openmp
 
 CFLAGS_ifort_debug  = -openmp -g -warn all -ftrapuv -debug all
 LDFLAGS_ifort_debug = -openmp
 
+CFLAGS_g95_fast     = $(INCDUMMYOMP) -O3
+LDFLAGS_g95_fast    = $(LIBDUMMYOMP)
 
-OMPLIB_g95 	        = dummy_omp_lib/omp_lib.o
-CFLAGS_g95_fast     = -Idummy_omp_lib -O3
-LDFLAGS_g95_fast    = 
+CFLAGS_g95_debug    = $(INCDUMMYOMP) -g -warn all -ftrapuv -debug all
+LDFLAGS_g95_debug   = $(LIBDUMMYOMP) 
 
-CFLAGS_g95_debug    = -g -warn all -ftrapuv -debug all
-LDFLAGS_g95_debug   = 
-
-OMPLIB_gfortran        =
 CFLAGS_gfortran_fast   = -fopenmp -O3
 LDFLAGS_gfortran_fast  = -fopenmp
 
 CFLAGS_gfortran_debug  = -fopenmp -g -Wall
 LDFLAGS_gfortran_debug = -fopenmp
 
+
 #### ---------------------------------------------------------------------------
+
+MACHINE := $(shell ./hostinfo.pl --machine)
+OS := $(shell ./hostinfo.pl --os)
 
 -include Makefile.local
 
@@ -92,7 +107,7 @@ TESTS = $(TESTS_SRCS:.f90=)
 
 all : targets 
 
-$(TARGETS) $(TESTS) : .sminpackdone .mseedsimple
+$(TARGETS) $(TESTS) : .sminpackdone .mseedsimple .dummyomplib .dummysacio
 
 .sminpackdone :
 	$(MAKE) -C sminpack/ && touch .sminpackdone
@@ -100,8 +115,11 @@ $(TARGETS) $(TESTS) : .sminpackdone .mseedsimple
 .mseedsimple :
 	$(MAKE) -C mseed/ && touch .mseedsimple
 
-dummy_omp_lib/omp_lib.mod dummy_omp_lib/omp_lib.o : Makefile.local Makefile dummy_omp_lib/omp_lib.f90
-	cd dummy_omp_lib ; $(FORTRANC) -c omp_lib.f90 -o omp_lib.o 
+.dummyomplib :
+	$(MAKE) -C dummy_omp_lib/ && touch .dummyomplib
+
+.dummysacio :
+	$(MAKE) -C dummy_sacio/ && touch .dummysacio
 
 targets : $(TARGETS)
 
@@ -159,15 +177,19 @@ progobjects.do : $(SRCS:.f90=.d)
 %.o : %.f90
 	$(FORTRANC) -c $(CFLAGS) $<
 
+
+clean :
+	rm -f *.o *.mod $(TESTS) $(TARGETS) .sminpackdone .mseedsimple .dummysacio .dummyomplib dummy_omp_lib/omp_lib.o dummy_omp_lib/omp_lib.mod
+	$(MAKE) -C sminpack/ clean
+	$(MAKE) -C mseed/ clean
+	$(MAKE) -C dummy_omp_lib/ clean
+	$(MAKE) -C dummy_sacio/ clean
+
+    
+clean-deps : clean
+	rm -f *.d *.do
+
 # include auto-created dependencies
 
 -include progobjects.do
 -include $(SRCS:.f90=.d) 
-
-clean :
-	rm -f *.o *.mod $(TESTS) $(TARGETS) .sminpackdone .mseedsimple
-	$(MAKE) -C sminpack/ clean
-	$(MAKE) -C mseed/ clean
-    
-clean-deps : clean
-	rm -f *.d *.do
