@@ -1,7 +1,5 @@
-! $Id: test_gfdb.f90 658 2007-08-03 12:48:49Z sebastian $ 
-! ------------------------------------------------------------------------------
 ! 
-!    Copyright 2007 Sebastian Heimann
+!    Copyright 2011 Sebastian Heimann
 ! 
 !    Licensed under the Apache License, Version 2.0 (the "License");
 !    you may not use this file except in compliance with the License.

@@ -1,7 +1,5 @@
-! $Id: source_all.f90 684 2007-12-03 11:31:59Z sebastian $ 
-! ------------------------------------------------------------------------------
 ! 
-!    Copyright 2007 Sebastian Heimann
+!    Copyright 2011 Sebastian Heimann
 ! 
 !    Licensed under the Apache License, Version 2.0 (the "License");
 !    you may not use this file except in compliance with the License.

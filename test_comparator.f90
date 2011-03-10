@@ -1,7 +1,5 @@
-! $Id: test_comparator.f90 669 2007-09-14 12:26:15Z sebastian $ 
-! ------------------------------------------------------------------------------
 ! 
-!    Copyright 2007 Sebastian Heimann
+!    Copyright 2011 Sebastian Heimann
 ! 
 !    Licensed under the Apache License, Version 2.0 (the "License");
 !    you may not use this file except in compliance with the License.
@@ -15,7 +13,6 @@
 !    See the License for the specific language governing permissions and
 !    limitations under the License.
 !
-
 
 program test_comparator
 

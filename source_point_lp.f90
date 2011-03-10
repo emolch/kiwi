@@ -1,5 +1,5 @@
-! ! 
-!    Copyright 2007 Lars Krieger, Sebastian Heimann
+!  
+!    Copyright 2011 Lars Krieger, Sebastian Heimann
 ! 
 !    Licensed under the Apache License, Version 2.0 (the "License");
 !    you may not use this file except in compliance with the License.
