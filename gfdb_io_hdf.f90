@@ -112,7 +112,7 @@ module gfdb_io_hdf
             h5inited = .false.
         end if
 
-    end subroutine    
+    end subroutine
 
     subroutine gfdb_io_read_index(filename, dt,dx,dz, firstx, firstz, &
                                                 nchunks, nx, nxc, nz, ng, ok )
