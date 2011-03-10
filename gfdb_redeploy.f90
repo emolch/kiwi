@@ -22,8 +22,6 @@ module gfdb_redeploy_
     use gfdb
     use better_varying_string
     use sparse_trace
-    use read_table
-    use seismogram_io
     
     implicit none
       
@@ -31,22 +29,40 @@ module gfdb_redeploy_
     public copyentry
     public set_database_in, set_database_out_nocreate
     public close_databases
+    public redeploy_cleanup
+    public set_mapping
     
     type(t_gfdb), save :: in, out
     integer :: traces_added = 0
     integer, dimension(2) :: last_span = (/1,1/)
+    integer, dimension(:), allocatable :: mapping
     
   contains
   
+    
+
     subroutine set_database_in( basefn, nipx, nipz )
         
         type(varying_string), intent(in) :: basefn
         integer, intent(in) :: nipx, nipz
+        integer :: ig
         
         call gfdb_init(in, basefn, nipx=nipx, nipz=nipz )
-        
+        allocate(mapping(in%ng))
+         do ig=1,in%ng
+            mapping(ig) = ig
+        end do
+
     end subroutine
-    
+  
+    subroutine set_mapping(igs, igt)
+        integer, intent(in) :: igs, igt
+        if (igs < 1 .or. igs > size(mapping)) then
+            call die("invalid mapping "//igs//" -> "//igt)
+        end if 
+        mapping(igs) = igt
+    end subroutine
+  
 ! not needed anymore, I think the -nocreate option was too dangerous
 ! so now, gfdb_redeploy will never try to create the database.    
 !     subroutine set_database_out( basefn )
@@ -84,13 +100,14 @@ module gfdb_redeploy_
         integer, dimension(2) :: span
         tracep => null()
         
+
         factor = 1.0
         nargs = count_words( buffer )
         if (nargs == 2) then
             read (unit=buffer,fmt=*,iostat=iostat) x, z
         else if (nargs == 3) then
             read (unit=buffer,fmt=*,iostat=iostat) x, z, factor 
-        else
+        else if (nargs == 4) then
             read (unit=buffer,fmt=*,iostat=iostat) x, z, tbeg, tend
             if (tbeg > tend) return
         end if
@@ -109,8 +126,11 @@ module gfdb_redeploy_
                     if ( .not. trace_is_empty(tracep)) then
                         call gfdb_get_indices( out, x, z, ixo, izo )
                         if (nargs /= 4) then
-                            call gfdb_save_trace( out, ixo, izo, ig, tracep )
+                            if (mapping(ig) /= 0 .and. mapping(ig) <= out%ng) then
+                                call gfdb_save_trace( out, ixo, izo, mapping(ig), tracep )
+                            end if
                             last_span = tracep%span
+                                
                         else 
                             
                             span(1) = max(floor(tbeg/out%dt), tracep%span(1))
@@ -126,7 +146,9 @@ module gfdb_redeploy_
                             else 
                                 call trace_pack( strip, short_trace )
                             end if
-                            call gfdb_save_trace( out, ixo, izo, ig, short_trace )
+                            if (mapping(ig) /= 0 .and. mapping(ig) <= out%ng) then
+                                call gfdb_save_trace( out, ixo, izo, mapping(ig), short_trace )
+                            end if
                             last_span = short_trace%span
                             call strip_destroy( strip )
                         end if
@@ -149,8 +171,13 @@ module gfdb_redeploy_
         
         end if
         
+
     end subroutine
  
+    subroutine redeploy_cleanup()
+        call close_databases()
+        if (allocated(mapping)) deallocate(mapping)
+    end subroutine
     
 end module
 
@@ -183,10 +210,10 @@ program gfdb_redeploy
     integer              :: iostat, iline
     logical              :: ok
     character, parameter :: eol = char(10)
-    integer              :: i_basefn_out, nipx, nipz
+    integer              :: nipx, nipz, igt, ig
     
     g_pn = 'gfdb_redeploy'
-    g_usage = 'usage: ' // g_pn // ' input-database [ nipx nipz ] output-database <<EOF' // eol // &
+    g_usage = 'usage: ' // g_pn // ' input-database [ nipx nipz [ g1_mapping g2_mapping ... ] ] output-database <<EOF' // eol // &
               'x z [ tbeg tend ]' // eol // &
               '...' // eol // &
               'EOF' // eol // eol // &
@@ -196,20 +223,27 @@ program gfdb_redeploy
               
   ! this argument processing definitely needs cleanup.
   ! should implement a getopt(), but this is no fun in fortran.
-    if (iargc() /= 2 .and. iargc() /= 4) call usage()
+    if (iargc() < 2) call usage()
     
     call vs_getarg( 1, basefn_in )
     nipx = 1
     nipz = 1
-    i_basefn_out = 2
-    if (iargc() == 4) then 
+    if (iargc() >= 4) then 
         call int_getarg( 2, 1, huge(nipx), nipx )
         call int_getarg( 3, 1, huge(nipz), nipz )
-        i_basefn_out = 2
     end if
+
     call set_database_in( basefn_in, nipx, nipz )
     
-    call vs_getarg( i_basefn_out, basefn_out )
+    if (iargc() > 4) then
+        do ig=1, iargc()-4
+            call int_getarg( ig+3, 0, huge(igt), igt)
+            print *, ig, igt
+            call set_mapping(ig,igt)
+        end do
+    end if
+
+    call vs_getarg( iargc(), basefn_out )
     
     call set_database_out_nocreate( basefn_out )
     
@@ -222,7 +256,7 @@ program gfdb_redeploy
         iline = iline+1
     end do line_loop
 
-    call close_databases()
+    call redeploy_cleanup()
     call cleanup()
     
 end program
