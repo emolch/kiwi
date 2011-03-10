@@ -1,7 +1,5 @@
-! $Id: gfdb.f90 702 2008-03-31 07:07:40Z sebastian $ 
-! ------------------------------------------------------------------------------
 ! 
-!    Copyright 2007 Sebastian Heimann
+!    Copyright 2011 Sebastian Heimann
 ! 
 !    Licensed under the Apache License, Version 2.0 (the "License");
 !    you may not use this file except in compliance with the License.
@@ -24,6 +22,8 @@ module gfdb
     use hdf5
     use interpolation
     use omp_lib
+    use gfdb_io_hdf
+
     implicit none
 
     public
@@ -156,13 +156,7 @@ module gfdb
   
     subroutine gfdb_cleanup()
         
-        integer(hid_t) :: egal
-    
-        if (h5inited) then
-            call h5close_f(egal)
-            !call h5close_types(egal)
-            h5inited = .false.
-        end if
+        call gfdb_io_deinit()
         
     end subroutine
   
@@ -212,9 +206,7 @@ module gfdb
             if (present(firstz)) c%firstz = firstz
             
         else   ! read cache metainformation from file
-        
-            e = 0
-        
+                
             c%filenamebase = fnbase
             filename = fnbase // ".index"
             c%nipx = 1
@@ -223,8 +215,8 @@ module gfdb
             if (present(nipx)) c%nipx = nipx
             if (present(nipz)) c%nipz = nipz
             
-            call gfdb_io_read_index(filename, dt,dx,dz, firstx, firstz, &
-                                                nchunks, nx, nxc, nz, ng, ok)
+            call gfdb_io_read_index(filename, c%dt,c%dx,c%dz, c%firstx, c%firstz, &
+                                                c%nchunks, c%nx, c%nxc, c%nz, c%ng, ok)
             if (.not. ok) call die()
             
           ! if interpolation is wanted add disired amount of oversampling
@@ -681,16 +673,21 @@ module gfdb
         integer :: ichunk
         integer(hid_t) :: file
         integer(hid_t) :: egal
+        
 
         type(varying_string) :: filename
-        
+        logical :: ok        
+
         if (.not. allocated(c%chunks)) return
 
         filename = c%filenamebase // ".index"
         
-        call gfdb_io_create_index(filename, c%dt,c%dx*c%nipx,c%dz*c%nipz, c%firstx, c%firstz, &
-                                      c%nchunks, c%nx, c%nxc, c%nz, c%ng, c%ok)
+        call gfdb_io_create_index(filename, &
+                c%dt, c%dx*c%nipx, c%dz*c%nipz, c%firstx, c%firstz, c%nchunks, &
+                c%nx/c%nipx, c%nxc/c%nipx, c%nz/c%nipz, c%ng, ok)
         
+        if (.not. ok) call die()
+
         do ichunk=1,c%nchunks
             call chunk_create( c%chunks(ichunk))
         end do
@@ -700,55 +697,12 @@ module gfdb
     subroutine chunk_create( c )
     
         type(t_chunk), intent(inout) :: c
-        
-        type(hobj_ref_t_f), dimension(:), allocatable :: refs
-        integer(hid_t) :: error, file, dataspace, dataset, group, egal
-        integer(hsize_t), dimension(3) :: dims
-        integer(hsize_t), dimension(1) :: dims1
-        integer :: i, length
-        
-        dims(1) = c%ng
-        dims(2) = c%nz/c%nipz
-        dims(3) = c%nxc/c%nipx
-        call h5eset_auto_f(0,egal)
-        call h5fcreate_f(char(c%filename),H5F_ACC_TRUNC_F,  file,error)
-        call h5eset_auto_f(1,egal)
-        if (error /= 0) call die( "gfdb: failed to create file: "//c%filename )
+        logical :: ok
 
-      ! create index dataset for faster access to individual traces
-        call h5screate_simple_f(3,dims,  dataspace,error)
-        if (error /= 0) &
-            call die( "gfdb: failed to write dataset to file: "//c%filename )
-      
-        call h5dcreate_f(file,"index",H5T_STD_REF_OBJ,dataspace,  dataset,error)
-        if (error /= 0) &
-            call die( "gfdb: failed to create index dataset in file: "//c%filename )
+        call gfdb_io_create_chunk(c%filename, c%ng, c%nxc/c%nipx, c%nz/c%nipz, &
+            int(c%nxc/c%nipx*(floor(log10(real(c%nxc/c%nipx)))+2),SIZE_T), ok)
 
-        dims1(1) = dims(1)*dims(2)*dims(3)
-        length = int(dims1(1)) ! remove a compiler warning 
-        allocate(refs(length))
-        
-        do i=1,dims1(1)
-            refs(i)%ref = 0
-        end do
-        
-        call h5dwrite_f(dataset, H5T_STD_REF_OBJ, refs, dims1, error )
-        if (error /= 0) &
-            call die( "gfdb: failed to write index dataset to file: "//c%filename )
-
-        deallocate(refs)
-            
-        call h5gcreate_f(file,"gf",group,error,int(c%nxc/c%nipx*(floor(log10(real(c%nxc/c%nipx)))+2),SIZE_T))
-        if (error /= 0) &
-            call die( "gfdb: failed to create group gf in file: "//c%filename )
-        
-        call h5gclose_f(group, error)    
-        
-        call h5dclose_f(dataset,  error)
-        call h5sclose_f(dataspace,  error)        
-        call h5fclose_f(file,  error)
-        if (error/=0) &
-             call die( "gfdb: problems closing file: "//c%filename )
+        if (.not. ok) call die()
              
     end subroutine
     
@@ -778,19 +732,11 @@ module gfdb
         integer, intent(in) :: ixc,iz,ig
         type(t_trace), intent(in) :: data
         
-        integer(hid_t), dimension(8) :: e
-        integer(hid_t) :: dataset, dataspace, dataspace1, attribute, group_dist
-        integer(hid_t) :: dataspace_for_ref, memspace, group
-        integer(hsize_t),dimension(1) :: dims
-        
-        integer :: totalsize, nstrips
-        type(hobj_ref_t_f), dimension(1) :: reference
-        type(varying_string) :: datasetname, gloc
-        integer(hsize_t), dimension(3,1) :: coord
+        type(hobj_ref_t_f), dimension(1)  :: reference
+        integer :: packed_size, nstrips
         integer :: ixc_file, iz_file
-        
-        e=0
-        
+        logical :: ok
+
         if (ixc > c%nxc .or. ixc < 1) return
         if (iz > c%nz .or. iz < 1) return
         if (ig > c%ng .or. ig < 1) return
@@ -812,85 +758,24 @@ module gfdb
                        "("//ixc_file//","//iz_file//","//ig//")" )
             return
         end if
-        e=0
-        
-      ! open/create group for the dataset
-                
-        gloc = var_str("/gf/") // ixc_file
-        call h5_opencreategroup( c%file, char(gloc), group_dist, e(1), int(c%nz/c%nipz*(floor(log10(real(c%nz/c%nipz)))+2),SIZE_T) )
-        gloc = iz_file
-        call h5_opencreategroup( group_dist, char(gloc), group, e(2), int(8*(floor(log10(8.))+2),SIZE_T) )
-        if (any(e /= 0)) call die( "gfdb: failed to open/create group "//gloc//" in file: " &
-                                      // c%filename )
-                
+   
       ! pack data to a single, continuous array
       ! generate arrays with offsets in the packed array (pofs)
       ! and offsets of the data strips (ofs)
-      
-        call trace_to_storable( data, c%packed, totalsize, c%pofs, c%ofs, nstrips )
         
-      ! create dataset for the array
-        
-        dims(1) = totalsize
-        call h5screate_simple_f(1,dims,  dataspace,e(1))
-        datasetname = ig
-        call h5dcreate_f(group,char(datasetname), &
-                         H5T_NATIVE_REAL,dataspace,  dataset,e(2))
-        if (any(e /= 0)) call die( "gfdb: failed to create dataset "// &
-                                    datasetname // " in file: " // c%filename )
-       
-      ! save offsets as attributes to the dataset  
-                         
-        dims(1) = nstrips
-        call h5screate_simple_f(1,dims, dataspace1, e(1))
-        
-        call h5acreate_f(dataset,"pofs",H5T_NATIVE_INTEGER,dataspace1, &
-                         attribute,e(2))
-        call h5awrite_f(attribute,H5T_NATIVE_INTEGER,c%pofs,dims,e(3))
-        call h5aclose_f(attribute, e(4))
-        
-        call h5acreate_f(dataset,"ofs",H5T_NATIVE_INTEGER,dataspace1, &
-                         attribute,e(5))
-        call h5awrite_f(attribute,H5T_NATIVE_INTEGER,c%ofs,dims,e(6))
-        call h5aclose_f(attribute, e(7))
-        call h5sclose_f(dataspace1, e(8))
-        if (any(e /= 0)) call die( "gfdb: failed to save attributes to dataset "// &
-                                    datasetname // " in file: " // c%filename )
-       
-      ! save the array 
-      
-        dims(1) = totalsize
-        call h5dwrite_f(dataset, H5T_NATIVE_REAL, c%packed, dims, e(1))
-        if (any(e /= 0)) call die( "gfdb: failed to write dataset "// &
-                                    datasetname // " in file: " // c%filename )
-      
-      ! save a reference to the dataset in the index block  
-        
-        call h5rcreate_f(group, char(datasetname), reference(1), e(1))
-        coord(:,1) = (/ ig, iz_file, ixc_file /)
-        
-        dims(1) = 1
-        call h5dget_space_f(c%dataset_index,dataspace_for_ref,e(2))
-        call h5sselect_elements_f(dataspace_for_ref,H5S_SELECT_SET_F,3, int(1,SIZE_T), coord, e(3))
-        call h5screate_simple_f(1, dims, memspace, e(4))
-        
-        call h5dwrite_f(c%dataset_index, H5T_STD_REF_OBJ, reference, dims, e(5), &
-                         mem_space_id=memspace, file_space_id=dataspace_for_ref)
-                         
-        call h5sclose_f(memspace, e(6))
-        call h5sclose_f(dataspace_for_ref, e(7))
-        if (any(e /= 0)) call die( "gfdb: failed save reference to "// &
-                                    datasetname // " in index dataset of file: " &
-                                    // c%filename )
-                                    
-        c%references(ig,iz_file,ixc_file) = reference(1)
-        
-        call h5dclose_f(dataset, e(1))
-        call h5sclose_f(dataspace, e(1))
-        call h5gclose_f(group_dist, e(1))
-        call h5gclose_f(group, e(1))
+        call trace_to_storable( data, c%packed, packed_size, c%pofs, c%ofs, nstrips )
 
-        
+        call gfdb_io_save_trace(c%filename, c%file, c%dataset_index, &
+                ixc_file, iz_file, ig, &
+                c%packed, packed_size, c%pofs, c%ofs, nstrips, &
+                int(c%nz/c%nipz*(floor(log10(real(c%nz/c%nipz)))+2),SIZE_T), &
+                int(8*(floor(log10(8.))+2),SIZE_T), &
+                reference, ok)
+
+        if (.not. ok) call die()
+
+        c%references(ig,iz_file,ixc_file) = reference(1)
+
     end subroutine
     
     subroutine gfdb_get_indices( c, x, z, ix, iz )
@@ -1077,19 +962,12 @@ module gfdb
         integer, intent(in)                 :: ixc, iz,ig
         type(t_trace), pointer :: tracep
         
-        integer(hsize_t),dimension(1) :: adims
-        integer(hid_t) :: dataset, attribute, space
-        integer :: compactsize, nstrips
-        integer(hid_t), dimension(8) :: e
-        integer(hid_t) :: egal
-        integer(hsize_t) :: length
+        integer :: packed_size, nstrips
         integer :: ixc_file, ix
         integer :: iz_file
         integer :: nbytes
-        
-        
-        e=0
-        
+        logical :: ok
+                
         tracep => null()  
       
         if (ixc > c%nxc .or. ixc < 1 .or. &
@@ -1123,82 +1001,27 @@ module gfdb
             tracep => c%traces(ig,iz,ixc)%p
             return
         end if
-        
-        allocate(c%traces(ig,iz,ixc)%p)
-        tracep => c%traces(ig,iz,ixc)%p
-        
-        call trace_destroy( tracep )
-        
-      ! lookup reference to the dataset for a quick jump
-        call h5eset_auto_f(0,egal)
-        call h5rdereference_f(c%dataset_index, c%references(ig,iz_file,ixc_file),&
-                              dataset, e(1) )
-        call h5eset_auto_f(1,egal)
-        call h5eclear_f(egal)
-        if (e(1) /= 0) then
+
+        if (c%references(ig,iz_file,ixc_file)%ref == 0) then
             call warn( "gfdb: chunk_get_trace() (chunk "//c%ichunk// &
                        "): no trace available for index "//&   
                        "("//ixc_file//","//iz_file//","//ig//")" )
             return
         end if
-        
-      ! get offsets
-                
-        call h5aopen_idx_f(dataset, 0, attribute, e(1))
-        call h5aget_space_f( attribute, space, e(2) )
-        call h5sget_simple_extent_npoints_f(space, length, e(3) )
-        call h5sclose_f( space, e(4) ) 
-        nstrips = int(length)
-        
-        if (any(e /= 0)) call die( "gfdb: failed to get size of attributes of dataset with" // &
-                                   "ixc="//ixc // ", iz="//iz //" and ig="//ig )
-       
-        if (.not. allocated(c%pofs)) &
-            call resize( c%pofs, 1, nstrips )
-       
-        if (nstrips > size(c%pofs)) &
-           call resize( c%pofs, 1, nstrips )
 
-        if (.not. allocated(c%ofs)) &
-            call resize( c%ofs, 1, nstrips )
-            
-        if (nstrips > size(c%ofs)) &
-            call resize( c%ofs, 1, nstrips )
+        call gfdb_io_get_trace(c%dataset_index, &
+                c%references(ig,iz_file,ixc_file), &
+                c%packed, packed_size, c%pofs, c%ofs, nstrips, ok)
+               
+        if (.not. ok) call die()
 
-        adims(1) = nstrips
-        call h5aread_f(attribute, H5T_NATIVE_INTEGER, c%pofs, adims, e(1))
-        call h5aclose_f( attribute, e(2) )
-        
-        call h5aopen_idx_f(dataset, 1, attribute, e(3))
-        call h5aread_f(attribute, H5T_NATIVE_INTEGER, c%ofs, adims, e(4))
-        call h5aclose_f( attribute, e(5) )
-        
-        if (any(e /= 0)) call die( "gfdb: failed to get attributes of dataset with" // &
-                                   "ixc="//ixc // ", iz="//iz //" and ig="//ig )
-        
-      ! get size of data
-      
-        call h5dget_space_f(dataset,space,e(1))
-        call h5sget_simple_extent_npoints_f(space, length, e(2))
-        call h5sclose_f( space, e(3) )
-        
-      ! get the data
-  
-        compactsize = int(length)
-        if (.not. allocated(c%packed)) &
-            call resize(c%packed, 1, compactsize)
-            
-        if (compactsize > size(c%packed)) &
-            call resize(c%packed, 1, compactsize)
+        allocate(c%traces(ig,iz,ixc)%p)
+        tracep => c%traces(ig,iz,ixc)%p
 
-        adims(1) = compactsize
-        call h5dread_f(dataset, H5T_NATIVE_REAL, c%packed, adims, e(4))
-        call h5dclose_f(dataset, e(5))
-        if (any(e /= 0)) call die( "gfdb: failed to get dataset with" // &
-                                   "ixc="//ixc // ", iz="//iz //" and ig="//ig )
-
+        call trace_destroy( tracep )
+        
       ! convert to sparse trace  
-        call trace_from_storable( tracep, c%packed(1:compactsize), &
+        call trace_from_storable( tracep, c%packed(1:packed_size), &
                                   c%pofs(1:nstrips), c%ofs(1:nstrips) )
         
         nbytes = trace_size_bytes( tracep )
@@ -1620,39 +1443,25 @@ module gfdb
         type(t_gfdb), intent(inout) :: db
         type(t_chunk), intent(inout) :: c
         
-        integer(hid_t) :: error, egal
-        integer(hsize_t), dimension(3) :: dims
         integer :: ig,iz,ixc
+        logical :: ok
         
         if ( c%readmode ) return
         if ( c%writemode ) call chunk_close( db, c )
 
-      ! the file will stay open
-        call h5eset_auto_f(0,egal)
-        call h5fopen_f(char(c%filename), H5F_ACC_RDONLY_F,  c%file, error)
-        call h5eset_auto_f(1,egal)
-        if (error /= 0) call die( "gfdb: failed to open file: "//c%filename )
+        call gfdb_io_chunk_open_read( c%filename, c%file, ok )
+        if (.not. ok) call die()
         
-      ! dataset must be kept open, so that dereferencing works
-        call h5dopen_f(c%file, "index", c%dataset_index, error)
-        if (error /= 0) call die( "gfdb: failed to open index dataset in file: " &
-                                    // c%filename )
-
-        c%readmode = .true.
-        
-        allocate( c%references(c%ng, c%nz/c%nipz, c%nxc/c%nipx) )
-        allocate( c%traces(c%ng, c%nz, c%nxc) )
-        
+        allocate( c%traces(c%ng, c%nz, c%nxc) )        
         forall (ig=1:c%ng, iz=1:c%nz, ixc=1:c%nxc) 
             c%traces(ig,iz,ixc)%p => null()
         end forall
+
+        allocate( c%references(c%ng, c%nz/c%nipz, c%nxc/c%nipx) )
+
+        call gfdb_io_chunk_read_index( c%file, c%dataset_index, c%references, ok )
+        if (.not. ok) call die()
         
-        dims(1) =  c%ng
-        dims(2) =  c%nz/c%nipz
-        dims(3) =  c%nxc/c%nipx
-        call workaround(c%dataset_index, c%references, dims, error )
-        if (error /= 0) call die( "gfdb: failed to read index dataset from file: " &
-                                    // c%filename )
         c%readmode = .true.
 
     end subroutine 
@@ -1665,34 +1474,21 @@ module gfdb
 
         type(t_gfdb), intent(inout) :: db
         type(t_chunk), intent(inout) :: c
-        integer(hsize_t), dimension(3) :: dims
-        integer(hid_t) :: error, egal
+
+        logical :: ok
+
         
         if ( c%writemode ) return
         if ( c%readmode ) call chunk_close(db,c)
-        
      
-      ! file will is kept open
-        call h5eset_auto_f(0,egal)
-        call h5fopen_f(char(c%filename), H5F_ACC_RDWR_F,  c%file, error)
-        call h5eset_auto_f(1,egal)
-        if (error /= 0) call die( "gfdb: failed to open file: "//c%filename )
-        
-      ! the index dataset is also be kept open
-        
-        call h5dopen_f(c%file, "index", c%dataset_index, error)
-        if (error /= 0) call die( "gfdb: failed to open index dataset in file: " &
-                                    // c%filename )
+        call gfdb_io_chunk_open_write( c%filename, c%file, ok )
+        if (.not. ok) call die()
                                     
       ! read references to detect duplicate inserts
-        
-        dims(1) =  c%ng
-        dims(2) =  c%nz/c%nipz
-        dims(3) =  c%nxc/c%nipx
         allocate( c%references(c%ng, c%nz/c%nipz, c%nxc/c%nipx) )
-        call workaround(c%dataset_index, c%references, dims, error )
-        if (error /= 0) call die( "gfdb: failed to read index dataset from file: " &
-                                    // c%filename )
+   
+        call gfdb_io_chunk_read_index( c%file, c%dataset_index, c%references, ok )
+        if (.not. ok) call die()
         
         c%writemode = .true.
 
@@ -1705,13 +1501,11 @@ module gfdb
         integer(hid_t), dimension(2) :: e
         integer :: ixc,iz,ig
         integer :: nbytes
+        logical :: ok
         
         if (c%file /= 0) then
-            call h5dclose_f(c%dataset_index,e(1))
-            call h5fclose_f( c%file, e(2) )
-            if (any (e /= 0)) then 
-                call warn("gfdb: problems closing file for chunk "//c%ichunk )
-            end if
+            call gfdb_io_chunk_close(c%file, c%dataset_index, ok)
+            if (.not. ok) call die()
         end if
         
         c%file = 0
