@@ -137,7 +137,7 @@ class QSeisConfig:
          
         self.source_depth_km = 10.0       # X
         
-        self.receiver_depth_km = 0.0      # X
+        self.receiver_depth_km = 0.0      # M
         self.sw_equidistant = 1           # X      # 1 is eqdist, 0 if not
         self.sw_d_unit = 1                # X      # 1 is km,  0 is deg
         self.no_distances = 100           # X
