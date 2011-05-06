@@ -369,4 +369,5 @@ try:
                     f.close()
 
 except ImportError:
-    sys.stderr.write('no seiscomp3 available\n')
+    #sys.stderr.write('no seiscomp3 available\n')
+    pass
