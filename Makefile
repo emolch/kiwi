@@ -11,7 +11,7 @@ SHELL = /bin/sh
 MAKEDEPEND = ./fdepend.pl -g -d -i hdf5.mod -i omp_lib.mod
 OBJDEPEND = ./objdepend.pl
 FORTRANC := gfortran
-
+INSTALL := /usr/bin/install
 
 #### Preset selection ----------------------------------------------------------
 
@@ -125,13 +125,13 @@ targets : $(TARGETS)
 
 
 install : targets
-	install -d $(bindir)
-	install $(TARGETS) $(bindir)
-	install -d $(datadir)/kiwi
+	$(INSTALL) -d $(bindir)
+	$(INSTALL) $(TARGETS) $(bindir)
+	$(INSTALL) -d $(datadir)/kiwi
 	for f in `find aux -type d -and -not -path '*/.svn*'` ; do \
-	    install -d $(datadir)/kiwi/$$f ; done
+	    $(INSTALL) -d $(datadir)/kiwi/$$f ; done
 	for f in `find aux -type f -and -not -path '*/.svn/*'` ; do \
-	    install  $$f $(datadir)/kiwi/$$f ; done
+	    $(INSTALL) $$f $(datadir)/kiwi/$$f ; done
 
 	@echo 
 	@echo '-----------------------------------------------------------------------'
