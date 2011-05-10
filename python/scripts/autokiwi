@@ -111,7 +111,7 @@ class GlobalDataRequest(wilber.IrisWilber):
         logger.info('Already have all data for given time range and event selection.')
         return None
 
-def event_names_from_pathes(base_config):
+def event_names_from_pathes(base_config, kiwi_config):
     # not nice; reverse lookup event names from pathes
     ev_dirs = glob.glob(base_config.path('event_dir', additional={ 'event_name': '*' }))
     event_names = []
@@ -121,7 +121,11 @@ def event_names_from_pathes(base_config):
         pat = re.escape(pat).replace('xxxEVENTNAMExxx', r'([^/]+)')
         m = re.match(pat, ev_dir)
         if m:
-            event_names.append(m.group(1))
+            ev_name = m.group(1)
+            done_fn = kiwi_config.path('processing_done_path', additional={ 'event_name': ev_name })
+            if not os.path.exists(done_fn):
+                event_names.append(ev_name)
+
     return event_names
             
 def wilber_pull(config, which='first', force=False, onlylist=False, specific=None):
@@ -303,7 +307,7 @@ usage = '''%prog [options] <command> [args]
 
 %prog [options] pull    [ first | all | eventname ]
 %prog [options] prepare ( all | eventnames ... )
-%prog [options] process ( all | eventnames ... )
+%prog [options] process ( all | missing | eventnames ... )
 %prog [options] report  ( all | eventnames ... )
 %prog [options] post    ( all | eventnames ... )
 %prog [options] list
@@ -438,9 +442,9 @@ try:
     if not event_names:
         event_names = args[1:]
     
-    if len(event_names) == 1 and event_names[0] == 'all':
-        event_names = event_names_from_pathes(base_config)
-    
+    if len(event_names) == 1 and event_names[0] in ('all', 'missing'):
+        event_names = event_names_from_pathes(base_config, kiwi_config)
+       
     if not event_names and base_config.has('event_names'):
         event_names = base_config.event_names
             
