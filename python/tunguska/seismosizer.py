@@ -420,7 +420,7 @@ class SeismosizerProcess(threading.Thread):
     
     def check_end(self):
         if self.the_end_has_come: 
-            mess = '"You gotta go when you gotta go!", says %i' % self.tid
+            mess = '"You gotta go when you gotta go!", says process %i' % self.tid
                     
             raise SeismosizerInsane(mess)
         
