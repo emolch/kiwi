@@ -396,6 +396,9 @@ class QSeisRunner:
         f = open(input_fn, 'w')
         
         qseis_input = str(config) % { 'tempdir': self.tempdir }
+        
+        logging.debug('===== begin qseis input =====\n%s===== end qseis input =====' % qseis_input)
+        
         f.write( qseis_input )
         f.close()
         program = self.program
@@ -410,19 +413,16 @@ class QSeisRunner:
             raise QSeisError('could not start qseis: "%s"' % program)
         
         (qseis_output, qseis_error) = proc.communicate('input\n')
-        
-        if proc.returncode != 0 or qseis_error:
+       
+        logging.debug('===== begin qseis output =====\n%s===== end qseis output =====' % qseis_output)
+        logging.debug('===== begin qseis error =====\n%s===== end qseis error =====' % qseis_error)
+
+        if proc.returncode != 0 or qseis_error or qseis_output.lower().find('error'):
             os.chdir(old_wd)
-            raise QSeisError('''===== qseis input =====
-%s
-
-==== qseis output ====
-%s
- 
-==== qseis error ====
-%s
-
-non-zero exit status from qseis (called as "%s")''' % (qseis_input, qseis_output, qseis_error, program))
+            raise QSeisError('''===== begin qseis input =====\n%s===== end qseis input =====
+===== begin qseis output =====\n%s===== end qseis output =====
+===== begin qseis error =====\n%s===== end qseis error =====
+non-zero exit status from qseis or the string 'error' has been found in qseis output (qseis has been invoked as "%s")''' % (qseis_input, qseis_output, qseis_error, program))
         
         self.qseis_output = qseis_output
         self.qseis_error = qseis_error
@@ -665,7 +665,6 @@ class QSeisGFDBBuilder(GFDBBuilder):
             conf.distances_km = [firstx/km, lastx/km]       # first, last, if equidist
             
             distances = num.linspace(firstx, lastx, nx).tolist()
-            #distances_wanted = [ dist for dist in distances if is_needed_distance(dist, 300.) ] 
             distances_wanted = distances
             distances_km = [ dist/km for dist in distances_wanted ]
             
