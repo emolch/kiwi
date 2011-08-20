@@ -85,7 +85,6 @@ class Gfdb:
         traces = []
         for igm, fn in enumerate(fns):
             ig = igm+1
-            print fn
             if fn:
                 for tr in io.load(fn):
                     sx = util.base36encode(int(round(x)))
@@ -100,7 +99,6 @@ class Gfdb:
         assert len(traces) == self.ng
         if not self.builder:
             self.builder = Popen( [config.gfdb_build_prog, self.path], stdin=PIPE, stdout=PIPE, close_fds=True)
-            print self.path
             self.tempdir = tempfile.mkdtemp('','gfdb_build-')
             self.tempfilebase = pjoin(self.tempdir, 'trace')
             
@@ -159,11 +157,4 @@ GFDB: %s
                                     self.firstx, self.firstz) ] + [ self.nx, self.nz, self.ng ])
     
 
-if __name__ == '__main__':
-    import sys
-    g = Gfdb(sys.argv[1])
-    print g
-    print g.get_traces_slow( 10000.,10000. )
-    
-    
     
