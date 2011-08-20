@@ -45,7 +45,8 @@ module parameterized_source
     integer, public, parameter :: psm_circular = 2
     integer, public, parameter :: psm_point_lp = 3
     integer, public, parameter :: psm_eikonal = 4
-    integer, public, parameter :: psm_moment_tensor = 5
+    integer, public, parameter :: psm_mt_eikonal = 5
+    integer, public, parameter :: psm_moment_tensor = 6
     
     type, public :: t_eikonal_grid
         real, dimension(2) :: first

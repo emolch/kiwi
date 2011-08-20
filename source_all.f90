@@ -36,6 +36,7 @@ module source_all
     use source_bilat
     use source_point_lp
     use source_eikonal
+    use source_mt_eikonal
     use source_moment_tensor
     
     implicit none
@@ -56,9 +57,9 @@ module source_all
     public psm_get_param_limits
     public psm_get_param_defaults
   
-    integer, public , parameter                            :: nsourcetypes   = 5
+    integer, public , parameter                            :: nsourcetypes   = 6
     integer, public , parameter, dimension(nsourcetypes)   :: sourcetypes = &
-     (/ psm_bilat, psm_circular, psm_point_lp, psm_eikonal, psm_moment_tensor /)
+     (/ psm_bilat, psm_circular, psm_point_lp, psm_eikonal, psm_mt_eikonal, psm_moment_tensor /)
     
   contains
   
@@ -67,6 +68,7 @@ module source_all
         call psm_cleanup_circular()
         call psm_cleanup_point_lp()
         call psm_cleanup_eikonal()
+        call psm_cleanup_mt_eikonal()
         call psm_cleanup_moment_tensor()
     end subroutine
   
@@ -79,6 +81,7 @@ module source_all
         if (sourcetype .eq. psm_circular)       name = "circular"
         if (sourcetype .eq. psm_point_lp)       name = "point_lp"
         if (sourcetype .eq. psm_eikonal)        name = "eikonal"
+        if (sourcetype .eq. psm_mt_eikonal)     name = "mt_eikonal"
         if (sourcetype .eq. psm_moment_tensor)  name = "moment_tensor"
     end subroutine
     
@@ -90,6 +93,7 @@ module source_all
         if (name .eq. "circular")       sourcetype = psm_circular
         if (name .eq. "point_lp")       sourcetype = psm_point_lp
         if (name .eq. "eikonal")        sourcetype = psm_eikonal
+        if (name .eq. "mt_eikonal")        sourcetype = psm_mt_eikonal
         if (name .eq. "moment_tensor")  sourcetype = psm_moment_tensor
     end subroutine
         
@@ -110,6 +114,9 @@ module source_all
             
             case (psm_eikonal) 
                 psm_get_n_source_params = n_source_params_eikonal
+
+            case (psm_mt_eikonal) 
+                psm_get_n_source_params = n_source_params_mt_eikonal
 
             case (psm_moment_tensor) 
                 psm_get_n_source_params = n_source_params_moment_tensor
@@ -137,6 +144,9 @@ module source_all
             case (psm_eikonal) 
                 call psm_get_param_name_eikonal( iparam, name )
 
+            case (psm_mt_eikonal) 
+                call psm_get_param_name_mt_eikonal( iparam, name )
+
             case (psm_moment_tensor) 
                 call psm_get_param_name_moment_tensor( iparam, name )
         
@@ -162,6 +172,9 @@ module source_all
             
             case (psm_eikonal) 
                 call psm_get_param_unit_eikonal( iparam, unit )
+
+            case (psm_mt_eikonal) 
+                call psm_get_param_unit_mt_eikonal( iparam, unit )
 
             case (psm_moment_tensor) 
                 call psm_get_param_unit_moment_tensor( iparam, unit )
@@ -189,6 +202,9 @@ module source_all
             
             case (psm_eikonal) 
                 call psm_get_param_id_eikonal( name, iparam )
+
+            case (psm_mt_eikonal) 
+                call psm_get_param_id_mt_eikonal( name, iparam )
 
             case (psm_moment_tensor) 
                 call psm_get_param_id_moment_tensor( name, iparam )
@@ -223,6 +239,8 @@ module source_all
                 call psm_set_point_lp( psm, params, normalized, only_moment_changed )
             case (psm_eikonal)
                 call psm_set_eikonal( psm, params, normalized, only_moment_changed )
+            case (psm_mt_eikonal)
+                call psm_set_mt_eikonal( psm, params, normalized, only_moment_changed )
             case (psm_moment_tensor)
                 call psm_set_moment_tensor( psm, params, normalized, only_moment_changed )
             
@@ -298,6 +316,15 @@ module source_all
                     limits_max(:) = psm_params_max_soft_eikonal(:)
                 end if
 
+            case (psm_mt_eikonal)
+                if (hard) then
+                    limits_min(:) = psm_params_min_hard_mt_eikonal(:)
+                    limits_max(:) = psm_params_max_hard_mt_eikonal(:)
+                else
+                    limits_min(:) = psm_params_min_soft_mt_eikonal(:)
+                    limits_max(:) = psm_params_max_soft_mt_eikonal(:)
+                end if
+
             case (psm_moment_tensor)
                 if (hard) then
                     limits_min(:) = psm_params_min_hard_moment_tensor(:)
@@ -334,6 +361,9 @@ module source_all
             
             case (psm_eikonal)
                 defaults(:) = psm_params_default_eikonal(:)
+
+            case (psm_mt_eikonal)
+                defaults(:) = psm_params_default_mt_eikonal(:)
 
             case (psm_moment_tensor)
                 defaults(:) = psm_params_default_moment_tensor(:)
@@ -385,6 +415,8 @@ module source_all
                 call psm_set_point_lp( psm, paramscopy, normalized, only_moment_changed )
             case (psm_eikonal)
                 call psm_set_eikonal( psm, paramscopy, normalized, only_moment_changed )
+            case (psm_mt_eikonal)
+                call psm_set_mt_eikonal( psm, paramscopy, normalized, only_moment_changed )
             case (psm_moment_tensor)
                 call psm_set_moment_tensor( psm, paramscopy, normalized, only_moment_changed )
             
@@ -421,6 +453,8 @@ module source_all
                 call psm_to_tdsm_point_lp( psm, tdsm, shortest_doi, ok )
             case (psm_eikonal)
                 call psm_to_tdsm_eikonal( psm, tdsm, shortest_doi, ok )
+            case (psm_mt_eikonal)
+                call psm_to_tdsm_mt_eikonal( psm, tdsm, shortest_doi, ok )
             case (psm_moment_tensor)
                 call psm_to_tdsm_moment_tensor( psm, tdsm, shortest_doi, ok )
                 
@@ -449,6 +483,8 @@ module source_all
                 call psm_write_info_file_point_lp( psm, fn )
             case (psm_eikonal)
                 call psm_write_info_file_eikonal( psm, fn )
+            case (psm_mt_eikonal)
+                call psm_write_info_file_mt_eikonal( psm, fn )
             case (psm_moment_tensor)
                 call psm_write_info_file_moment_tensor( psm, fn )
                 
@@ -457,3 +493,4 @@ module source_all
     end subroutine
     
 end module
+
