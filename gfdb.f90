@@ -699,7 +699,7 @@ module gfdb
         type(t_chunk), intent(inout) :: c
         logical :: ok
 
-        call gfdb_io_create_chunk(c%filename, c%ng, c%nxc/c%nipx, c%nz/c%nipz, &
+        call gfdb_io_create_chunk(c%filename, c%nxc/c%nipx, c%nz/c%nipz, c%ng, &
             int(c%nxc/c%nipx*(floor(log10(real(c%nxc/c%nipx)))+2),SIZE_T), ok)
 
         if (.not. ok) call die()

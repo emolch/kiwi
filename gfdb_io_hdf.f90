@@ -229,7 +229,7 @@ module gfdb_io_hdf
   
     end subroutine
   
-    subroutine gfdb_io_create_chunk(filename, ng, nz, nxc, size_hint, ok)
+    subroutine gfdb_io_create_chunk(filename, nxc, nz, ng, size_hint, ok)
         
         type(varying_string), intent(in) :: filename
         integer, intent(in)              :: ng, nz, nxc
@@ -314,11 +314,11 @@ module gfdb_io_hdf
 
         type(varying_string), intent(in)                :: filename
         integer(hid_t), intent(in)                      :: file,  dataset_index
-        integer                                         :: ixc, iz, ig
+        integer, intent(in)                             :: ixc, iz, ig
         integer, dimension(:), intent(in)               :: ofs, pofs
         real, dimension(:), intent(in)                  :: packed
         integer, intent(in)                             :: packed_size, nstrips
-        integer(size_t)                                 :: size_hint1, size_hint2
+        integer(size_t), intent(in)                     :: size_hint1, size_hint2
         type(hobj_ref_t_f), dimension(1), intent(out)   :: reference
         logical, intent(out)                            :: ok
 
@@ -394,7 +394,6 @@ module gfdb_io_hdf
         
         call h5rcreate_f(group, char(datasetname), reference(1), e(1))
         coord(:,1) = (/ ig, iz, ixc /)
-        
         dims(1) = 1
         call h5dget_space_f(dataset_index,dataspace_for_ref,e(2))
         call h5sselect_elements_f(dataspace_for_ref,H5S_SELECT_SET_F,3, int(1,SIZE_T), coord, e(3))
@@ -663,7 +662,7 @@ module gfdb_io_hdf
         do ix=1,dims(3)
             do iz=1,dims(2)
                 do ig=1,dims(1)
-                    refs(ig,iz,ix) = refs2(i)                    
+                    refs(ig,iz,ix) = refs2(i)
                     i=i+1
                 end do
             end do
