@@ -415,14 +415,24 @@ class QSeisRunner:
         (qseis_output, qseis_error) = proc.communicate('input\n')
        
         logging.debug('===== begin qseis output =====\n%s===== end qseis output =====' % qseis_output)
-        logging.debug('===== begin qseis error =====\n%s===== end qseis error =====' % qseis_error)
+        if qseis_error:
+            logging.error('===== begin qseis error =====\n%s===== end qseis error =====' % qseis_error)
 
-        if proc.returncode != 0 or qseis_error or qseis_output.lower().find('error'):
+        errmess = []
+        if proc.returncode != 0:
+            errmess.append('qseis had a non-zero exit state: %i' % proc.returncode)
+        if qseis_error:
+            errmess.append('qseis emitted something via stderr')
+        if qseis_output.lower().find('error') != -1:
+            errmess.append("the string 'error' appeared in qseis output")
+
+        if errmess:
             os.chdir(old_wd)
             raise QSeisError('''===== begin qseis input =====\n%s===== end qseis input =====
 ===== begin qseis output =====\n%s===== end qseis output =====
 ===== begin qseis error =====\n%s===== end qseis error =====
-non-zero exit status from qseis or the string 'error' has been found in qseis output (qseis has been invoked as "%s")''' % (qseis_input, qseis_output, qseis_error, program))
+%s
+qseis has been invoked as "%s"''' % (qseis_input, qseis_output, qseis_error, '\n'.join(errmess), program))
         
         self.qseis_output = qseis_output
         self.qseis_error = qseis_error
