@@ -1,0 +1,431 @@
+<html>
+<head>
+<title>Kinherd earthquake report</title>
+<style type="text/css">
+div.left {float:left; width:47%;}
+div.right {float:right; width:47%;}
+div.wide {clear:both;}
+span.failed {color:#ef2929;}
+</style>
+<script type="text/javascript">
+function putimage(id,imglink) {
+    ele = document.getElementById(id);
+    ele.src = imglink;
+}
+</script>
+</head>
+<body style="min-width:1000px;">
+<img
+src="http://www.uni-hamburg.de/onTEAM/admin/onteam/_grafik/logos/logo_uhh_neu.gif"
+alt="Uni Hamburg Logo">
+<img
+src="http://www.bgr.bund.de/SiteGlobals/StyleBundles/Bilder/bgr/logo__a,property=default.gif"
+alt="BGR Logo">
+
+
+<h1>Kinherd Earthquake Report</h1>
+
+<h2>Setup</h2>
+
+#if $informer.oc
+<h3>Station map</h3>
+<ul>
+    <li>Number of stations: $informer.oc.nstations</li>
+    <li>Closest station: $informer.oc.closest_station</li>
+    <li>Farthest station: $informer.oc.farthest_station</li>
+</ul>
+$informer.gx('stations')
+
+<h3>Regional overview</h3>
+$informer.gx('region')
+#end if
+
+<h2>Point source</h2>
+
+#if $orienter.oc
+<h3>Orientation</h3>
+<p>
+    We try to get a first estimate on the orientation of the point source double couple,
+    by fitting amplitude spectra of the vertical and transversal components of the seismograms.
+    This step involves a grid search over gradient searches.
+    The polarity of the double couple can not be determined with this data, so
+    there is not only the ambiguity between the two fault planes, but also
+    an ambiguity in the slip-rake angle of &plusmn;n180&deg;.
+    The advantage of this approach is, that only rough estimates of location
+    and timing of the event are needed.
+</p>
+
+<p>
+Results:
+<ul>
+    <li>Moment: $orienter.ocf('%(moment)10.1e') Nm</li>
+    <li>Strike: $orienter.ocf('%(strike)5.0f')&deg;</li>
+    <li>Dip: $orienter.ocf('%(dip)5.0f')&deg;</li>
+    <li>Slip-Rake: $orienter.ocf('%(slip_rake)5.0f')&deg;</li>
+
+</ul>
+</p>
+#end if
+
+#if $timetuner.oc
+<h3>Time offset</h3>
+<p>
+    A grid search on the parameters time and moment is done to determine an initial value for
+    the time of the event. The misfit is calculated in the time domain.
+    This grid search is repeated for both possible slip-rake values
+    and so also resolves the polarity of the double-couple.
+    
+    Results:
+    <ul>
+        <li>$timetuner.oc.moment_stats.str_best_and_confidence(unit='Nm') </li>
+        <li>$timetuner.oc.time_stats.str_best_and_confidence(unit='s') </li>
+        <li>$timetuner.oc.slip_rake_stats.str_best(unit='&deg;')</li>
+    </ul>
+
+    $timetuner.gx('misfit-time') <br />
+    $timetuner.gx('histogram-time')
+</p>
+#end if
+
+#if $greeper.oc
+<h3>Best fitting point source model</h3>
+<p>
+    A gradient search on the parameters time, north-shift, east-shift, depth,
+    moment, strike, dip, slip-rake and rise-time should now quickly resolve the
+    best fitting point source model. This gradient search is repeated for several
+    starting values for source depth.
+</p>
+<p> 
+    Results:
+    <ul>
+        <li>Time = $greeper.ocf('%(time)10.1f') s</li>
+        <li>North-Shift = $greeper.ocf('%(north_shift)10.1f', mult=0.001) km</li>
+        <li>East-Shift = $greeper.ocf('%(east_shift)10.1f', mult=0.001) km</li>
+        <li>Depth = $greeper.ocf('%(depth)10.1f', mult=0.001) km</li>
+        <li>Moment = $greeper.ocf('%(moment)10.1e') Nm</li>
+        <li>Strike: $greeper.ocf('%(strike)5.0f')&deg;</li>
+        <li>Dip: $greeper.ocf('%(dip)5.0f')&deg;</li>
+        <li>Slip-Rake: $greeper.ocf('%(slip_rake)5.0f')&deg;</li>
+        <li>Minimal misfit = $greeper.ocf('%(min_misfit)g')</li>
+    </ul>
+</p>
+<p>
+    Statistics:
+    <ul>
+        <li>Number of gradient searches started: $greeper.oc.greeper_ntotal</li>
+        <li>Number of gradient searches with a successful termination condition: $greeper.oc.greeper_ngood</li>
+        <li>Number of point source models tested: $greeper.oc.greeper_nminfunccalls</li>
+    </ul>
+</p>
+#end if
+
+#if $depthtuner.oc
+<h3>Depth vs. moment stability test</h3>
+While keeping the other parameters constant, a grid search on the parameters
+depth and moment is done to check the quality of the depth estimate.
+
+<h4>Results:</h4>
+<ul>
+    <li>$depthtuner.oc.depth_stats.str_best_and_confidence(factor=0.001,unit='km') </li>
+    <li>$depthtuner.oc.moment_stats.str_best_and_confidence(unit='Nm') </li>
+</ul>
+$depthtuner.gx('misfogram-depth-moment')
+#end if
+
+#if $planetuner.oc
+<h3>Fault plane orientation stability test</h3>
+<p>
+    A 4D grid-search is done on the parameters moment, strike, dip, and 
+    slip-rake in a hypercube around the solution found using the gradient search.
+</p>
+<div style="width:120px; float:left;">
+    $planetuner.gx('beachball')
+</div>
+<ul>
+    <li>$planetuner.oc.strike_stats.str_best_and_confidence(unit='degrees') </li>
+    <li>$planetuner.oc.dip_stats.str_best_and_confidence(unit='degrees') </li>
+    <li>$planetuner.oc.slip_rake_stats.str_best_and_confidence(unit='degrees') </li>
+    <li>$depthtuner.oc.moment_stats.str_best_and_confidence(unit='Nm') </li>
+</ul>
+<p style="clear:both;">
+    Following are the results projected into 2 dimensions. 
+    Contours show the minimal misfit values. The red star indicates the best solution.
+    The circles represent a histogram of the bootstrap results.
+</p>
+
+<h4>Angle vs. angle</h4>
+$planetuner.gx('misfogram-strike-dip') 
+$planetuner.gx('misfogram-slip-rake-dip')
+<br />
+$planetuner.gx('misfogram-strike-slip-rake')
+<br />
+<h4>Moment vs. angle</h4>
+$planetuner.gx('misfogram-strike-moment')
+<br />
+$planetuner.gx('misfogram-dip-moment') 
+<br />
+$planetuner.gx('misfogram-slip-rake-moment') 
+
+<h4>Per parameter histograms of bootstrap results</h4>
+$planetuner.gx('histogram-strike')
+$planetuner.gx('histogram-dip')
+<br>
+$planetuner.gx('histogram-slip-rake')
+$planetuner.gx('histogram-moment')
+#end if
+
+#if $locationtuner.oc
+<h3>Location</h3>
+<p>
+    A 3D grid-search on the parameters East-Shift, North-Shift, and Time is done to check the stability of location and time.
+    The results of this grid-search are currently not used in the further processing.
+</p>
+<h4>Results:</h4>
+<ul>
+    <li>$locationtuner.oc.north_shift_stats.str_best_and_confidence(factor=0.001,unit='km') </li>
+    <li>$locationtuner.oc.east_shift_stats.str_best_and_confidence(factor=0.001,unit='km') </li>
+    <li>$locationtuner.oc.time_stats.str_best_and_confidence(unit='s') </li>
+</ul>
+
+$locationtuner.gx('misfogram-east-shift-north-shift')
+$locationtuner.gx('misfogram-time-north-shift')
+<br />
+$locationtuner.gx('misfogram-east-shift-time')
+<br />
+$locationtuner.gx('histogram-north-shift')
+$locationtuner.gx('histogram-east-shift')
+$locationtuner.gx('histogram-time')
+$locationtuner.gx('stations')
+#end if
+
+<h3>Waveforms for best double-couple solution</h3>
+$seismograms_dc.gx('seismograms_all')
+
+
+#if $shifter.oc
+<h3>Time-shifting of traces</h3>
+<p style="font-size:80%">
+#set sep = ''
+#for s in $shifter.oc.shifts_debug
+$sep
+    #if $s.failed
+        <span class="failed">$s.name</span>#slurp
+    #else
+        $s.name: $s.shift#slurp
+    #end if
+    #set sep = ', '
+#end for
+</p>
+$shifter.gx('stations')
+#end if
+
+
+#if $durationfinder2.oc
+<h3>Duration</h3>
+<div style="float:left; width:500px;">
+$durationfinder2.gx('misfit-rise-time') <br />
+$durationfinder2.gx('histogram-rise-time')
+</div>
+#end if
+
+<div class="wide">
+    <h2 style="clear:left;">Extension</h2>
+    <p>A 4D grid-search on the parameters Bord-Radius, Nukl-Shift-X, Nukl-Shift-Y and Moment is done.
+    This grid-search is done for both possible fault planes. Rupture velocity is fixed at 90% of the S-wave velocity.</p>
+</div>
+
+#if $extension_plane1.oc
+<div class="left">
+    <h3>Extension assuming plane 1</h3>
+    <div style="width:120px; float:left;">
+        $extension_plane1.gx('beachball')
+    </div>
+    <ul>
+        <li>Strike: $extension_plane1.ocf('%(active_strike)5.0f')&deg; </li>
+        <li>Dip: $extension_plane1.ocf('%(active_dip)5.0f')&deg; </li>
+        <li>Slip-Rake: $extension_plane1.ocf('%(active_slip_rake)5.0f')&deg; </li>
+    </ul>
+    <h4>Results</h4>
+    <ul>
+        <li>$extension_plane1.oc.bord_radius_stats.str_best_and_confidence(factor=0.001,unit='km') </li>
+        <li>$extension_plane1.oc.nukl_shift_x_stats.str_best_and_confidence(factor=0.001,unit='km') </li>
+        <li>$extension_plane1.oc.nukl_shift_y_stats.str_best_and_confidence(factor=0.001,unit='km') </li>
+    </ul>
+    <div style="text-align:center;">
+        $extension_plane1.gx('rupture') <br />
+        $extension_plane1.gx('location')
+    </div>
+    <div style="text-align:center;">
+        $extension_plane1.gx('misfogram-nukl-shift-x-bord-radius') <br />
+        $extension_plane1.gx('misfogram-nukl-shift-x-nukl-shift-y') <br />
+        $extension_plane1.gx('stations') <br />
+        $extension_plane1.gx('histogram-bord-radius') <br />
+        $extension_plane1.gx('histogram-nukl-shift-x') <br />
+        $extension_plane1.gx('histogram-nukl-shift-y') <br />
+    </div>
+    <h4>Waveforms</h4>
+    $seismograms_ext_plane1.gx('seismograms_all')
+</div>
+#end if
+
+
+
+#if $extension_plane2.oc
+<div class="right">
+    <h3>Extension assuming plane 2</h3>
+    <div style="width:120px; float:left;">
+        $extension_plane2.gx('beachball')
+    </div>
+    <ul>
+        <li>Strike: $extension_plane2.ocf('%(active_strike)5.0f')&deg; </li>
+        <li>Dip: $extension_plane2.ocf('%(active_dip)5.0f')&deg; </li>
+        <li>Slip-Rake: $extension_plane2.ocf('%(active_slip_rake)5.0f')&deg; </li>
+    </ul>
+    <h4>Results:</h4>
+    <ul>
+        <li>$extension_plane2.oc.bord_radius_stats.str_best_and_confidence(factor=0.001,unit='km') </li>
+        <li>$extension_plane2.oc.nukl_shift_x_stats.str_best_and_confidence(factor=0.001,unit='km') </li>
+        <li>$extension_plane2.oc.nukl_shift_y_stats.str_best_and_confidence(factor=0.001,unit='km') </li>
+    </ul>
+    <div style="text-align:center;">
+        $extension_plane2.gx('rupture') <br />
+        $extension_plane2.gx('location')
+    </div>
+    <div style="text-align:center;">
+        $extension_plane2.gx('misfogram-nukl-shift-x-bord-radius') <br />
+        $extension_plane2.gx('misfogram-nukl-shift-x-nukl-shift-y') <br />
+        $extension_plane2.gx('stations') <br />
+        $extension_plane2.gx('histogram-bord-radius') <br />
+        $extension_plane2.gx('histogram-nukl-shift-x') <br />
+        $extension_plane2.gx('histogram-nukl-shift-y') <br />
+    </div>
+    <h4>Waveforms</h4>
+    $seismograms_ext_plane2.gx('seismograms_all')
+</div>
+#end if
+
+
+<div class="wide">
+    <h3>Seismograms and spectra</h3>
+    <ul>
+        <li style="color:black;">Black: Observations</li>
+        <li style="color:#3465a4;">Blue: Best point source</li>
+        <li style="color:#cc0000;">Red: Fixed rupture velocity result</li>
+        <li style="color:#4e9a06;">Green: Variable rupture velocity result</li>
+    </ul>
+    
+</div>
+
+<div class="wide">
+<h3>Rupture velocity</h3>
+An atempt to estimate the repture velocity is made by doing a 3D grid-search in
+the parameters Rel-Rupture-Velocity, Bord-Radius and Nukl-Shift-X, in a cube around the 
+previously obtained solution for the extension.
+</div>
+
+
+#if $extensiontuner_plane1.oc
+<div class="left">
+    <h3>Assuming plane 1</h3>
+    <ul>
+        <li>Strike: $extension_plane1.oc.active_strike&deg; </li>
+        <li>Dip: $extension_plane1.oc.active_dip&deg; </li>
+        <li>Slip-Rake: $extension_plane1.oc.active_slip_rake&deg; </li>
+    </ul>
+    <h4>Results</h4>
+    <ul>
+        <li>$extensiontuner_plane1.oc.rel_rupture_velocity_stats.str_best_and_confidence() </li>
+        <li>$extensiontuner_plane1.oc.bord_radius_stats.str_best_and_confidence(factor=0.001,unit='km') </li>
+        <li>$extensiontuner_plane1.oc.nukl_shift_x_stats.str_best_and_confidence(factor=0.001,unit='km') </li>
+        <li>$extensiontuner_plane1.oc.nukl_shift_y_stats.str_best_and_confidence(factor=0.001,unit='km')</li>
+    </ul>
+    <div style="text-align:center;">
+        $extensiontuner_plane1.gx('misfogram-rel-rupture-velocity-bord-radius') <br />
+        $extensiontuner_plane1.gx('misfogram-nukl-shift-x-bord-radius') <br />
+        $extensiontuner_plane1.gx('misfogram-nukl-shift-x-nukl-shift-y') <br />
+        $extensiontuner_plane1.gx('histogram-rel-rupture-velocity') <br />
+        $extensiontuner_plane1.gx('histogram-bord-radius') <br />
+        $extensiontuner_plane1.gx('histogram-nukl-shift-x') <br />
+        $extensiontuner_plane1.gx('histogram-nukl-shift-y') <br />
+    </div>
+    <h4>Waveforms</h4>
+    $seismograms_exttune_plane1.gx('seismograms_all')
+</div>
+#end if
+
+
+#if $extensiontuner_plane2.oc
+<div class="right">
+    <h3>Assuming plane 2</h3>
+    <ul>
+        <li>Strike: $extension_plane2.oc.active_strike&deg; </li>
+        <li>Dip: $extension_plane2.oc.active_dip&deg; </li>
+        <li>Slip-Rake: $extension_plane2.oc.active_slip_rake&deg; </li>
+    </ul>
+    <h4>Results</h4>
+    <ul>
+        <li>$extensiontuner_plane2.oc.rel_rupture_velocity_stats.str_best_and_confidence() </li>
+        <li>$extensiontuner_plane2.oc.bord_radius_stats.str_best_and_confidence(factor=0.001,unit='km') </li>
+        <li>$extensiontuner_plane2.oc.nukl_shift_x_stats.str_best_and_confidence(factor=0.001,unit='km') </li>
+        <li>$extensiontuner_plane2.oc.nukl_shift_y_stats.str_best_and_confidence(factor=0.001,unit='km')</li>
+    </ul>
+    <div style="text-align:center;">
+        $extensiontuner_plane2.gx('misfogram-rel-rupture-velocity-bord-radius') <br />
+        $extensiontuner_plane2.gx('misfogram-nukl-shift-x-bord-radius') <br />
+        $extensiontuner_plane2.gx('misfogram-nukl-shift-x-nukl-shift-y') <br />
+        $extensiontuner_plane2.gx('histogram-rel-rupture-velocity') <br />
+        $extensiontuner_plane2.gx('histogram-bord-radius') <br />
+        $extensiontuner_plane2.gx('histogram-nukl-shift-x') <br />
+        $extensiontuner_plane2.gx('histogram-nukl-shift-y') <br />
+    </div>
+    <h4>Waveforms</h4>
+    $seismograms_exttune_plane2.gx('seismograms_all')
+            
+</div>
+#end if
+
+
+<h3>Explanation of the various plot types</h3>
+
+<h4>1D misfit vs. parameter</h4>
+<p>
+    Each blue dot represents the misfit value of one tested source model parameterization.
+    If the plot comes from a multi-dimensional grid search, more than one dot may be shown at each tested parameter value.
+</p>
+
+<h4>1D bootstrap histogram</h4>
+<p>
+    With hundreds of randomly choosen station configurations, it is possible to
+    check the stability of the minimum of the grid searches with respect to
+    station geometry. Each choosen station configuration may yield a different
+    location of the grid search minimum. These histograms show the likelyhood
+    of a particular position of the misfit minimum.
+</p>
+
+<h4>2D projected minimal misfit plots</h4>
+<p>
+    To depict the results of multidimensional grid searches, projections of the
+    minimal misfit are projected into two dimensions and plotted as contour
+    and density plots. The red star indicates the global minimum of the grid search.
+    The circles represent a 2D histogram of the bootstrap results (see above).
+</p>
+
+<h4>Station maps with flags</h4>
+<p>
+    Each station has two flags. The flag pointing to the left is for the P phase window,
+    the flag pointing to the right is for the S phase window.
+    The size of the flags corresponds to the value of the misfit at each station.
+    The color indicates, if the misfit has increased or decreased during the
+    inversion step for which the plot has been made. Blue depicts an improvement
+    of fit, red indicates decline.
+</p>
+
+<h4>Plots of the rupture time history</h4>
+<p>
+    Isochrones of the rupture front are depicted as contour lines. The nucleation
+    point is marked by a red star. The plot is slightly shaded, such that deeper 
+    parts of the rupture surface have a darker color.
+</p>
+
+</body>
+</html>

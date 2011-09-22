@@ -1,0 +1,4 @@
+<earthquake>
+    <ref_time>$earthquake.time_as_string</ref_time>
+    <region>$earthquake.region</region>
+</earthquake>

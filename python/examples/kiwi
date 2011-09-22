@@ -1,0 +1,329 @@
+#!/usr/bin/env python
+
+from tunguska import *
+wd = 'work'
+
+depthrange = 1000., 99000.
+mindepth_centroid = 5000.
+
+basic = Config()
+basic.nsets         = 2
+basic.set_names     = ['P', 'S']
+basic.hosts         = ['localhost']*4
+basic.balance_method = '123123'
+basic.datadir       = 'data'
+basic.gfdb_path     = '/kinherd/gfdb/gemini-prem-11000km-body/db'
+basic.effective_dt  = 2.0
+basic.components    = ['u', 'r']
+basic.blacklist     = []
+basic.verbose       = False
+basic.constraining_planes = [((0.,0.,depthrange[0]),(0.,0.,-1.)),
+                             ((0.,0.,depthrange[1]),(0.,0.,+1.))]
+
+basic.report_templates_dir = 'report_templates'
+basic.report_dir = 'report'
+
+initial = Config()
+initial.time         = 0.
+initial.bord_radius  = 0.
+initial.rise_time    = 1.
+initial.moment       = 1.0e18
+initial.depth        = 15000.
+initial.strike       = 0.
+initial.dip          = 45.
+initial.slip_rake    = 0.
+initial.north_shift  = 0.
+initial.east_shift   = 0.
+initial.nukl_shift_x = 0.
+initial.nukl_shift_y = 0.
+initial.bord_radius  = 0.
+
+
+#  misfit methods
+mm = Config()
+mm.outer_norm           = 'l1norm'
+mm.bootstrap_iterations = 1000
+mm.taper                = [Taper( phases=('P','Pn'), offsets=(-20,-10, 40,50) ), 
+                           Taper( phases=('S','Sn'), offsets=(-20,-10, 40,50) )]
+mm.filter               = Filter( frequencies=(0., 0.01, 0.05, 0.1) )
+mm.anarchy              = False 
+
+
+mm_timedomain = Config(mm)
+mm_timedomain.inner_norm ='l1norm'
+
+mm_frequencydomain = Config(mm)
+mm_frequencydomain.inner_norm = 'ampspec_l1norm'
+
+mm_duration = Config(mm_timedomain)
+mm_duration.filter = Filter( frequencies=(0., 0.01, 0.25, 0.3) )
+
+mm_extended = Config(mm_frequencydomain)
+
+weighter_conf = Config(mm_frequencydomain)
+
+momenttuner_conf = Config(mm_frequencydomain)
+momenttuner_conf.moment_range = 1e16, 1e23, 1.1, 'exp'
+
+orienter_conf = Config(mm_frequencydomain)
+orienter_conf.strike_start_range = -180., 180., 90.
+orienter_conf.dip_start_range    =   20., 70., 50.
+orienter_conf.slip_rake_start_range = 0., 90., 90.
+orienter_conf.strike_range     = -360., 360., 10.
+orienter_conf.dip_range        =    0.,  120., 10.
+orienter_conf.slip_rake_range  =  -360., 360., 10.
+orienter_conf.moment_range     =  0.1,  3.0,  0.1, 'mult'
+orienter_conf.depth_range      =  mindepth_centroid, depthrange[1], 1000.
+
+depthorienter_conf = Config(mm_frequencydomain)
+depthorienter_conf.depth_start_range = mindepth_centroid, depthrange[1], 10000.
+depthorienter_conf.strike_range     = -360., 360., 10.
+depthorienter_conf.dip_range        =    0.,  120., 10.
+depthorienter_conf.slip_rake_range  =  -360., 360., 10.
+depthorienter_conf.moment_range     =  0.1,  3.0,  0.1, 'mult'
+depthorienter_conf.depth_range      =  mindepth_centroid, depthrange[1], 1000.
+
+timetuner_conf = Config(mm_timedomain)
+timetuner_conf.time_range = -30., 30., 1.
+timetuner_conf.moment_range = 0.1,1.8,0.1, 'mult'
+timetuner_conf.slip_rake_range = 0., 180., 180., 'add'
+
+greeper_conf = Config(mm_timedomain)
+greeper_conf.depth_start_range = mindepth_centroid, depthrange[1], 5000.
+greeper_conf.moment_range     =  0.1, 3., 0.05, 'mult'
+greeper_conf.depth_range      =  mindepth_centroid, depthrange[1], 1000.
+greeper_conf.time_range       = -10., 10., 1., 'add'
+greeper_conf.strike_range     = -40., +40.,  5., 'add'
+greeper_conf.dip_range        = -30., +30.,  5., 'add'
+greeper_conf.slip_rake_range  = -40., +40., 10., 'add'
+greeper_conf.north_shift_range = -100000., +100000., 10000., 'add'
+greeper_conf.east_shift_range  = -100000., +100000., 10000., 'add'
+greeper_conf.rise_time_range   = 1., 20., 1.
+
+depthtuner_conf = Config(mm_timedomain)
+depthtuner_conf.depth_range = mindepth_centroid, depthrange[1], 1000.
+depthtuner_conf.moment_range = 0.1, 2.5, 0.1, 'mult'
+
+planetuner_conf = Config(mm_timedomain)
+planetuner_conf.strike_range    = -20., +20.,  5., 'add'
+planetuner_conf.dip_range       = -20., +20.,  5., 'add'
+planetuner_conf.slip_rake_range = -30., +30.,  5., 'add'
+planetuner_conf.moment_range    =  0.7, 1.5, 0.1, 'mult'
+
+locationtuner_conf = Config(mm_timedomain)
+locationtuner_conf.north_shift_range = -100000., +100000., 10000., 'add'
+locationtuner_conf.east_shift_range  = -100000., +100000., 10000., 'add'
+locationtuner_conf.time_range        = -4., +4., 1., 'add'
+
+shifter_conf = Config()
+shifter_conf.taper = mm.taper
+shifter_conf.filter = mm.filter
+shifter_conf.autoshift_range = -20., 20.
+shifter_conf.autoshift_limit = -10., 10.
+
+durationfinder_conf = Config(mm_duration)
+durationfinder_conf.rise_time_range = 1., 30., 1.
+durationfinder_conf.moment_range  = 0.6,2.,0.05, 'mult'
+
+durationfinder2_conf = Config(mm_duration)
+durationfinder2_conf.rise_time_range = 1., 30., 1.
+durationfinder2_conf.depth_range = mindepth_centroid, depthrange[1], 1000.
+durationfinder2_conf.moment_range =  0.6, 2.0, 0.2, 'mult'
+
+
+stf_conf = Config(mm_extended)
+stf_conf.inner_norm = 'scalar_product'
+stf_conf.time_range = -20., 30., 0.5
+stf_conf.rise_time = 1.
+stf_conf.taper                = [Taper( phases=('P','Pn'), offsets=(-20,-10,10,20) ), 
+                                 Taper( phases=('S','Sn'), offsets=(-20,-10,40,50), amplitude=0.0 )]
+stf_conf.filter               = None
+
+
+informer            = Informer(wd, name='informer')
+weighter            = WeightMaker(wd, name='weightmaker')
+momenttuner0        = ParamTuner(wd, name='momenttuner0', params=['moment'], xblacklist_level=4.)
+momenttuner         = ParamTuner(wd, name='momenttuner', params=['moment'], xblacklist_level=4.)
+orienter            = Greeper(wd, name='orienter', params=['strike', 'dip', 'slip_rake', 'moment', 'depth'])
+depthorienter       = Greeper(wd, name='depthorienter', params=['strike', 'dip', 'slip_rake', 'moment', 'depth'])
+timetuner           = ParamTuner(wd, name='timetuner', params=['time', 'slip_rake', 'moment'])
+greeper             = Greeper(wd, name='greeper', params=['moment', 'time', 'depth', 'strike', 'dip', 'slip_rake', 'north_shift', 'east_shift', 'rise_time'] )
+depthtuner          = ParamTuner(wd, name='depthtuner', params=['depth', 'moment']) 
+planetuner          = ParamTuner(wd, name='planetuner', params=['strike', 'dip', 'slip_rake', 'moment'])
+locationtuner       = ParamTuner(wd, name='locationtuner', params=['north_shift', 'east_shift', 'time'])
+seismograms_dc      = TracePlotter(wd, name='seismograms_dc', snapshots=[(locationtuner, 'best')])
+shifter             = Shifter(wd, name='shifter')
+durationfinder0     = ParamTuner(wd, name='durationfinder0', params=['rise_time', 'moment'], xblacklist_level=2.)
+durationfinder1     = ParamTuner(wd, name='durationfinder1', params=['rise_time', 'moment'])
+durationfinder2     = ParamTuner(wd, name='durationfinder2', params=['depth','rise_time', 'moment'])
+seismograms_dc_hf      = TracePlotter(wd, name='seismograms_dc_hf', snapshots=[(durationfinder2, 'best')])
+stfestimator        = ParamTuner(wd, name='stfestimator', params=['time'])
+mm_extended_auto    = ExtConfigurator(wd, name='mm_extended_auto', 
+                            generate=('filter', 'constraining_planes') )
+                            
+range_extended_auto = ExtConfigurator(wd, name='range_extended_auto', 
+                            generate=('bord_radius_range', 'nukl_shift_x_range', 'nukl_shift_y_range'),
+                            size_factor=4000., steps=10.)
+
+
+durationfinder3_conf = Config(mm_extended, mm_extended_auto)
+durationfinder3_conf.rise_time_range = 1., 30., 1.
+durationfinder3_conf.moment_range =  0.6, 2.0, 0.2, 'mult'
+
+momenttuner_final_conf = Config(mm_frequencydomain)
+momenttuner_final_conf.moment_range = 0.6, 2.0, 0.025, 'mult'
+
+plane1 = Config()
+plane1.plane = 1
+
+plane2 = Config()
+plane2.plane = 2
+
+extended = Config(mm_extended, mm_extended_auto, range_extended_auto)
+extended.rise_time             =     2.
+extended.rel_rupture_velocity  =     0.8
+extended.spacial_undersampling = [1, 1]
+
+extended1 = Config(extended,plane1)
+extended2 = Config(extended,plane2)
+
+exttune = Config(extended)
+exttune.effective_dt = 4.
+exttune.rel_rupture_velocity_range = 0.4, 1.4, 0.1
+exttune.bord_radius_range = -12000.,6000., 2000., 'add'
+exttune.nukl_shift_x_range = -6000.,6000., 2000., 'add'
+exttune.nukl_shift_y_range = -6000.,6000., 2000., 'add'
+
+exttune1 = Config(exttune,plane1)
+exttune2 = Config(exttune,plane2)
+
+
+momenttuner_final   = ParamTuner(wd, name='momenttuner_final', params=['moment'])
+durationfinder3     = ParamTuner(wd, name='durationfinder3', params=['rise_time', 'moment'])
+
+
+extension_plane1    = ParamTuner(wd, name='extension_plane1',
+    params = [ 'bord_radius', 'nukl_shift_x', 'nukl_shift_y'],
+    ref_source_from = (durationfinder3, 'best'))
+
+seismograms_ext_plane1      = TracePlotter(wd, name='seismograms_ext_plane1',
+    snapshots=[(durationfinder3, 'best'), (extension_plane1, 'best')])
+
+extensiontuner_plane1 = ParamTuner(wd, name='extensiontuner_plane1',
+    params=['rel_rupture_velocity', 'bord_radius', 'nukl_shift_x', 'nukl_shift_y'])
+
+seismograms_exttune_plane1 = TracePlotter(wd,
+    name='seismograms_exttune_plane1',
+    snapshots=[(durationfinder3, 'best'),(extensiontuner_plane1, 'best')])
+
+
+extension_plane2 = ParamTuner(wd, name='extension_plane2', 
+    params=[ 'bord_radius', 'nukl_shift_x', 'nukl_shift_y'],
+    ref_source_from = (durationfinder3, 'best'))
+
+seismograms_ext_plane2 = TracePlotter(wd, 
+    name='seismograms_ext_plane2',
+    snapshots=[(durationfinder3, 'best'),(extension_plane2, 'best')])
+
+extensiontuner_plane2 = ParamTuner(wd, name='extensiontuner_plane2', 
+    params=['rel_rupture_velocity', 'bord_radius', 'nukl_shift_x', 'nukl_shift_y'])
+
+seismograms_exttune_plane2 = TracePlotter(wd,
+    name='seismograms_exttune_plane2',
+    snapshots=[(durationfinder3, 'best'),(extensiontuner_plane2, 'best')])
+
+confstack = [basic, initial]
+informer.in_config          = Config( basic )
+weighter.in_config          = Config( *(confstack+[weighter_conf]) )
+confstack.append(weighter)
+momenttuner0.in_config       = Config( *(confstack+[momenttuner_conf]) )
+confstack.append(momenttuner0)
+momenttuner.in_config       = Config( *(confstack+[momenttuner_conf]) )
+confstack.append(momenttuner)
+orienter.in_config          = Config( *(confstack+[orienter_conf]) )
+confstack.append(orienter)
+depthorienter.in_config     = Config( *(confstack+[depthorienter_conf]) )
+confstack.append(depthorienter)
+timetuner.in_config         = Config( *(confstack+[timetuner_conf]) )
+confstack.append(timetuner)
+greeper.in_config           = Config( *(confstack+[greeper_conf]) )
+confstack.append(greeper)
+depthtuner.in_config        = Config( *(confstack+[depthtuner_conf]) )
+confstack.append(depthtuner)
+planetuner.in_config        = Config( *(confstack+[planetuner_conf]) )
+confstack.append(planetuner)
+locationtuner.in_config     = Config( *(confstack+[locationtuner_conf]) )
+confstack.append(locationtuner)
+seismograms_dc.in_config    = Config( *confstack )
+shifter.in_config           = Config( *(confstack+[shifter_conf]) )
+confstack.append(shifter)
+
+durationfinder0.in_config    = Config( *(confstack+[durationfinder_conf]) )
+confstack.append(durationfinder0)
+durationfinder1.in_config    = Config( *(confstack+[durationfinder_conf]) )
+confstack.append(durationfinder1)
+durationfinder2.in_config    = Config( *(confstack+[durationfinder2_conf]) )
+# results from durationfinder2 are not used
+
+seismograms_dc_hf.in_config    = Config( *(confstack+[durationfinder2]) )
+
+stfestimator.in_config = Config( *(confstack+[stf_conf]) )
+
+confstack.append(locationtuner)
+
+mm_extended_auto.in_config = Config(*(confstack+[mm_extended]))
+range_extended_auto.in_config = Config(*(confstack+[mm_extended]))
+
+durationfinder3.in_config = Config( *(confstack+[durationfinder3_conf]) )
+
+momenttuner_final.in_config = Config( *(confstack+[momenttuner_final_conf]) )
+confstack.append(momenttuner_final)
+
+extension_plane1.in_config  = Config( *(confstack+[extended1]) )
+confstack1 = confstack + [extension_plane1]
+seismograms_ext_plane1.in_config = Config( *confstack1 )
+extensiontuner_plane1.in_config = Config( *(confstack1+[exttune1]) )
+confstack1 = confstack + [extensiontuner_plane1]
+seismograms_exttune_plane1.in_config = Config( *confstack1 )
+
+extension_plane2.in_config  = Config( *(confstack+[extended2]) )
+confstack2 = confstack + [extension_plane2]
+seismograms_ext_plane2.in_config = Config( *confstack2 )
+extensiontuner_plane2.in_config = Config( *(confstack2+[exttune2]) )
+confstack2 = confstack + [extensiontuner_plane2]
+seismograms_exttune_plane2.in_config = Config( *confstack2 )
+
+steps = [
+informer, 
+weighter, 
+momenttuner0, 
+momenttuner, 
+orienter,
+depthorienter,
+timetuner, 
+greeper, 
+depthtuner, 
+planetuner, 
+locationtuner, 
+seismograms_dc, 
+shifter, 
+durationfinder0, 
+durationfinder1, 
+durationfinder2, 
+seismograms_dc_hf, 
+stfestimator, 
+mm_extended_auto,
+range_extended_auto,
+durationfinder3,
+momenttuner_final,
+extension_plane1, 
+seismograms_ext_plane1,
+extension_plane2, 
+seismograms_ext_plane2,
+extensiontuner_plane1, 
+seismograms_exttune_plane1,
+extensiontuner_plane2,
+seismograms_exttune_plane2,
+]
+ 
+kiwi_main(steps)

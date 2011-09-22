@@ -1,0 +1,96 @@
+<parametersets>
+#for $ext in $extension_plane1, $extension_plane2
+#if $ext.oc
+<parameterset>
+    <shortmethod>KES</shortmethod>
+    <shortvariant>P$ext.ic.plane</shortvariant>
+    <agency>Uni Hamburg/Uni Potsdam/GFZ/BGR</agency>
+    <operator>Kiwi Autopilot</operator>
+    <method>Kiwi L1 Teleseismic Bodywave Extended Source Waveform Inversion</method>
+    <variant>Plane $ext.ic.plane</variant>
+    <description></description>
+    <comment>These are preliminary results.</comment>
+    <credits>
+        Inversion has been done using the Kiwi Tools, developed by Sebastian Heimann and Simone Cesca, http://kinherd.org/.
+        Green's functions have been created with the GEMINI, written by Joerg Dalkolmo and Wolfgang Friedrich.
+        Data has been downloaded from IRIS http://www.iris.edu/wilber/.
+    </credits>
+    <posted_time>$time.strftime('%Y-%m-%d %H:%M:%S', $time.gmtime($posted))</posted_time>
+    <reference_time>$time.strftime('%Y-%m-%d %H:%M:%S', $time.gmtime($informer.oc.reference_time))</reference_time>
+    
+    <parameter>
+        <name>Latitude</name>
+        <value>$ext.oc.centroid_latitude</value>
+        <fixed />
+    </parameter>
+    <parameter>
+        <name>Longitude</name>
+        <value>$ext.oc.centroid_longitude</value>
+        <fixed />
+    </parameter>
+    <parameter>
+        <name>Depth</name>
+        <value>$ext.ic.depth</value>
+        <fixed />
+    </parameter>
+    <parameter>
+        <name>Strike</name>
+        <value>$ext.oc.active_strike</value>
+        <fixed />
+    </parameter>
+    <parameter>
+        <name>Dip</name>
+        <value>$ext.oc.active_dip</value>
+        <fixed />
+    </parameter>
+    <parameter>
+        <name>Slip-Rake</name>
+        <value>$ext.oc.active_slip_rake</value>
+        <fixed />
+    </parameter>
+    <parameter>
+        <name>Rel-Rupture-Velocity</name>
+        <value>$ext.ic.rel_rupture_velocity</value>
+        <fixed />
+    </parameter>
+    <parameter>
+        <name>Rise-Time</name>
+        <value>$ext.ic.rise_time</value>
+        <fixed />
+    </parameter>
+    
+$ext.oc.bord_radius_stats.as_xml
+$ext.oc.nukl_shift_x_stats.as_xml
+$ext.oc.nukl_shift_y_stats.as_xml
+
+    #for $format in 'pdf', 'png'
+    <attachment>
+        <name>beachball.$format</name>
+        <path>$ext.gxi('beachball', $format)</path>
+    </attachment>
+        
+    <attachment>
+        <name>region.$format</name>
+        <path>$ext.gxi('region', $format)</path>
+    </attachment>
+    
+    <attachment>
+        <name>stations.$format</name>
+        <path>$informer.gxi('stations', $format)</path>
+    </attachment>
+    
+    <attachment>
+        <name>rupture.$format</name>
+        <path>$ext.gxi('rupture', $format)</path>
+    </attachment>
+    
+    <attachment>
+        <name>location.$format</name>
+        <path>$ext.gxi('location', $format)</path>
+    </attachment>
+    
+    #end for
+</parameterset>
+#end if
+#end for
+</parametersets>

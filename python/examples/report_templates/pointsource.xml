@@ -1,0 +1,61 @@
+#import time
+<parameterset>
+    <shortmethod>KPS</shortmethod>
+    <agency>Uni Hamburg/Uni Potsdam/GFZ/BGR</agency>
+    <operator>Kiwi Autopilot</operator>
+    <method>Kiwi L1 Teleseismic Bodywave Pointsource Doublecouple Waveform Inversion</method>
+    <description>Pointsource doublecouple is estimated from fit of
+    teleseismic P and SH bodywave phases.</description>
+    <comment>These are preliminary results.</comment>
+    <credits>
+        Inversion has been done using the Kiwi Tools, developed by Sebastian Heimann and Simone Cesca, http://kinherd.org/.
+        Green's functions have been created with the GEMINI, written by Joerg Dalkolmo and Wolfgang Friedrich.
+        Data has been downloaded from Geofon http://geofon.gfz-potsdam.de/
+    </credits>
+    <posted_time>$time.strftime('%Y-%m-%d %H:%M:%S', $time.gmtime($posted))</posted_time>
+    <reference_time>$time.strftime('%Y-%m-%d %H:%M:%S', $time.gmtime($informer.oc.reference_time))</reference_time>
+$locationtuner.oc.time_stats.as_xml
+$locationtuner.oc.north_shift_stats.as_xml
+$locationtuner.oc.east_shift_stats.as_xml
+$locationtuner.oc.latitude_stats.as_xml
+$locationtuner.oc.longitude_stats.as_xml
+$depthtuner.oc.depth_stats.as_xml
+$planetuner.oc.magnitude_stats.as_xml
+$planetuner.oc.moment_stats.as_xml
+$planetuner.oc.strike_stats.as_xml
+$planetuner.oc.dip_stats.as_xml
+$planetuner.oc.slip_rake_stats.as_xml
+$durationfinder2.oc.rise_time_stats.as_xml
+    <parameter>
+        <name>Misfit</name>
+        <value>$locationtuner.oc.min_misfit</value>
+    </parameter>
+    <parameter>
+        <name>Traces total</name>
+        <value>$locationtuner.oc.nstations_total</value>
+    </parameter>
+    <parameter>
+        <name>Traces used</name>
+        <value>$locationtuner.oc.nstations_used</value>
+    </parameter>
+    
+
+    #for $format in 'pdf', 'png'
+    <attachment>
+        <name>beachball.$format</name>
+        <path>$planetuner.gxi('beachball', $format)</path>
+    </attachment>
+        
+    <attachment>
+        <name>region.$format</name>
+        <path>$informer.gxi('region', $format)</path>
+    </attachment>
+    
+    <attachment>
+        <name>stations.$format</name>
+        <path>$informer.gxi('stations', $format)</path>
+    </attachment>
+    
+    #end for
+    
+</parameterset>
