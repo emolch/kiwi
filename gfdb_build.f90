@@ -90,7 +90,7 @@ module gfdb_build_
                 end if
                 
               ! convert seismogram => strip
-                ioffset = floor(toffset/db%dt) + 1
+                ioffset = nint(toffset/db%dt) + 1
               
                 span(1) = ioffset
                 span(2) = ioffset+size(seismogram)-1
