@@ -452,19 +452,30 @@ module receiver
         integer, intent(in) :: differentiate     ! 1, or 2 ; zero is not implemented yet.
         real, intent(out) :: val
         
-        integer iver, ihor1, ihor2
-        
+        integer i, ii, nused
+        integer, dimension(3) :: icomp
+        integer, dimension(3) :: icomp_used
+
         val = 0.
         if (self%enabled) then 
-            call get_component_ids( self, iver, ihor1, ihor2 )
-            if (iver /= 0 .and. ihor1 /= 0 .and. ihor2 /= 0) then
-                val = probes_max_vecnorm_3( differentiate, self%syn_probes(iver), self%syn_probes(ihor1), self%syn_probes(ihor2) )
-            else if (ihor1 /= 0 .and. ihor2 /= 0) then
-                val = probes_max_vecnorm_2( differentiate, self%syn_probes(ihor1), self%syn_probes(ihor2) )
-            else if (iver /= 0) then
-                val = probes_max_vecnorm_1( differentiate, self%syn_probes(iver) )
+            call get_component_ids( self, icomp(1), icomp(2), icomp(3) )
+            nused = 0
+            do i=1,3
+                if (icomp(i) /= 0) then
+                    nused = nused + 1
+                    icomp_used(nused) = icomp(i)
+                end if
+            end do
+            if (nused == 1) then
+                val = probes_max_vecnorm_1( differentiate, self%syn_probes(icomp_used(1)) )
+            else if (nused == 2) then
+                val = probes_max_vecnorm_2( differentiate, self%syn_probes(icomp_used(1)), self%syn_probes(icomp_used(2)) )
+            else if (nused == 3) then
+                val = probes_max_vecnorm_3( differentiate, self%syn_probes(icomp_used(1)), self%syn_probes(icomp_used(2)), &
+                            self%syn_probes(icomp_used(3)) )
             end if
         end if
+
     end subroutine
 
     subroutine receiver_get_arias_intensity( self, val )
