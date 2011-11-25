@@ -34,7 +34,7 @@
 
 ## Uncomment to disable SAC IO support to not depend on libsacio
 #
-# LIBSAC = -Ldummy_sacio -lsacio
+LIBSAC = -Ldummy_sacio -lsacio
 
 
 ## Installation prefix
