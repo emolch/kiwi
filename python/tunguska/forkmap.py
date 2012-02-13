@@ -128,6 +128,7 @@ def map(function, *sequence):
                         # Wait one second before quitting.  Children
                         # should generally hear from their parent almost
                         # instantly.
+                        index = None
                         signal.alarm(1)
                         message = recvmessage(fromparent)
                         signal.alarm(0)
