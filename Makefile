@@ -70,8 +70,8 @@ LDFLAGS_ifort_debug = -openmp
 CFLAGS_g95_fast     = $(INCDUMMYOMP) -O3
 LDFLAGS_g95_fast    = $(LIBDUMMYOMP)
 
-CFLAGS_g95_debug    = $(INCDUMMYOMP) -g -warn all -ftrapuv -debug all
-LDFLAGS_g95_debug   = $(LIBDUMMYOMP) 
+CFLAGS_g95_debug    = $(INCDUMMYOMP) -g -Wall -ftrace=full -fbounds-check
+LDFLAGS_g95_debug   = $(LIBDUMMYOMP) -g -Wall -ftrace=full -fbounds-check 
 
 CFLAGS_gfortran_fast   = -fopenmp -O3
 LDFLAGS_gfortran_fast  = -fopenmp
