@@ -39,6 +39,10 @@ kiwi_component_map_default = {
 
 def station_to_receiver(station, wanted_components=None, kiwi_component_map=None):
     '''Convert pyrocko-style station into kiwi-style receiver.'''
+    
+    if kiwi_component_map == 'default':
+        kiwi_component_map = kiwi_component_map_default
+
     components = ''
     for channel in station.get_channels():
         cname = channel.name
