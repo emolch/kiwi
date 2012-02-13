@@ -314,7 +314,12 @@ class Step:
         
         seis.set_taper(tapers, conf['depth'])
         if conf['filter']:
-            seis.set_filter(conf['filter'])
+            if isinstance(conf['filter'], list):
+                filters_by_set = conf['filter']
+                filters = [ filters_by_set[i%len(filters_by_set)] for i in range(len(seis.receivers)) ]
+                seis.set_filters(filters)
+            else:
+                seis.set_filter(conf['filter'])
             
         seis.set_misfit_method(conf['inner_norm'])
         
@@ -717,7 +722,13 @@ class Shifter(Step):
         tapers_by_set = conf['taper']
         tapers = [ tapers_by_set[i%len(tapers_by_set)] for i in range(len(seis.receivers)) ]
         seis.set_taper(tapers, base_source['depth'])
-        seis.set_filter(conf['filter'])
+
+        if isinstance(conf['filter'], list):
+            filters_by_set = conf['filter']
+            filters = [ filters_by_set[i%len(filters_by_set)] for i in range(len(seis.receivers)) ]
+            seis.set_filters(filters)
+        else:
+            seis.set_filter(conf['filter'])
         
         shifts = seis.autoshift_ref_seismograms( conf['autoshift_range'] )
         fails = []

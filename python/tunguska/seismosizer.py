@@ -55,6 +55,7 @@ class SeismosizerBase:
                 'set_effective_dt',
                 'set_misfit_method',
                 'set_misfit_filter',
+                'set_misfit_filter_1',
                 'set_misfit_taper',
                 'set_synthetics_factor',
                 'minimize_lm',
@@ -551,6 +552,10 @@ class Seismosizer(SeismosizerBase):
     def set_filter( self, filter):
         self.filter = filter
         self.do_set_misfit_filter( *self.filter() )
+
+    def set_filters(self, filters):
+        for irec, rec in enumerate(self.receivers):
+            self.do_set_misfit_filter_1( irec+1, *filter() )
         
     def set_misfit_method( self, method ):
         self.inner_misfit_method = method
