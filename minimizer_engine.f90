@@ -79,7 +79,6 @@ module minimizer_engine
     type(t_gfdb), save                              :: db
     integer                                         :: misfit_method = L2NORM
     real                                            :: misfit
-    type(t_plf),save                                :: filter
     logical                                         :: interpolate = .false.
     integer                                         :: xundersample = 1
     integer                                         :: zundersample = 1
@@ -272,13 +271,6 @@ module minimizer_engine
         if (.not. ok) then
             call cleanup_receivers()
             return
-        end if
-        
-      ! set filter if one has already been defined
-        if (plf_defined(filter)) then
-            do ireceiver=1,nreceivers
-                call receiver_set_filter( receivers(ireceiver), filter )
-            end do
         end if
         
         receivers_inited = .true.
@@ -553,23 +545,38 @@ module minimizer_engine
         
     end subroutine
         
-    subroutine set_misfit_filter( x, y )
+    subroutine set_misfit_filter( ireceiver, x, y, ok )
+
+      ! set plf filter on one or all receivers
     
+        integer, intent(in) :: ireceiver
         real, dimension(:), intent(in) :: x,y
+        logical, intent(out)              :: ok        
         
-        integer :: ireceiver, nreceivers
+        integer :: irec, nreceivers
+        type(t_plf) :: filter
         
+        call update_ref_probes( ok )
+        if (.not. ok) return
+        
+        nreceivers = size(receivers)
+        if (ireceiver < 0 .or. nreceivers < ireceiver) then
+            ok = .false.
+            call error( 'receiver index out of range' )
+            return
+        end if
+
         call plf_make( filter, x, y )
-        
-        if (allocated(receivers)) then
-            nreceivers = size(receivers)
-            do ireceiver=1,nreceivers
-                call receiver_set_filter( receivers(ireceiver), filter )
+
+        if (ireceiver .eq. 0) then
+            do irec=1,nreceivers
+                call receiver_set_filter( receivers(irec), filter )
             end do
+        else
+            call receiver_set_filter( receivers(ireceiver), filter )
         end if
         
         call plf_destroy( filter )
-        
         call dirtyfy_misfits()
         
     end subroutine
@@ -987,7 +994,6 @@ module minimizer_engine
         call gfdb_destroy( db )
         
         call cleanup_comparator()
-        call plf_destroy( filter )
         
     end subroutine
 

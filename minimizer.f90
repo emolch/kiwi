@@ -62,6 +62,7 @@ module minimizer_wrappers
     public do_set_effective_dt
     public do_set_misfit_method
     public do_set_misfit_filter
+    public do_set_misfit_filter_1
     public do_set_misfit_taper
     public do_set_synthetics_factor
     public do_minimize_lm
@@ -808,12 +809,59 @@ module minimizer_wrappers
             return
         end if
         
-        call set_misfit_filter( x, y )
+        call set_misfit_filter( 0, x, y, ok )
         
         deallocate(x,y)
                 
     end subroutine
     
+    subroutine do_set_misfit_filter_1( line, answer, ok )
+      
+     !! === {{{set_misfit_filter_1 ireceiver x0 y0  x1 y1  ...}}} ===
+      !
+      ! Defines a piecewise linear function which is multiplied to the
+      ! spectra before calculating misfits in the frequency domain.
+      !
+      !  * {{{ireceiver}}}: Number of the receiver to which the filter shall be applied. 0 for all.
+      !  * {{{x0 y0  x1 y1 ...}}}: Control points with {{{xi}}}: frequency [Hz] and 
+      !    {{{yi}}}: multiplicator amplitude.
+      !
+      ! The amplitude drops to zero before the first and after the last control point.
+      !
+      ! Example: {{{set_misfit_filter_1 11  0.2 1  0.5 1}}} defines a rectangular 
+      ! window between 0.2 and 0.5 Hz for receiver number 11.
+      
+        type(varying_string), intent(in)  :: line
+        type(varying_string), intent(out) :: answer
+        logical, intent(out)              :: ok
+        
+        integer :: i, n, nwords, iostat, ireceiver
+        real, dimension(:), allocatable :: x,y
+        character(len=len(line)) :: buffer
+        
+        answer = ''
+        ok = .true.
+        
+        buffer = char(line)
+        nwords = count_words( buffer )
+        
+        n = (nwords-1)/2
+        allocate(x(n),y(n))
+        
+        buffer = char(line)
+        read (unit=buffer,fmt=*,iostat=iostat) ireceiver, (x(i), y(i), i=1,n)
+        if (iostat > 0) then
+            ok = .false.
+            call error( "failed to parse values" )
+            return
+        end if
+        
+        call set_misfit_filter( ireceiver, x, y, ok )
+        
+        deallocate(x,y)
+                
+    end subroutine
+
     subroutine do_set_misfit_taper( line, answer, ok )
       
      !! === {{{set_misfit_taper ireceiver x0 y0  x1 y1 ...}}} ===
@@ -1635,6 +1683,8 @@ program minimizer
             call do_output_distances( arguments, answer, ok )
         else if (command == 'set_misfit_filter') then
             call do_set_misfit_filter( arguments, answer, ok )
+        else if (command == 'set_misfit_filter') then
+            call do_set_misfit_filter_1( arguments, answer, ok )
         else if (command == 'set_misfit_taper') then
             call do_set_misfit_taper( arguments, answer, ok )
         else if (command == 'set_synthetics_factor') then
