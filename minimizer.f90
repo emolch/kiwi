@@ -1683,7 +1683,7 @@ program minimizer
             call do_output_distances( arguments, answer, ok )
         else if (command == 'set_misfit_filter') then
             call do_set_misfit_filter( arguments, answer, ok )
-        else if (command == 'set_misfit_filter') then
+        else if (command == 'set_misfit_filter_1') then
             call do_set_misfit_filter_1( arguments, answer, ok )
         else if (command == 'set_misfit_taper') then
             call do_set_misfit_taper( arguments, answer, ok )
