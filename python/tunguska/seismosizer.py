@@ -546,11 +546,14 @@ class Seismosizer(SeismosizerBase):
             taper = [ taper ] * len(self.receivers)
             
         for irec, rec in enumerate(self.receivers):
-            if rec.depth != 0.0:
-                dist = num.sqrt(rec.distance_m**2 + (sourcedepth - rec.depth)**2)
-                values = taper[irec](dist, 0.0)
+            if taper[irec] is not None:
+                if rec.depth != 0.0:
+                    dist = num.sqrt(rec.distance_m**2 + (sourcedepth - rec.depth)**2)
+                    values = taper[irec](dist, 0.0)
+                else:
+                    values = taper[irec](rec.distance_m, sourcedepth)
             else:
-                values = taper[irec](rec.distance_m, sourcedepth)
+                values = []
                 
             if None in values:
                 # Phase(s) not existant at this distance
@@ -564,7 +567,11 @@ class Seismosizer(SeismosizerBase):
 
     def set_filters(self, filters):
         for irec, rec in enumerate(self.receivers):
-            self.do_set_misfit_filter_1( irec+1, *filter() )
+            filter = filters[irec]
+            if filter is not None:
+                self.do_set_misfit_filter_1( irec+1, *filter() )
+            else:
+                self.do_set_misfit_filter_1( irec+1 )
         
     def set_misfit_method( self, method ):
         self.inner_misfit_method = method
