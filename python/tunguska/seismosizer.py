@@ -36,6 +36,13 @@ def getsigdict():
            r[getattr(signal, name)] = name
     return r
 
+class Fatal(Exception):
+    
+    def __init__(self, *args, **kwargs):
+        Exception.__init__(self, *args, **kwargs)
+        if config.exit_on_fatal:
+            sys.exit(args[0])
+
 class SeismosizerBase:
     '''Controls a group of seismosizer processes'''
     
@@ -189,7 +196,7 @@ class SeismosizerBase:
                 
         if fatal:
             self.close()
-            sys.exit('Shit happens.')
+            raise Fatal('Shit happens.')
        
         if errors:
             raise SeismosizersReturnedErrors(errors)
@@ -317,7 +324,7 @@ class SeismosizerProcess(threading.Thread):
             self.to_p = p.stdin
             self.from_p = p.stdout
         except:
-            sys.exit("cannot start %s on %s" % (config.seismosizer_prog, self.host))
+            raise Fatal("cannot start %s on %s" % (config.seismosizer_prog, self.host))
             
         self.commands = Queue.Queue()
         self.answers = Queue.Queue(maxsize=batch_block_size*3)
@@ -371,8 +378,10 @@ class SeismosizerProcess(threading.Thread):
         
         self.to_p.close()
         self.from_p.close()
-        self.p.wait()
-        
+        retcode = self.p.wait()
+        if retcode != 0:
+            logging.error('Seismosizer %i exited with nonzero exit status: %i' % (self.tid, retcode))
+         
         logging.debug('Seismosizer %i finished.' % self.tid)
                
     def _do(self, command):
@@ -777,7 +786,7 @@ class Seismosizer(SeismosizerBase):
                 
             except SeismosizersDied:
                 self.close()
-                sys.exit('Indeed - shit happens.')
+                raise Fatal('Indeed - shit happens.')
             
             if show_progress: pbar.update(isource+1)
                         

@@ -11,6 +11,8 @@ earthradius = 6371.*1000.
 show_progress = True
 default_loglevel = logging.INFO
 
+exit_on_fatal = True
+
 source_info_prog = 'source_info'
 gfdb_info_prog = 'gfdb_info'
 gfdb_extract_prog = 'gfdb_extract'
