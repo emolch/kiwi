@@ -72,7 +72,7 @@ def receiver_to_station(rec):
     sta = model.Station(rec.get_network(), rec.get_station(), rec.get_location(), rec.lat, rec.lon, 0.0, depth=rec.depth, channels=channels)
     return sta
     
-def start_seismosizer( gfdb_path, event, stations=None, receivers=None,
+def start_seismosizer( gfdb_or_path, event, stations=None, receivers=None,
                     local_interpolation     = 'bilinear',
                     spacial_undersampling   = [ 1, 1 ],
                     effective_dt            = 1,
@@ -80,11 +80,20 @@ def start_seismosizer( gfdb_path, event, stations=None, receivers=None,
                     constraining_planes     = None,
                     hosts                   = ['localhost'],
                     balance_method          = '123321',
-                    verbose                 = False):
+                    verbose                 = False,
+                    gfdb_path               = None, # for backward compatibility
+                    ):
         
         assert stations==None or receivers==None
+       
+        if gfdb_path is not None:
+            gfdb_or_path = gfdb_path
+
+        if isinstance(gfdb_or_path, str):
+            database = gfdb.Gfdb(gfdb_or_path)
+        else:
+            database = gfdb_or_path
         
-        database = gfdb.Gfdb(gfdb_path)
         seis = seismosizer.Seismosizer(hosts, balance_method)
         if verbose: seis.set_verbose('T')
         seis.set_database(database)
@@ -121,7 +130,8 @@ class EventDataToKiwi:
                  station_splitting  = ['nsewudacrl'],
                  kiwi_component_map = kiwi_component_map_default,
                  trace_factor       = 1.0,
-                 trace_time_zero    = ('system','event')[0] ):
+                 trace_time_zero    = ('system','event')[0]
+                ):
         
         self._acc = accessor
         self._station_splitting = station_splitting
@@ -129,6 +139,7 @@ class EventDataToKiwi:
         self._station_filter = station_filter
         self._kiwi_component_map = kiwi_component_map
         self._trace_factor = trace_factor
+
         self._update()
         if trace_time_zero == 'system':
             self._zero_time = 0.
@@ -136,7 +147,7 @@ class EventDataToKiwi:
             self._zero_time = self.get_event().time
         
     def make_seismosizer(self, 
-                    gfdb_path,
+                    gfdb_or_path,
                     local_interpolation     = 'bilinear',
                     spacial_undersampling   = [ 1, 1 ],
                     effective_dt            = 1,
@@ -147,9 +158,18 @@ class EventDataToKiwi:
                     xblacklist              = None,
                     hosts                   = ['localhost'],
                     balance_method          = '123321',
-                    verbose                 = False):
-        
-        database = gfdb.Gfdb(gfdb_path)
+                    verbose                 = False,
+                    gfdb_path               = None, # for backward compatibility
+                    ):
+       
+        if gfdb_path is not None:
+            gfdb_or_path = gfdb_path
+
+        if isinstance(gfdb_or_path, str):
+            database = gfdb.Gfdb(gfdb_or_path)
+        else:
+            database = gfdb_or_path
+
         seis = seismosizer.Seismosizer(hosts, balance_method)
         if verbose: seis.set_verbose('T')
         seis.set_database(database)
@@ -245,7 +265,10 @@ class EventDataToKiwi:
                 if self._trace_factor != 1.0:
                     ydata *= self._trace_factor
                 io.save([tr], fn)
-                
+
+    def get_preprocessed_traces(self):
+        return self._acc.get_traces()
+
     def _update(self):
         
         event = self.get_event()
@@ -254,8 +277,8 @@ class EventDataToKiwi:
         stations.sort(self._station_order)
         
         kcm = self._kiwi_component_map
-        
-        traces = self._acc.get_pile().all()
+       
+        traces = self.get_preprocessed_traces() 
         
         # gather traces by station, apply station splitting, and  select desired 
         # components in each set
