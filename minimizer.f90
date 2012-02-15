@@ -805,6 +805,7 @@ module minimizer_wrappers
         read (unit=buffer,fmt=*,iostat=iostat) (x(i), y(i), i=1,n)
         if (iostat > 0) then
             ok = .false.
+            deallocate(x,y)
             call error( "failed to parse coordinates" )
             return
         end if
@@ -852,6 +853,7 @@ module minimizer_wrappers
         read (unit=buffer,fmt=*,iostat=iostat) ireceiver, (x(i), y(i), i=1,n)
         if (iostat > 0) then
             ok = .false.
+            deallocate(x,y)
             call error( "failed to parse values" )
             return
         end if
