@@ -111,11 +111,22 @@ module receiver
     public receiver_output_cross_correlations
     public receiver_get_maxabs
     public receiver_get_arias_intensity
+    public receiver_scaled_seismograms_to_probes
 
     public character_to_id
     
   contains
  
+    pure subroutine intersection( a, b, c )
+    
+        real, dimension(2), intent(in) :: a, b
+        real, dimension(2), intent(out) :: c
+        
+        c(1) = max(a(1),b(1))
+        c(2) = min(a(2),b(2))
+        
+    end subroutine
+    
     subroutine receiver_init( self, origin, depth, components_str, dt, ok )
     
         type(t_receiver), intent(inout)  :: self
@@ -755,5 +766,57 @@ module receiver
     
     end subroutine
  
-    
+    subroutine receiver_scaled_seismograms_to_probes(receiver, risetime, moment)
+
+      ! Put seismogram data into probes and apply moment and rise-time
+
+        type(t_receiver), intent(inout) :: receiver
+        real, intent(in) :: risetime, moment
+
+        integer :: icomp, ishift, nshifts
+        type(t_strip) :: tmp
+        real, dimension(2) :: rrise, rsamp, rover
+        real, dimension(:), allocatable :: weights, shifts
+        real :: ts
+
+        if (receiver%enabled) then
+
+            ! make weights and shifts for stf
+            if (risetime > 0.0) then
+                rrise(1) = -risetime/2.
+                rrise(2) = +risetime/2.
+                nshifts = 1 + 2 * nint(0.5*risetime/receiver%dt)
+                if (allocated(weights)) deallocate(weights)
+                if (allocated(shifts)) deallocate(shifts)
+                allocate( weights(nshifts))
+                allocate( shifts(nshifts))
+                do ishift=1,nshifts
+                    ts = (ishift-1 - 0.5*(nshifts-1))*receiver%dt
+                    rsamp(1) = ts-receiver%dt/2.
+                    rsamp(2) = ts+receiver%dt/2.
+                    call intersection(rrise, rsamp, rover)
+                    weights(ishift) = max(0., rover(2)-rover(1))
+                    shifts(ishift) = ts / receiver%dt
+                end do
+                weights = weights/sum(weights)
+            end if
+            
+            do icomp=1,receiver%ncomponents
+                
+                call strip_copy(receiver%displacement(icomp), tmp)
+                if (risetime > 0.0) then
+                    call strip_fold( tmp, shifts, weights )
+                end if
+                call probe_set_array( receiver%syn_probes(icomp), tmp, &
+                                    factor_=moment )
+
+            end do
+        end if
+
+        if (allocated(weights)) deallocate(weights)
+        if (allocated(shifts)) deallocate(shifts)
+        call strip_destroy(tmp)
+
+    end subroutine
+
 end module
