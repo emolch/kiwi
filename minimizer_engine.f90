@@ -790,16 +790,6 @@ module minimizer_engine
         
     end subroutine
     
-    pure subroutine intersection( a, b, c )
-    
-        real, dimension(2), intent(in) :: a, b
-        real, dimension(2), intent(out) :: c
-        
-        c(1) = max(a(1),b(1))
-        c(2) = min(a(2),b(2))
-        
-    end subroutine
-    
     subroutine scale_seismograms()
 
       ! Put seismogram data into probes and apply moment and rise-time
