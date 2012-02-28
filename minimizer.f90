@@ -1621,6 +1621,9 @@ program minimizer
         logical, intent(out) :: ok
         type(varying_string) :: arguments
         
+        answer = ''
+        command = ''
+
         call reduce_whitespace(line,arguments)
         if ( char(arguments) == '' ) then
             ok = .true.
@@ -1718,6 +1721,7 @@ program minimizer
         logical :: ws
         integer :: j,i
         
+        buff = ''
         j = 1
         ws = .true.
         do i=1,len(in)
