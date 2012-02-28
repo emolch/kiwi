@@ -73,11 +73,11 @@ LDFLAGS_g95_fast    = $(LIBDUMMYOMP)
 CFLAGS_g95_debug    = $(INCDUMMYOMP) -g -Wall -ftrace=full -fbounds-check
 LDFLAGS_g95_debug   = $(LIBDUMMYOMP) -g -Wall -ftrace=full -fbounds-check 
 
-CFLAGS_gfortran_fast   = -fopenmp -O3
-LDFLAGS_gfortran_fast  = -fopenmp
+CFLAGS_gfortran_fast   = $(INCDUMMYOMP) -O3
+LDFLAGS_gfortran_fast  = $(LIBDUMMYOMP) 
 
-CFLAGS_gfortran_debug  = -fopenmp -g -Wall
-LDFLAGS_gfortran_debug = -fopenmp
+CFLAGS_gfortran_debug  = $(INCDUMMYOMP) -g -Wall
+LDFLAGS_gfortran_debug = $(LIBDUMMYOMP) 
 
 
 #### ---------------------------------------------------------------------------
