@@ -139,7 +139,8 @@ class EventDataToKiwi:
         self._station_filter = station_filter
         self._kiwi_component_map = kiwi_component_map
         self._trace_factor = trace_factor
-
+        self._dataset = None
+        self._have_observations = None
         self._update()
         if trace_time_zero == 'system':
             self._zero_time = 0.
@@ -190,10 +191,11 @@ class EventDataToKiwi:
             seis.set_source_constraints( *values )
         
         seis.set_receivers(self.get_receivers())
-        
-        self._ref_seismogram_stem = seis.tempdir + '/reference-from-eventdata'
-        self.put_ref_seismograms()
-        seis.set_ref_seismograms( self._ref_seismogram_stem, 'mseed')
+       
+        if self._have_observations:
+            self._ref_seismogram_stem = seis.tempdir + '/reference-from-eventdata'
+            self.put_ref_seismograms()
+            seis.set_ref_seismograms( self._ref_seismogram_stem, 'mseed')
         
         if blacklist:
             seis.blacklist_receivers( blacklist )
@@ -201,8 +203,9 @@ class EventDataToKiwi:
             seis.xblacklist_receivers( xblacklist )
             
         # apply reference seismograms shifts
-        if shifts is not None:
-            seis.shift_ref_seismograms( shifts )
+        if self._have_observations:
+            if shifts is not None:
+                seis.shift_ref_seismograms( shifts )
         
         return seis
         
@@ -287,37 +290,44 @@ class EventDataToKiwi:
         for station in stations:
             if not self._station_filter(station):
                 continue
-            
+
             dataset_station = []
             anydata = False
-            for set_components in self._station_splitting:
-                station_traces = []
-                trace_ids = {}
-                for tr in traces:
-                    if get_nsl(tr) == get_nsl(station) and \
-                       tr.channel in kcm and \
-                       kcm[tr.channel] in set_components and \
-                       tr.nslc_id not in trace_ids:
-                       
-                        station_traces.append(tr)
-                        trace_ids[tr.nslc_id] = True  # cannot handle gappy traces
-        
-                station_traces.sort(lambda a,b: cmp(kcm[a.channel], kcm[b.channel]))
+            for set_components in self._station_splitting: 
                 
-                kiwi_components = ''
-                for tr in station_traces:
-                    kiwi_components += kcm[tr.channel]
-                    anydata = True
+                if traces:
+                    station_traces = []
+                    trace_ids = {}
+                    for tr in traces:
+                        if get_nsl(tr) == get_nsl(station) and \
+                           tr.channel in kcm and \
+                           kcm[tr.channel] in set_components and \
+                           tr.nslc_id not in trace_ids:
+                           
+                            station_traces.append(tr)
+                            trace_ids[tr.nslc_id] = True  # cannot handle gappy traces
+            
+                    station_traces.sort(lambda a,b: cmp(kcm[a.channel], kcm[b.channel]))
+                    
+                    kiwi_components = ''
+                    for tr in station_traces:
+                        kiwi_components += kcm[tr.channel]
+                        anydata = True
                 
+                else:
+                    kiwi_components = set_components
+                    station_traces = []
+
                 receiver = station_to_receiver(station, 
                             wanted_components=kiwi_components, 
                             kiwi_component_map=kcm)
                 
                 dataset_station.append( (station, receiver, station_traces))
                     
-            if anydata:
-                # keep empty datasets if another set from this station has data
+            if anydata or not traces:
+                # keep empty datasets if another set from this station has data or if only forward modelling is wanted (no data at all)
                 dataset.extend(dataset_station)
                 
+        self._have_observations = any( [ x[2] for x in dataset ] )
         self._dataset = dataset
         

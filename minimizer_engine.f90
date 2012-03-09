@@ -556,7 +556,7 @@ module minimizer_engine
         integer :: irec, nreceivers
         type(t_plf) :: filter
         
-        call update_ref_probes( ok )
+        call update_receivers( ok )
         if (.not. ok) return
         
         nreceivers = size(receivers)
@@ -590,7 +590,10 @@ module minimizer_engine
         integer :: nreceivers
         type(t_plf) :: taper
          
-        call update_ref_probes( ok )
+        !call update_ref_probes( ok )
+        !if (.not. ok) return
+        
+        call update_receivers( ok )
         if (.not. ok) return
         
         nreceivers = size(receivers)

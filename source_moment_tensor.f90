@@ -46,15 +46,15 @@ module source_moment_tensor
     
   ! logical, physical or computational accuracy limits for params
     real, dimension(n_source_params_moment_tensor), public, parameter :: psm_params_min_hard_moment_tensor = &
-    (/ -big, -100000., -100000., 0., 0., 0., 0., 0., 0., 0., 0./)
+    (/ -big, -100000., -100000., 0., -7e25, -7e25, -7e25, -7e25, -7e25, -7e25, 0./)
     real, dimension(n_source_params_moment_tensor), public, parameter :: psm_params_max_hard_moment_tensor = &
-    (/ big, 100000., 100000., 1000000., 7e25, 7e25, 7e25, 7e25, 7e25, 7e25, 10./)
+    (/ big, 100000., 100000., 1000000., 7e25, 7e25, 7e25, 7e25, 7e25, 7e25, 100./)
     
   ! these limits give range of realistic, non-redundant or practical params
     real, dimension(n_source_params_moment_tensor), public, parameter :: psm_params_min_soft_moment_tensor = &
-    (/ -20., -10000., -10000., 0., 0., 0., 0., 0., 0., 0., 0./)
+    (/ -20., -10000., -10000., 0., -7e25, -7e25, -7e25, -7e25, -7e25, -7e25, 0./)
     real, dimension(n_source_params_moment_tensor), public, parameter :: psm_params_max_soft_moment_tensor = &
-    (/ 20., 10000., 10000., 150000.,  7e25, 7e25, 7e25, 7e25, 7e25, 7e25, 5./)
+    (/ 20., 10000., 10000., 150000.,  7e25, 7e25, 7e25, 7e25, 7e25, 7e25, 100./)
     
   ! defaults for external use
     real, dimension(n_source_params_moment_tensor), public, parameter :: psm_params_default_moment_tensor = &

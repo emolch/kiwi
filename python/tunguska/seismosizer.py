@@ -16,6 +16,8 @@ import progressbar
 import config
 import phase
 
+logger = logging.getLogger('kiwi.seismosizer')
+
 runners_sleep = 0.001
 pollers_sleep = 0.0001
 batch_block_size = 20
@@ -106,7 +108,7 @@ class SeismosizerBase:
         shutil.rmtree(self.tempdir)
         
     def sighandler(self, *args):
-        logging.warn('Caught signal %s, license to kill' % getsigdict()[args[0]])
+        logger.warn('Caught signal %s, license to kill' % getsigdict()[args[0]])
         self.close()
         self.terminate()
         
@@ -116,7 +118,7 @@ class SeismosizerBase:
             p.stop()
             
     def terminate(self):
-        logging.warn( 'I like terminate!' )
+        logger.warn( 'I like terminate!' )
         for p in self.processes:
             p.terminate()
             
@@ -166,7 +168,7 @@ class SeismosizerBase:
         # distribute command to each process
         runners = []
         for p in processes:
-            logging.debug('Do (%i): %s' % (p.tid, strcommand))
+            logger.debug('Do (%i): %s' % (p.tid, strcommand))
             p.push( strcommand )
             runners.append(p)
         
@@ -180,7 +182,7 @@ class SeismosizerBase:
             try:
                 answer = p.poll()
                 answers[p.tid] = answer
-                logging.debug('Answer (%i): %s' % (p.tid, answer))
+                logger.debug('Answer (%i): %s' % (p.tid, answer))
                 
             except NonePending:
                 runners.append(p)
@@ -190,7 +192,7 @@ class SeismosizerBase:
                 errors[p.tid] = error.args[1]
             
             except ThreadIsDead:
-                logging.warn('Lost seismosizer process %s' % p.tid)
+                logger.warn('Lost seismosizer process %s' % p.tid)
                 self.terminate()
                 fatal = True
                 
@@ -224,7 +226,7 @@ class SeismosizerBase:
         # distribute command to each process
         runners = []
         for p in processes:
-            logging.debug('Do (%i): %s' % (p.tid, strcommand))
+            logger.debug('Do (%i): %s' % (p.tid, strcommand))
             p.push( strcommand )
             runners.append(p)
         
@@ -241,7 +243,7 @@ class SeismosizerBase:
                 try:
                     answer = p.poll()
                     answers[p.tid] = answer
-                    logging.debug('Answer (%i): %s' % (p.tid, answer))
+                    logger.debug('Answer (%i): %s' % (p.tid, answer))
                     
                 except NonePending:
                     runners_current.append(p)
@@ -251,7 +253,7 @@ class SeismosizerBase:
                     errors[p.tid] = error.args[1]
                 
                 except ThreadIsDead:
-                    logging.warn('Lost seismosizer process %s' % p.tid)
+                    logger.warn('Lost seismosizer process %s' % p.tid)
                     self.terminate()
                     fatal = True
                     
@@ -347,13 +349,13 @@ class SeismosizerProcess(threading.Thread):
         if not self.have_sent_term_signal:
             try:
                 os.kill(self.p.pid, signal.SIGTERM)
-                logging.warn( 'Sent SIGTERM to seismosizer %i, pid %i' % (self.tid, self.p.pid) )
+                logger.warn( 'Sent SIGTERM to seismosizer %i, pid %i' % (self.tid, self.p.pid) )
             except OSError, error:
-                logging.warn( error )
+                logger.warn( error )
             self.have_sent_term_signal = True
         
     def run(self):
-        logging.debug('Starting seismosizer %i.' % self.tid)
+        logger.debug('Starting seismosizer %i.' % self.tid)
         i = 0
         try:
             while True:
@@ -373,16 +375,16 @@ class SeismosizerProcess(threading.Thread):
                 i += 1
                     
         except (IOError, SeismosizerDied, SeismosizerInsane), e:
-            logging.warn( e )
+            logger.warn( e )
             self.the_end_has_come = True
         
         self.to_p.close()
         self.from_p.close()
         retcode = self.p.wait()
         if retcode != 0:
-            logging.error('Seismosizer %i exited with nonzero exit status: %i' % (self.tid, retcode))
+            logger.error('Seismosizer %i exited with nonzero exit status: %i' % (self.tid, retcode))
          
-        logging.debug('Seismosizer %i finished.' % self.tid)
+        logger.debug('Seismosizer %i finished.' % self.tid)
                
     def _do(self, command):
         '''Put command to minimizer and return the results'''
@@ -625,7 +627,7 @@ class Seismosizer(SeismosizerBase):
         
         tdir = pjoin(self.tempdir, 'get_receivers_copy')
         if os.path.isdir(tdir):
-            logging.warn('Found stale traces output dir')
+            logger.warn('Found stale traces output dir')
             shutil.rmtree(tdir)
         os.mkdir(tdir)
         
