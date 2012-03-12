@@ -20,7 +20,7 @@ logger = logging.getLogger('kiwi.seismosizer')
 
 runners_sleep = 0.001
 pollers_sleep = 0.0001
-batch_block_size = 20
+batch_block_size = 1
 
 def load_table(fn):
     f = open(fn, 'r')
