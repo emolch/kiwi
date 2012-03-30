@@ -270,7 +270,7 @@ class EventDataToKiwi:
                 io.save([tr], fn)
 
     def get_preprocessed_traces(self):
-        return self._acc.get_traces()
+        return list( self._acc.iter_displacement_traces() )
 
     def _update(self):
         
