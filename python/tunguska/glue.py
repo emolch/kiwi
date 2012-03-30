@@ -5,7 +5,7 @@ from pyrocko import io
 
 from tunguska import source
 from tunguska import receiver
-from tunguska import gfdb
+from tunguska import gfdb as gfdb_mod
 from tunguska import seismosizer
 from tunguska import gridsearch
 
@@ -72,27 +72,25 @@ def receiver_to_station(rec):
     sta = model.Station(rec.get_network(), rec.get_station(), rec.get_location(), rec.lat, rec.lon, 0.0, depth=rec.depth, channels=channels)
     return sta
     
-def start_seismosizer( gfdb_or_path, event, stations=None, receivers=None,
-                    local_interpolation     = 'bilinear',
-                    spacial_undersampling   = [ 1, 1 ],
-                    effective_dt            = 1,
-                    crustal_thickness_limit = None,
-                    constraining_planes     = None,
-                    hosts                   = ['localhost'],
-                    balance_method          = '123321',
-                    verbose                 = False,
-                    gfdb_path               = None, # for backward compatibility
-                    ):
+def start_seismosizer(  gfdb_path = None, gfdb = None, 
+                        event = None, 
+                        stations=None, receivers=None,
+                        local_interpolation     = 'bilinear',
+                        spacial_undersampling   = [ 1, 1 ],
+                        effective_dt            = 1,
+                        crustal_thickness_limit = None,
+                        constraining_planes     = None,
+                        hosts                   = ['localhost'],
+                        balance_method          = '123321',
+                        verbose                 = False ):
         
-        assert stations==None or receivers==None
-       
+        assert (stations is None) != (receivers is None), 'either `receivers` or `stations` argument should be given.'
+        assert (gfdb_path is None) != (gfdb is None), 'either `gfdb_path` or `gfdb` argument should be given.' 
+        
         if gfdb_path is not None:
-            gfdb_or_path = gfdb_path
-
-        if isinstance(gfdb_or_path, str):
-            database = gfdb.Gfdb(gfdb_or_path)
+            database = gfdb_mod.Gfdb(gfdb_or_path)
         else:
-            database = gfdb_or_path
+            database = gfdb
         
         seis = seismosizer.Seismosizer(hosts, balance_method)
         if verbose: seis.set_verbose('T')
@@ -148,7 +146,8 @@ class EventDataToKiwi:
             self._zero_time = self.get_event().time
         
     def make_seismosizer(self, 
-                    gfdb_or_path,
+                    gfdb_path               = None,
+                    gfdb                    = None,
                     local_interpolation     = 'bilinear',
                     spacial_undersampling   = [ 1, 1 ],
                     effective_dt            = 1,
@@ -160,16 +159,14 @@ class EventDataToKiwi:
                     hosts                   = ['localhost'],
                     balance_method          = '123321',
                     verbose                 = False,
-                    gfdb_path               = None, # for backward compatibility
                     ):
-       
+        
+        assert (gfdb_path is None) != (gfdb is None), 'either `gfdb_path` or `gfdb` argument should be given' 
+        
         if gfdb_path is not None:
-            gfdb_or_path = gfdb_path
-
-        if isinstance(gfdb_or_path, str):
-            database = gfdb.Gfdb(gfdb_or_path)
+            database = gfdb_mod.Gfdb(gfdb_or_path)
         else:
-            database = gfdb_or_path
+            database = gfdb
 
         seis = seismosizer.Seismosizer(hosts, balance_method)
         if verbose: seis.set_verbose('T')
