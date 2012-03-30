@@ -88,7 +88,7 @@ def start_seismosizer(  gfdb_path = None, gfdb = None,
         assert (gfdb_path is None) != (gfdb is None), 'either `gfdb_path` or `gfdb` argument should be given.' 
         
         if gfdb_path is not None:
-            database = gfdb_mod.Gfdb(gfdb_or_path)
+            database = gfdb_mod.Gfdb(gfdb_path)
         else:
             database = gfdb
         
@@ -164,7 +164,7 @@ class EventDataToKiwi:
         assert (gfdb_path is None) != (gfdb is None), 'either `gfdb_path` or `gfdb` argument should be given' 
         
         if gfdb_path is not None:
-            database = gfdb_mod.Gfdb(gfdb_or_path)
+            database = gfdb_mod.Gfdb(gfdb_path)
         else:
             database = gfdb
 
