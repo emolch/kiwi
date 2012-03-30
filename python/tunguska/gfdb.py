@@ -87,9 +87,13 @@ class Gfdb:
             ig = igm+1
             if fn:
                 for tr in io.load(fn):
-                    sx = util.base36encode(int(round(x)))
-                    sz = util.base36encode(int(round(z)))
-                    tr.meta = {'x':x, 'z':z, 'ig':ig}
+                    ix = 1 + int(round((x-self.firstx)/self.dx))
+                    iz = 1 + int(round((z-self.firstz)/self.dz))
+                    gridx = self.firstx + (ix-1)*self.dx
+                    gridz = self.firstz + (iz-1)*self.dz
+                    sx = util.base36encode(ix)
+                    sz = util.base36encode(iz)
+                    tr.meta = {'x':gridx, 'z':gridz, 'ig':ig}
                     tr.set_codes(network=sz, station=sx, channel='%i' % ig)
                     traces.append(tr)
                     
