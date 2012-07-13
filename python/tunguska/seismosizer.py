@@ -2,7 +2,8 @@
 import os
 import sys
 import time
-import threading, Queue
+import threading
+from Queue import Queue, Empty
 import tempfile
 import subprocess
 import signal
@@ -18,9 +19,6 @@ import phase
 
 logger = logging.getLogger('kiwi.seismosizer')
 
-runners_sleep = 0.001
-pollers_sleep = 0.0001
-batch_block_size = 1
 
 def load_table(fn):
     f = open(fn, 'r')
@@ -100,8 +98,6 @@ class SeismosizerBase:
         signal.signal(signal.SIGINT, self.sighandler)
         signal.signal(signal.SIGTERM, self.sighandler)
         signal.signal(signal.SIGQUIT, self.sighandler)
-        self.batch = []
-        self.batchmode = False
 
     def __del__(self):
         self.close()
@@ -124,24 +120,6 @@ class SeismosizerBase:
             
     def __len__(self):
         return len(self.processes)
-        
-    def batch_record(self):
-        self.batch = []
-        self.batchmode = True
-        
-    def batch_execute(self):
-        self.batchmode = False
-        batch = self.batch 
-        self.batch = []
-        
-        if batch:
-            xwhere = batch[0][1]
-            cmds = []
-            for (cmd, where) in batch:
-                assert where == xwhere
-                cmds.append(cmd)
-                
-            return self.do_batch( cmds=cmds, where=xwhere )
                 
     def do(self, cmd, where=None):
         '''Parallel execution of same command on selected processes.
@@ -150,10 +128,6 @@ class SeismosizerBase:
            on single process:     s.do( ['command','arg' ], where=2 )
            on group of processes: s.do( ['command','arg' ], where=range(1,4) )
         '''
-        
-        if self.batchmode:
-            self.batch.append((cmd,where))
-            return 
         
         if where is None:
             processes = self.processes
@@ -167,34 +141,39 @@ class SeismosizerBase:
         
         # distribute command to each process
         runners = []
+        ready = Queue()
         for p in processes:
             logger.debug('Do (%i): %s' % (p.tid, strcommand))
-            p.push( strcommand )
+            p.push(strcommand, ready)
             runners.append(p)
         
-       
         # gather answers
         answers = {}
         errors = {}
         fatal = False
         while runners:
-            p = runners.pop(0)
             try:
-                answer = p.poll()
-                answers[p.tid] = answer
-                logger.debug('Answer (%i): %s' % (p.tid, answer))
+                p = ready.get()  #(True, 1.0)
+                runners.remove(p)
+                try:
+                    answer = p.poll()
+                    answers[p.tid] = answer
+                    logger.debug('Answer (%i): %s' % (p.tid, answer))
                 
-            except NonePending:
-                runners.append(p)
-                time.sleep(pollers_sleep)
+                except SeismosizerReturnedError, error:
+                    errors[p.tid] = error.args[1]
+                
+                except ThreadIsDead:
+                    logger.warn('Lost seismosizer process %s' % p.tid)
+                    self.terminate()
+                    fatal = True
             
-            except SeismosizerReturnedError, error:
-                errors[p.tid] = error.args[1]
-            
-            except ThreadIsDead:
-                logger.warn('Lost seismosizer process %s' % p.tid)
-                self.terminate()
-                fatal = True
+            except Empty:
+                for p in runners:
+                    if not p.isAlive():
+                        self.terminate()
+                        fatal = True
+                        runners = []
                 
         if fatal:
             self.close()
@@ -204,67 +183,6 @@ class SeismosizerBase:
             raise SeismosizersReturnedErrors(errors)
         
         return [ answers[i] for i in sorted(answers.keys()) ]
-                    
-    def do_batch(self, cmds=None, where=None):
-        '''Parallel execution of same command on selected processes.
-        
-           everywhere:            s.do( ['command','arg' ] )
-           on single process:     s.do( ['command','arg' ], where=2 )
-           on group of processes: s.do( ['command','arg' ], where=range(1,4) )
-        '''
-        
-        if where is None:
-            processes = self.processes
-        else:
-            if isinstance(where, int):
-                processes = [ self.processes[where] ]
-            else:
-                processes = [ self.processes[i] for i in where ]
-        
-        strcommand  = '\n'.join(  [ ' '.join( [str(arg) for arg in cmd ] ) for cmd in cmds ] )
-        
-        # distribute command to each process
-        runners = []
-        for p in processes:
-            logger.debug('Do (%i): %s' % (p.tid, strcommand))
-            p.push( strcommand )
-            runners.append(p)
-        
-        for ianswer in xrange(len(cmds)):
-            # gather answers
-            answers = {}
-            errors = {}
-            fatal = False
-            
-            runners_current = copy.copy(runners)
-            
-            while runners_current:
-                p = runners_current.pop(0)
-                try:
-                    answer = p.poll()
-                    answers[p.tid] = answer
-                    logger.debug('Answer (%i): %s' % (p.tid, answer))
-                    
-                except NonePending:
-                    runners_current.append(p)
-                    time.sleep(pollers_sleep)
-                
-                except SeismosizerReturnedError, error:
-                    errors[p.tid] = error.args[1]
-                
-                except ThreadIsDead:
-                    logger.warn('Lost seismosizer process %s' % p.tid)
-                    self.terminate()
-                    fatal = True
-                    
-                
-            if fatal:
-                raise SeismosizersDied()
-                
-            if errors:
-                yield SeismosizersReturnedErrors(errors)
-            else:
-                yield [ answers[i] for i in sorted(answers.keys()) ]
 
 # add commands as methods
 def gen_do_method(command):
@@ -287,9 +205,6 @@ class SeismosizerReturnedError(Exception):
 class SeismosizerDied(Exception):
     pass
     
-class NonePending(Exception):
-    pass
-
 class ThreadIsDead(Exception):
     pass
 
@@ -328,8 +243,8 @@ class SeismosizerProcess(threading.Thread):
         except:
             raise Fatal("cannot start %s on %s" % (config.seismosizer_prog, self.host))
             
-        self.commands = Queue.Queue()
-        self.answers = Queue.Queue(maxsize=batch_block_size*3)
+        self.commands = Queue()
+        self.answers = Queue()
         self.the_end_has_come = False
         self.have_sent_term_signal = False
         self.start()
@@ -356,23 +271,26 @@ class SeismosizerProcess(threading.Thread):
         
     def run(self):
         logger.debug('Starting seismosizer %i.' % self.tid)
-        i = 0
         try:
             while True:
                 retcode = self.p.poll()
                 if retcode is not None: 
                     raise SeismosizerDied('Seismosizer %i died or has been killed. Exit status: %i' % (self.tid, retcode))
-                try:
-                    if self.the_end_has_come: break
-                    cmd = self.commands.get_nowait()
-                    
-                    for answer in self._do(cmd):
-                        self.answers.put(answer)
                 
-                except Queue.Empty:
-                    time.sleep(runners_sleep)
-                    
-                i += 1
+                if self.the_end_has_come:
+                    break
+
+                while True:
+                    try:
+                        cmd, ready = self.commands.get() #(True, 1.0)
+                        break
+
+                    except Empty:
+                        self.check_end()
+
+                answer = self._do(cmd)
+                self.answers.put(answer)
+                ready.put(self)
                     
         except (IOError, SeismosizerDied, SeismosizerInsane), e:
             logger.warn( e )
@@ -390,45 +308,35 @@ class SeismosizerProcess(threading.Thread):
         '''Put command to minimizer and return the results'''
                
         answer = None
-        lines = command.strip().splitlines()
+        line = command.strip()
         
-        iblock = 0
-        lblock = batch_block_size
-        while iblock*lblock < len(lines):
-            block = lines[iblock*lblock:(iblock+1)*lblock]
+        self.to_p.write(line+"\n")
+        self.to_p.flush()
         
-            for line in block:
-                self.to_p.write(line+"\n")
-
-            self.to_p.flush()
+        answer = ''
+        retval = self.from_p.readline().rstrip()
+        self.check_end()
+        
+        if retval.endswith('nok'):
+            return SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
+                        (config.seismosizer_prog, self.host, self.tid, line), '' )
+                        
+        elif retval.endswith('nok >'):
+            error_str = self.from_p.readline().rstrip()
+            self.check_end()
+            return SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
+                        (config.seismosizer_prog, self.host, self.tid, line), error_str )
             
-            answer = ''
-            for line in block:
-                retval = self.from_p.readline().rstrip()
-                self.check_end()
-                
-                if retval.endswith('nok'):
-                    yield SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
-                                (config.seismosizer_prog, self.host, self.tid, line), '' )
-                                
-                elif retval.endswith('nok >'):
-                    error_str = self.from_p.readline().rstrip()
-                    self.check_end()
-                    yield SeismosizerReturnedError("%s on %s (tid=%i) failed doing command: %s" %
-                                (config.seismosizer_prog, self.host, self.tid, line), error_str )
-                    
-                elif retval.endswith('ok >'):
-                    answer = self.from_p.readline().rstrip()
-                    self.check_end()
-                    yield answer
-                
-                elif retval.endswith('ok'):
-                    yield ''
-                    
-                else:
-                    raise SeismosizerInsane('Seismosizer %i did not answer correctly.' % self.tid)
-                                
-            iblock += 1
+        elif retval.endswith('ok >'):
+            answer = self.from_p.readline().rstrip()
+            self.check_end()
+            return answer
+        
+        elif retval.endswith('ok'):
+            return ''
+            
+        else:
+            raise SeismosizerInsane('Seismosizer %i did not answer correctly.' % self.tid)
     
     def check_end(self):
         if self.the_end_has_come: 
@@ -436,21 +344,17 @@ class SeismosizerProcess(threading.Thread):
                     
             raise SeismosizerInsane(mess)
         
-    def push(self, cmd):
+    def push(self, cmd, ready):
         '''Enqueue command for seismosizer.'''
-        self.commands.put(cmd)
+        self.commands.put((cmd, ready))
         
     def poll(self):
         '''Check for results of commands.'''
         if not self.isAlive(): raise ThreadIsDead()
-        try:
-            answer = self.answers.get_nowait()
-            if isinstance(answer, SeismosizerReturnedError):
-                raise answer
-            return answer
-            
-        except Queue.Empty:
-            raise NonePending()
+        answer = self.answers.get()
+        if isinstance(answer, SeismosizerReturnedError):
+            raise answer
+        return answer
 
 class NoValidSources(Exception):
     pass
@@ -768,20 +672,11 @@ class Seismosizer(SeismosizerBase):
             
             pbar = progressbar.ProgressBar(widgets=widgets, maxval=len(sources)).start()
         
-        self.batch_record()
-        for isource, source in enumerate(sources):
-            self.set_source(source)
-            self.do_get_misfits()
-        
-        results_iterator = self.batch_execute()
         failings = []
         for isource, source in enumerate(sources):
             try:
-                results_set_source = results_iterator.next() # skip output from set_source()
-                results = results_iterator.next()
-                
-                if isinstance(results_set_source, Exception): raise results_set_source
-                if isinstance(results, Exception): raise results
+                self.set_source(source)
+                results = self.do_get_misfits()
                 
                 self._gather_misfits_into_receivers(results)
                 for ireceiver, receiver in enumerate(self.receivers):

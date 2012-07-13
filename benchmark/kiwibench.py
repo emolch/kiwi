@@ -104,7 +104,7 @@ elif command == 'syntheseis':
     
     db = gfdb.Gfdb('benchdb')
     
-    seis = seismosizer.Seismosizer(hosts=['localhost'])
+    seis = seismosizer.Seismosizer(hosts=['localhost']*4)
     seis.set_database(db)
     seis.set_effective_dt(0.1)
     seis.set_local_interpolation('bilinear')
@@ -112,7 +112,7 @@ elif command == 'syntheseis':
     seis.set_source_location( olat, olon, 0.0)
     
     s = source.Source('bilateral', 
-        sourceparams_str='0 0 0 5000 1e12  91 87 164 0 900 700 2000 2500 0.2')
+        sourceparams_str='0 0 0 5000 1e12  91 87 164 0 0 0 0 2500 0.2')
     
     seis.set_source(s)
     seis.set_synthetic_reference()
