@@ -106,7 +106,6 @@ class Gfdb:
             self.tempdir = tempfile.mkdtemp('','gfdb_build-')
             self.tempfilebase = pjoin(self.tempdir, 'trace')
             
-        fns = []
         
         for ig, xx in enumerate(traces):
             if xx is not None:
@@ -116,13 +115,8 @@ class Gfdb:
                     fn = '%s-%i.table' % (self.tempfilebase, ig)
                     num.savetxt(fn, tab)
                     self.builder.stdin.write("%f %f %i '%s'\n" % (x,z,ig+1,fn))
-                    fns.append(fn)
-        
-        self.builder.stdin.flush()
-
-        for fn in fns:
-            answer = self.builder.stdout.readline()
-            assert answer.strip() == fn
+                    answer = self.builder.stdout.readline()
+                    assert answer.strip() == fn
                 
             
     def terminate(self):
