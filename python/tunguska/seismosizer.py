@@ -106,15 +106,14 @@ class SeismosizerBase:
     def sighandler(self, *args):
         logger.warn('Caught signal %s, license to kill' % getsigdict()[args[0]])
         self.close()
+        time.sleep(1.0)
         self.terminate()
         
-    
     def close(self):
         for p in self.processes:
             p.stop()
             
     def terminate(self):
-        logger.warn( 'I like terminate!' )
         for p in self.processes:
             p.terminate()
             
@@ -151,9 +150,12 @@ class SeismosizerBase:
         answers = {}
         errors = {}
         fatal = False
-        while runners:
-            try:
-                p = ready.get()  #(True, 1.0)
+        try:
+            while runners:
+                p = ready.get()
+                if not p:
+                    raise ThreadIsDead()
+
                 runners.remove(p)
                 try:
                     answer = p.poll()
@@ -163,21 +165,11 @@ class SeismosizerBase:
                 except SeismosizerReturnedError, error:
                     errors[p.tid] = error.args[1]
                 
-                except ThreadIsDead:
-                    logger.warn('Lost seismosizer process %s' % p.tid)
-                    self.terminate()
-                    fatal = True
-            
-            except Empty:
-                for p in runners:
-                    if not p.isAlive():
-                        self.terminate()
-                        fatal = True
-                        runners = []
-                
-        if fatal:
+        except ThreadIsDead:
             self.close()
-            raise Fatal('Shit happens.')
+            time.sleep(1.0)
+            self.terminate()
+            raise Fatal('Shit happens!')
        
         if errors:
             raise SeismosizersReturnedErrors(errors)
@@ -257,44 +249,47 @@ class SeismosizerProcess(threading.Thread):
             
     def stop(self):
        self.the_end_has_come = True
-        
+       self.commands.put(('close',None))
         
     def terminate(self):
-        self.stop()
         if not self.have_sent_term_signal:
-            try:
-                os.kill(self.p.pid, signal.SIGTERM)
-                logger.warn( 'Sent SIGTERM to seismosizer %i, pid %i' % (self.tid, self.p.pid) )
-            except OSError, error:
-                logger.warn( error )
+            if self.p.poll() is None:
+                try:
+                    os.kill(self.p.pid, signal.SIGTERM)
+                    logger.warn( 'Sent SIGTERM to seismosizer %i, pid %i' % (self.tid, self.p.pid) )
+                except OSError, error:
+                    logger.warn( error )
+
             self.have_sent_term_signal = True
         
     def run(self):
         logger.debug('Starting seismosizer %i.' % self.tid)
+        ready = None
         try:
             while True:
                 retcode = self.p.poll()
                 if retcode is not None: 
                     raise SeismosizerDied('Seismosizer %i died or has been killed. Exit status: %i' % (self.tid, retcode))
                 
-                if self.the_end_has_come:
+                self.check_end()
+                cmd, ready = self.commands.get()
+                
+                if cmd == 'close':
                     break
 
-                while True:
-                    try:
-                        cmd, ready = self.commands.get() #(True, 1.0)
-                        break
-
-                    except Empty:
-                        self.check_end()
-
-                answer = self._do(cmd)
-                self.answers.put(answer)
-                ready.put(self)
-                    
+                else:
+                    answer = self._do(cmd)
+                    self.answers.put(answer)
+                    ready.put(self)
+                    ready = None
+            
+                
+                
         except (IOError, SeismosizerDied, SeismosizerInsane), e:
             logger.warn( e )
             self.the_end_has_come = True
+            if ready is not None:
+                ready.put(None)
         
         self.to_p.close()
         self.from_p.close()
@@ -688,10 +683,6 @@ class Seismosizer(SeismosizerBase):
             except SeismosizersReturnedErrors:
                 failings.append(isource)
                 
-            except SeismosizersDied:
-                self.close()
-                raise Fatal('Indeed - shit happens.')
-            
             if show_progress: pbar.update(isource+1)
                         
         if show_progress: pbar.finish()
