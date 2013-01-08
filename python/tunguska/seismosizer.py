@@ -448,11 +448,11 @@ class Seismosizer(SeismosizerBase):
             
         for irec, rec in enumerate(self.receivers):
             if taper[irec] is not None:
-                if rec.depth != 0.0:
-                    dist = num.sqrt(rec.distance_m**2 + (sourcedepth - rec.depth)**2)
-                    values = taper[irec](dist, 0.0)
-                else:
-                    values = taper[irec](rec.distance_m, sourcedepth)
+                #if rec.depth != 0.0:
+                #    dist = num.sqrt(rec.distance_m**2 + (sourcedepth - rec.depth)**2)
+                #    values = taper[irec](dist, 0.0)
+                #else:
+                values = taper[irec](rec.distance_m, sourcedepth)
             else:
                 values = []
                 
