@@ -95,7 +95,7 @@ elif command == 'syntheseis':
 
     olat, olon = 30., 70.
     receivers = []
-    distances = num.linspace(3000, 4000, 100)
+    distances = num.linspace(3000, 4000, 10)
     
     for dist in distances:
         lat, lon = orthodrome.ne_to_latlon(olat, olon, dist, 0.)
@@ -111,11 +111,11 @@ elif command == 'syntheseis':
     seis.set_receivers(receivers)
     seis.set_source_location( olat, olon, 0.0)
     
-   # s = source.Source('bilateral', 
-   #     sourceparams_str='0 0 0 5000 1e12  91 87 164 0 0 0 0 2500 0.2')
-    
     s = source.Source('bilateral', 
-        sourceparams_str='0 0 0 5000 1e12  91 87 164 0 600 600 600 2500 0.2')
+        sourceparams_str='0 0 0 5000 1e12  91 87 164 0 0 0 0 2500 0.2')
+    
+   # s = source.Source('bilateral', 
+    #    sourceparams_str='0 0 0 5000 1e12  91 87 164 0 600 600 600 2500 0.2')
     
     seis.set_source(s)
     seis.set_synthetic_reference()
@@ -131,7 +131,7 @@ elif command == 'syntheseis':
     
     start = time.time()
     times = [ start ]
-    strikes = num.linspace(0.,360.,361)
+    strikes = num.linspace(0.,360.,3610)
     for istrike, strike in enumerate(strikes):
         s['strike'] = strike
         seis.set_source(s)
