@@ -15,6 +15,7 @@ setup(
         'kinherd_sourceview_pres', 
         'gfdb_phaser',
         'gfdb_downsample',
+        'gfdb_meta',
         'autokiwi', 
         'snufflek',
     ]],
