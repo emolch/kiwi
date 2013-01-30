@@ -279,10 +279,17 @@ def run_processing_command(processing_dir, processing_command, event_names):
 
 def post_event(config, event_names):
     for event_name in event_names:
+        if config.has('event_info_path'):
+            ev = model.Event(load=config.path('event_info_path', additional=dict(event_name=event_name) ))
+            config.event_name_catalog = ev.name
+
         source_dir = config.path('source_dir', additional={ 'event_name': event_name }).rstrip('/')
         target_dir = config.path('target_dir', additional={ 'event_name': event_name }).rstrip('/')
         target_host = config.target_host
-        trigger_command = [ config.mkpath(xxx, additional={ 'event_name': event_name }) for xxx in  config.trigger_command ]
+        
+        trigger_command = None
+        if config.has('trigger_command'):
+            trigger_command = [ config.mkpath(xxx, additional={ 'event_name': event_name }) for xxx in  config.trigger_command ]
         
         if os.path.isdir(source_dir):
             target = target_dir
@@ -292,7 +299,8 @@ def post_event(config, event_names):
             check_call(['rsync', '-a', source_dir+'/', target ])
             # trigger host to import the new data
             
-            check_call(trigger_command)
+            if trigger_command:
+                check_call(trigger_command)
 
 def load_plugin( plugins_dir, plugin_name):
     if plugins_dir not in sys.path: sys.path[0:0] = [ plugins_dir ]

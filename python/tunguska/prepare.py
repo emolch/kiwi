@@ -160,7 +160,11 @@ def save_kiwi_dataset(acc, stations, traces, event, config):
     if config.has('source_origin_path'):
         fpath = config.path('source_origin_path')
         f = open(fpath, 'w')
-        f.write('%e %e 0\n' % (event.lat, event.lon))
+        t = 0.
+        if config.trace_time_zero == 'system':
+            t = event.time
+
+        f.write('%e %e %f\n' % (event.lat, event.lon, t))
         f.close()
             
 

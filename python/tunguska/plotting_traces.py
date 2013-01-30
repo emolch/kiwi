@@ -176,6 +176,9 @@ def multi_seismogram_plot2(snapshots, source_locations, plotdir):
                             iend = indices[-1]+1
                             xdata = xdata[ibeg:iend]
                             ydata = ydata[ibeg:iend]
+
+                        else:
+                            xdata = xdata - source_location[2]
                         
                         trace = UTrace(
                             station = rec.get_station(),
