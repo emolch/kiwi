@@ -22,6 +22,15 @@ class WaveformType(StringChoice):
             'surface wave',
             'undefined',
         ]
+    
+
+class NearfieldTermsType(StringChoice):
+    choices = [
+            'complete',
+            'incomplete',
+            'missing',
+            'undefined',
+        ]
 
 
 class GFType(StringChoice):
@@ -85,7 +94,8 @@ class Citation(Object):
 
 class EarthModel(Object):
     id = StringID.T()
-    description = String.T(default='', optional=True)
+    region = String.T(optional=True)
+    description = String.T(optional=True)
     citation_ids = List.T(StringID.T())
 
 
@@ -109,6 +119,7 @@ class GFSet(Object):
     modelling_code_id = StringID.T(optional=True)
     scope_type = ScopeType.T(default='undefined')
     waveform_type = WaveformType.T(default='undefined')
+    nearfield_terms = NearfieldTermsType.T(default='undefined')
     can_interpolate_source = Bool.T(default=False)
     can_interpolate_receiver = Bool.T(default=False)
     frequency_min = Float.T(optional=True)
