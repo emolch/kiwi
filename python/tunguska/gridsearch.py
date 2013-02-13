@@ -254,6 +254,9 @@ class MisfitGrid:
             **outer_misfit_config )
                 
         ibest = num.nanargmin(misfits_by_s)
+        if not num.isfinite(ibest):
+            ibest = 0
+
         if not return_misfits_by_r:
             return self.sources[ibest], misfits_by_s
 

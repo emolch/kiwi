@@ -229,7 +229,7 @@ class Step:
     inner_misfit_method_params = set(('inner_norm', 'taper', 'filter', 'nsets', 'depth'))
     outer_misfit_method_params = set(('outer_norm', 'bootstrap_iterations', 'anarchy', 'receiver_weights'))
     
-    def __init__(self, workdir, name, dump_processing='filtered'):
+    def __init__(self, workdir, name, dump_processing='filtered', failure_check=None):
         self.baseworkdir = workdir
         self.stepname = name
         self.in_config = None
@@ -239,6 +239,7 @@ class Step:
         self.required = set(standard_setup.required)
         self.optional = set(standard_setup.optional)
         self.dump_processing = dump_processing
+        self.failure_check = failure_check
         
     def make_rundir_path(self, run_id):
         return pjoin(self.stepdir, str(run_id))
@@ -461,24 +462,33 @@ class Step:
         return object
 
     def plot(self, run_id='current'):
-         logging.info('Starting plotting for step: %s' % self.stepname)
-         
-         plotdir = self.make_plotdir_path(run_id)
-         if os.path.exists( plotdir ): 
+        logging.info('Starting plotting for step: %s' % self.stepname)
+
+        plotdir = self.make_plotdir_path(run_id)
+        if os.path.exists( plotdir ): 
             shutil.rmtree( plotdir )
-         os.makedirs( plotdir )
+
+        os.makedirs( plotdir )
+
+        plot_files = self._plot( run_id )
+
+        # convert plots to png
+        for infn in plot_files:
+            inpath = pjoin( plotdir, infn )
+            fnbase = os.path.splitext(infn)[0]
+            outfn = fnbase+'.png'
+            outpath = pjoin( plotdir, outfn )
+            convert_graph( inpath, outpath )
          
-         plot_files = self._plot( run_id )
-         
-         # convert plots to png
-         for infn in plot_files:
-             inpath = pjoin( plotdir, infn )
-             fnbase = os.path.splitext(infn)[0]
-             outfn = fnbase+'.png'
-             outpath = pjoin( plotdir, outfn )
-             convert_graph( inpath, outpath )
-             
-         logging.info('Done with plotting for step: %s' % self.stepname)
+        logging.info('Done with plotting for step: %s' % self.stepname)
+
+        if self.failure_check:
+            failure = self.failure_check(self.oc())
+            if failure:
+                if self.seismosizer:
+                    self.seismosizer.close()
+                logging.info('Failure: %s' % failure)
+                sys.exit(1)
 
     def _plot(self, rundir_id):
         logging.info('Nothing to do')
@@ -545,8 +555,8 @@ class Step:
 
 class Informer(Step):
     
-    def __init__(self, workdir, name='weightmaker'):
-        Step.__init__(self, workdir, name)
+    def __init__(self, workdir, name='weightmaker', failure_check=None):
+        Step.__init__(self, workdir, name, failure_check=failure_check)
         
     
     def work(self, **kwargs):
@@ -622,8 +632,8 @@ class Informer(Step):
         
 class WeightMaker(Step):
     
-    def __init__(self, workdir, name='weightmaker'):
-        Step.__init__(self, workdir, name)
+    def __init__(self, workdir, name='weightmaker', failure_check=None):
+        Step.__init__(self, workdir, name, failure_check=failure_check)
         
         self.required |= Step.inner_misfit_method_params | gen_dweights.required \
                         | set(('depth', 'moment', 'rise_time')) 
@@ -644,14 +654,25 @@ class WeightMaker(Step):
                                 "moment": float(conf['moment']),
                                 "rise-time": float(conf['rise_time']) } )
         
-        self.out_config.receiver_weights = gen_dweights(seis, base_source, **conf )
+
+        w = gen_dweights(seis, base_source, **conf )
+    
+        if 'set_weights' in conf:
+            set_weights = conf['set_weights']
+            assert conf['nsets'] == len(set_weights)
+            nsets = conf['nsets']
+            for iset in range(nsets):
+                w[iset::nsets] *= set_weights[iset]
+
+        self.out_config.receiver_weights = w
+        
         self.post_work(True)
 
 
 class EffectiveDtTester(Step):
     
-    def __init__(self, workdir, name='effective_dt_tester'):
-        Step.__init__(self, workdir, name)
+    def __init__(self, workdir, name='effective_dt_tester', failure_check=None):
+        Step.__init__(self, workdir, name, failure_check=failure_check)
         
         self.required |= Step.inner_misfit_method_params | gen_dweights.required \
                         | set(('depth', 'moment', 'rise_time')) 
@@ -698,8 +719,8 @@ class EffectiveDtTester(Step):
 
 
 class Shifter(Step):
-    def __init__(self, workdir, name='shifter'):
-        Step.__init__(self, workdir, name)
+    def __init__(self, workdir, name='shifter', failure_check=None):
+        Step.__init__(self, workdir, name, failure_check=failure_check)
         
         self.required |= set(('taper', 'filter', 'autoshift_range', 'autoshift_limit'))
                         
@@ -800,8 +821,8 @@ class Shifter(Step):
 class ExtConfigurator(Step):
     
     def __init__(self, workdir, name, generate=('filter', 'constraining_planes', 
-                    'bord_radius_range', 'nukl_shift_x_range', 'nukl_shift_y_range' ), size_factor=4000., steps=5.):
-        Step.__init__(self, workdir, name)
+                    'bord_radius_range', 'nukl_shift_x_range', 'nukl_shift_y_range' ), size_factor=4000., steps=5., failure_check=None):
+        Step.__init__(self, workdir, name, failure_check=failure_check)
         self.required |= Step.inner_misfit_method_params | set(('depth', 'rise_time'))
         self.generate = generate
         self.size_factor = size_factor
@@ -842,9 +863,9 @@ class ExtConfigurator(Step):
 class ParamTuner(Step):
      
     def __init__(self, workdir, sourcetype='eikonal', params=['time'], name=None, 
-            xblacklist_level=None, dump_processing='filtered', ref_source_from=None):
+            xblacklist_level=None, dump_processing='filtered', ref_source_from=None, failure_check=None):
         if name is None: name = '-'.join(params)+'-tuner'
-        Step.__init__(self, workdir, name, dump_processing)
+        Step.__init__(self, workdir, name, dump_processing, failure_check=failure_check)
         self.sourcetype = sourcetype
         self.params = params
         self.xblacklist_level = xblacklist_level
@@ -963,8 +984,8 @@ class ParamTuner(Step):
     
 class EnduringPointSource(Step):
     
-    def __init__(self, workdir, name='extension'):
-        Step.__init__(self, workdir, name)
+    def __init__(self, workdir, name='extension', failure_check=None):
+        Step.__init__(self, workdir, name, failure_check=failure_check)
         
         self.params = ('rise_time',)
         
@@ -1113,9 +1134,9 @@ class Greeper(Step):
     
     aaahrrggg! this has to be rewritten!'''
      
-    def __init__(self, workdir, sourcetype='eikonal', params=['time'], name=None):
+    def __init__(self, workdir, sourcetype='eikonal', params=['time'], name=None, failure_check=None):
         if name is None: name = '-'.join(params)+'-greeper'
-        Step.__init__(self, workdir, name)
+        Step.__init__(self, workdir, name, failure_check=failure_check)
         self.params = params
         self.sourcetype = sourcetype
         

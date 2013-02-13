@@ -52,6 +52,12 @@ class Config:
             
     def path(self, name, additional=None):
         return self.mkpath(getattr(self, name), additional)
+
+    def path_or_none(self, name, additional=None):
+        if not self.has(name):
+            return None
+        else:
+            return self.path(name, additional=additional)
     
     def path_check_file(self, name, additional=None):
         p = self.mkpath(getattr(self, name), additional)

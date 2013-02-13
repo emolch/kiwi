@@ -262,8 +262,13 @@ def edump_pull(config, which='first', force=False, onlylist=False):
         
     logger.info('Already have all data for given events.')
     return []
+
+def failure(fn, label):
+    with open(fn, 'w+') as f:
+        f.write(label+'\n')
     
-def run_processing_command(processing_dir, processing_command, event_names):
+def run_processing_command(processing_dir, processing_command, event_names, fail_label='', fail_filename=None):
+    failures = False
     for event_name in event_names:
         pdir = processing_dir % { 'event_name': event_name }
         if not os.path.exists(pdir):
@@ -274,10 +279,20 @@ def run_processing_command(processing_dir, processing_command, event_names):
         try:
             check_call(processing_command)
         except CalledProcessError:
-            logger.error('Running process on event %s failed.' % event_name)
+            logger.error('Running "%s" on event %s failed.' % (fail_label, event_name))
+            if fail_filename is not None:
+                fn = fail_filename % { 'event_name': event_name }
+                failure(fn, fail_label)
+
+            failures = True
+
         os.chdir(oldwd)
 
+    if failures:
+        sys.exit(1)
+
 def post_event(config, event_names):
+    failures = False
     for event_name in event_names:
         if config.has('event_info_path'):
             ev = model.Event(load=config.path('event_info_path', additional=dict(event_name=event_name) ))
@@ -296,11 +311,20 @@ def post_event(config, event_names):
             if target_host:
                 target = target_host+':'+target_dir
                 
-            check_call(['rsync', '-a', source_dir+'/', target ])
-            # trigger host to import the new data
-            
-            if trigger_command:
-                check_call(trigger_command)
+            try:
+                check_call(['rsync', '-a', source_dir+'/', target ])
+                if trigger_command:
+                    check_call(trigger_command)
+
+            except CalledProcessError:
+                logger.error('Posting results failed')
+                fn = config.path('fail_filename', additional={ 'event_name': event_name })
+                failure(fn, 'post')
+
+                failures = True
+
+    if failures:
+        sys.exit(1)
 
 def load_plugin( plugins_dir, plugin_name):
     if plugins_dir not in sys.path: sys.path[0:0] = [ plugins_dir ]
@@ -463,40 +487,41 @@ try:
 
     if not event_names and base_config.has('event_names'):
         event_names = base_config.event_names
-            
+
     for command in commands:
-        if command in ('prepare', 'process', 'report', 'post'):
-            if not event_names:
-                parser.error('What do you want to %s today?' % command)
-            
-    if 'prepare' in commands:
-        prepare.prepare(prepare_config, kiwi_config, rapid_config, event_names)
+
+        if command == 'prepare':
+            prepare.prepare(prepare_config, kiwi_config, rapid_config, event_names)
     
-    if 'process' in commands:   
-        run_processing_command( kiwi_config.path('main_dir'),
+        if command == 'process':
+            run_processing_command( kiwi_config.path('main_dir'),
                                     kiwi_config.processing_command,
-                                    event_names)
+                                    event_names, 
+                                    fail_label='process',
+                                    fail_filename=kiwi_config.path_or_none('fail_filename') )
         
-    if 'report' in commands:
-        run_processing_command( kiwi_config.path('main_dir'),
+        if command == 'report':
+            run_processing_command( kiwi_config.path('main_dir'),
                                     kiwi_config.report_command,
-                                    event_names)
+                                    event_names,
+                                    fail_label='report',
+                                    fail_filename=kiwi_config.path_or_none('fail_filename') )
     
-    if 'post' in commands:
-        if post_config is None:
-            die('No post configuration found\n(using config from file "%s".)' % (e, config_filename))
+        if command == 'post':
+            if post_config is None:
+                die('No post configuration found\n(using config from file "%s".)' % (e, config_filename))
     
-        post_event(post_config, event_names)
+            post_event(post_config, event_names)
         
-    if 'list' in commands:
-        levent_names = event_names_from_pathes(base_config)
-        for event_name in levent_names:
-            print event_name
+        if command == 'list':
+            levent_names = event_names_from_pathes(base_config)
+            for event_name in levent_names:
+                print event_name
     
-    for plugin in plugins:
-        for command in plugin.__autokiwi_commands__:
-            if command in commands:
-                plugin.__autokiwi_main__(command, options, conf, event_names)
+        for plugin in plugins:
+            for pcommand in plugin.__autokiwi_commands__:
+                if command == pcommand:
+                    plugin.__autokiwi_main__(command, options, conf, event_names)
             
 except configurator.ConfigAttributeError, e:
     die('Configuration directive "%s" not found.\n(using config from file "%s".)' % (e, config_filename))
