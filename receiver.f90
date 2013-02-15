@@ -425,6 +425,68 @@ module receiver
     
     end subroutine
 
+    subroutine receiver_calculate_floating_misfits( self, misfit_method, shiftrange )
+    
+        type(t_receiver), intent(inout)    :: self
+        integer, intent(in)                :: misfit_method
+        integer, intent(in), dimension(2)  :: shiftrange
+        
+      ! calculate misfits between synthetics and references for all components of this receiver
+        
+        integer :: icomponent
+        real :: min_misfit
+        integer :: ishift, i, iloc
+        real, dimension(self%ncomponents,slen(shiftrange)) :: misfits, norms
+
+        if (self%ncomponents == 0) then
+            return
+        end if 
+        
+        if (.not. self%enabled) then
+            do icomponent=1,self%ncomponents
+                self%misfits(icomponent) = 0.0
+                self%misfits_norm_factors(icomponent) = 0.0
+            end do
+
+        else
+
+            ishift = shiftrange(1)
+            
+            do i=1,slen(shiftrange)
+                do icomponent=1,self%ncomponents
+                    call probe_shift( self%ref_probes(icomponent), ishift )
+
+                    misfits(icomponent,i) = probes_norm( self%ref_probes(icomponent), &
+                                                            self%syn_probes(icomponent), &
+                                                            misfit_method )
+
+                    norms(icomponent,i) = probe_norm( self%ref_probes(icomponent), &
+                                                            misfit_method )
+
+                end do
+                ishift = 1
+            end do
+            
+            if (misfit_method == L1NORM) then
+                iloc = minloc( sum(misfits,1),1 )
+            else if (misfit_method == L2NORM) then
+                iloc = minloc( sum(misfits**2,1),1 )
+            else
+                stop 'receiver_calculate_floating_misfits only works with L1NORM or L2NORM'
+            end if
+
+            self%misfits = misfits(:,iloc)
+            self%misfits_norm_factors = sum(norms,2) / slen(shiftrange)
+
+          ! reset shift
+            do icomponent=1,self%ncomponents
+                call probe_shift( self%ref_probes(icomponent), -shiftrange(2) )
+            end do
+
+        end if 
+    
+    end subroutine
+
     subroutine get_component_ids( self, iver, ihor1, ihor2 )
     
       ! get the horizontal components, preferably a/c and r/l
@@ -818,5 +880,11 @@ module receiver
         call strip_destroy(tmp)
 
     end subroutine
+
+    pure function slen( span )
+        integer, dimension(2), intent(in) :: span
+        integer :: slen
+        slen = span(2) - span(1) + 1
+    end function
 
 end module
