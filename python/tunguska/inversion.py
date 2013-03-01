@@ -226,7 +226,7 @@ gen_dweights.required = set(('datadir',))
 gen_dweights.optional = set(('ref_seismogram_stem', 'ref_seismogram_format'))
 
 class Step:
-    inner_misfit_method_params = set(('inner_norm', 'taper', 'filter', 'nsets', 'depth'))
+    inner_misfit_method_params = set(('inner_norm', 'taper', 'filter', 'nsets', 'depth', 'floating_shiftrange'))
     outer_misfit_method_params = set(('outer_norm', 'bootstrap_iterations', 'anarchy', 'receiver_weights'))
     
     def __init__(self, workdir, name, dump_processing='filtered', failure_check=None):
@@ -323,6 +323,8 @@ class Step:
                 seis.set_filter(conf['filter'])
             
         seis.set_misfit_method(conf['inner_norm'])
+        if 'floating_shiftrange' in conf and conf['floating_shiftrange'] is not None:
+            seis.set_floating_shiftrange(0, *conf['floating_shiftrange'] )
         
     def post_work(self, stop_seismosizer=True):
         

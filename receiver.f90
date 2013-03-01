@@ -412,23 +412,24 @@ module receiver
 
         if (misfit_method == FLOATING_L1NORM .or. misfit_method == FLOATING_L2NORM) then
             call receiver_calculate_floating_misfits( self, misfit_method, self%floating_shiftrange )
-        end if
+        else
         
-        do icomponent=1,self%ncomponents
-        
-            if (self%enabled) then
-                self%misfits(icomponent) = probes_norm( self%ref_probes(icomponent), &
-                                                        self%syn_probes(icomponent), &
-                                                        misfit_method )
-                self%misfits_norm_factors(icomponent) = &
-                                        probe_norm( self%ref_probes(icomponent), &
-                                                        misfit_method )
-            else
-                self%misfits(icomponent) = 0.0
-                self%misfits_norm_factors(icomponent) = 0.0
-            end if
+            do icomponent=1,self%ncomponents
+            
+                if (self%enabled) then
+                    self%misfits(icomponent) = probes_norm( self%ref_probes(icomponent), &
+                                                            self%syn_probes(icomponent), &
+                                                            misfit_method )
+                    self%misfits_norm_factors(icomponent) = &
+                                            probe_norm( self%ref_probes(icomponent), &
+                                                            misfit_method )
+                else
+                    self%misfits(icomponent) = 0.0
+                    self%misfits_norm_factors(icomponent) = 0.0
+                end if
 
-        end do
+            end do
+        end if
     
     end subroutine
 

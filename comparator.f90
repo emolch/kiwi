@@ -30,7 +30,7 @@ module comparator
     
     include 'fftw3.f'
     
-    integer, public, parameter :: n_comparator_norms = 6
+    integer, public, parameter :: n_comparator_norms = 8
     
     integer, public, parameter :: L2NORM = 1
     integer, public, parameter :: L1NORM = 2

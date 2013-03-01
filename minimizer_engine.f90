@@ -71,6 +71,7 @@ module minimizer_engine
     public autoshift_ref_seismogram
     public get_cached_traces_memory
     public set_cached_traces_memory_limit
+    public set_floating_shiftrange
         
     type(t_psm), save                               :: psm
     real                                            :: effective_dt = 1.
@@ -405,6 +406,38 @@ module minimizer_engine
             allocate(shifts(1))
             call receiver_autoshift_ref_seismogram( receivers(ireceiver), ishiftrange, ishift )
             shifts(1) = ishift*db%dt
+
+        end if
+        
+        call dirtyfy_ref_probes()
+        
+    end subroutine
+
+    subroutine set_floating_shiftrange( ireceiver, shiftrange, ok )
+
+        integer, intent(in)               :: ireceiver
+        real, dimension(2), intent(in)    :: shiftrange
+        logical, intent(out)              :: ok
+
+        integer :: nreceivers, irec
+        integer, dimension(2) :: ishiftrange
+        
+        ok = .true.
+
+        nreceivers = size(receivers)
+        ishiftrange(:) = int(nint(shiftrange(:)/db%dt))
+
+        if (ireceiver == 0) then ! apply to all
+            do irec=1,nreceivers
+                receivers(irec)%floating_shiftrange = ishiftrange
+            end do
+        else
+            if (ireceiver < 1 .or. nreceivers < ireceiver) then
+                ok = .false.
+                call error( 'receiver index out of range' )
+                return
+            end if
+            receivers(ireceiver)%floating_shiftrange = ishiftrange
 
         end if
         
