@@ -1,10 +1,11 @@
 class InnerMisfitSetup:
-    def __init__(self, inner_norm, tapers_by_set=None, filters_by_set=None, taper=None, filter=None):
+    def __init__(self, inner_norm, tapers_by_set=None, filters_by_set=None, taper=None, filter=None, floating_shiftrange=None):
         self._inner_norm = inner_norm
         self._tapers_by_set = tapers_by_set
         self._filters_by_set = filters_by_set
         self._filter = filter
         self._taper = taper
+        self._floating_shiftrange = floating_shiftrange
         
     def setup(self, seis, depth):
         tapers, filters = [], []
@@ -24,6 +25,9 @@ class InnerMisfitSetup:
         seis.set_taper(tapers, depth)
         seis.set_filters(filters)
         seis.set_misfit_method(self._inner_norm)
+        
+        if self._floating_shiftrange:
+            seis.set_floating_shiftrange(0, self._floating_shiftrange )
         
 class OuterMisfitSetup:
     def __init__(self, outer_norm='l1norm', bootstrap_iterations=1000, anarchy=False, receiver_weights=None):
