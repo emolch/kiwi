@@ -90,6 +90,9 @@ module receiver
       ! (these are used to compare references to synthetics in comparator.f90)
         type(t_probe), dimension(:), allocatable   :: ref_probes, syn_probes
 
+      ! allowed range of shifts for floating misfits
+        integer, dimension(2)                      :: floating_shiftrange = (/ 0, 0 /)
+
     end type
 
     public receiver_init
@@ -406,6 +409,10 @@ module receiver
       ! calculate misfits between synthetics and references for all components of this receiver
         
         integer :: icomponent
+
+        if (misfit_method == FLOATING_L1NORM .or. misfit_method == FLOATING_L2NORM) then
+            call receiver_calculate_floating_misfits( self, misfit_method, self%floating_shiftrange )
+        end if
         
         do icomponent=1,self%ncomponents
         
@@ -428,7 +435,7 @@ module receiver
     subroutine receiver_calculate_floating_misfits( self, misfit_method, shiftrange )
     
         type(t_receiver), intent(inout)    :: self
-        integer, intent(in)                :: misfit_method
+        integer, intent(in)                :: misfit_method  ! FLOATING_L?NORM
         integer, intent(in), dimension(2)  :: shiftrange
         
       ! calculate misfits between synthetics and references for all components of this receiver
@@ -437,6 +444,15 @@ module receiver
         real :: min_misfit
         integer :: ishift, i, iloc
         real, dimension(self%ncomponents,slen(shiftrange)) :: misfits, norms
+        integer :: evaluate_misfit_method
+
+        if (misfit_method == FLOATING_L1NORM) then
+            evaluate_misfit_method = L1NORM
+        else if (misfit_method == FLOATING_L2NORM) then
+            evaluate_misfit_method = L2NORM
+        else
+            call die('receiver_calculate_floating_misfits only works with FLOATING_L1NORM or FLOATING_L2NORM')
+        end if
 
         if (self%ncomponents == 0) then
             return
@@ -458,21 +474,21 @@ module receiver
 
                     misfits(icomponent,i) = probes_norm( self%ref_probes(icomponent), &
                                                             self%syn_probes(icomponent), &
-                                                            misfit_method )
+                                                            evaluate_misfit_method )
 
                     norms(icomponent,i) = probe_norm( self%ref_probes(icomponent), &
-                                                            misfit_method )
-
+                                                            evaluate_misfit_method )
+ 
                 end do
                 ishift = 1
             end do
             
-            if (misfit_method == L1NORM) then
+            if (evaluate_misfit_method == L1NORM) then
                 iloc = minloc( sum(misfits,1),1 )
-            else if (misfit_method == L2NORM) then
+            else if (evaluate_misfit_method == L2NORM) then
                 iloc = minloc( sum(misfits**2,1),1 )
             else
-                stop 'receiver_calculate_floating_misfits only works with L1NORM or L2NORM'
+                iloc = 1 ! should not happen
             end if
 
             self%misfits = misfits(:,iloc)

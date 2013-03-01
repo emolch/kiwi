@@ -38,6 +38,8 @@ module comparator
     integer, public, parameter :: AMPSPEC_L1NORM = 4
     integer, public, parameter :: SCALAR_PRODUCT = 5
     integer, public, parameter :: PEAK = 6
+    integer, public, parameter :: FLOATING_L2NORM = 7 ! handled in calling module
+    integer, public, parameter :: FLOATING_L1NORM = 8 ! handled in calling module
 
   ! processing ids
     integer, parameter, public :: PLAIN = 1
@@ -145,6 +147,8 @@ module comparator
             comparator_norm_names(4) = "ampspec_l1norm"
             comparator_norm_names(5) = "scalar_product"
             comparator_norm_names(6) = "peak"
+            comparator_norm_names(7) = "floating_l2norm"
+            comparator_norm_names(8) = "floating_l1norm"
         end if
     
     end subroutine
