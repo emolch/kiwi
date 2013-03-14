@@ -93,6 +93,9 @@ module receiver
       ! allowed range of shifts for floating misfits
         integer, dimension(2)                      :: floating_shiftrange = (/ 0, 0 /)
 
+      ! last occured best floating shift
+        integer                                    :: floating_shift = 0
+
     end type
 
     public receiver_init
@@ -491,6 +494,8 @@ module receiver
             else
                 iloc = 1 ! should not happen
             end if
+
+            self%floating_shift = shiftrange(1) + (iloc-1)
 
             self%misfits = misfits(:,iloc)
             self%misfits_norm_factors = sum(norms,2) / slen(shiftrange)

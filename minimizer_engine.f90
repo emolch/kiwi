@@ -63,6 +63,7 @@ module minimizer_engine
     public get_distances
     public get_global_misfit
     public get_misfits
+    public get_floating_shifts
     public get_peak_amplitudes
     public get_arias_intensities
     public get_principal_axes
@@ -1010,6 +1011,41 @@ module minimizer_engine
             
         misfit_ = misfit
     
+    end subroutine
+
+    subroutine get_floating_shifts( shifts_, ok )
+    
+        real, dimension(:), allocatable, intent(inout) :: shifts_
+        logical, intent(out)  :: ok
+        
+        integer :: ireceiver, nreceivers
+        integer :: ishift, nshifts
+        
+        call update_misfits( ok )
+        if ( .not. ok ) return
+        
+      ! how many are needed?
+        nreceivers = size(receivers)
+        nshifts = 0
+        do ireceiver=1,nreceivers
+            if (receivers(ireceiver)%enabled) then
+                nshifts = nshifts + 1
+            end if
+        end do
+        
+        if ( allocated(shifts_) ) deallocate(shifts_)
+        allocate( shifts_(nshifts) )
+        
+      ! fill into temporary array
+        ishift = 1
+        do ireceiver=1,nreceivers
+            if (receivers(ireceiver)%enabled) then
+                shifts_(ishift) = receivers(ireceiver)%floating_shift * &
+                    receivers(ireceiver)%dt
+                ishift = ishift + 1
+            end if
+        end do
+        
     end subroutine
     
     subroutine get_misfits( misfits_, ok )

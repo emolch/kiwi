@@ -72,6 +72,7 @@ class SeismosizerBase:
                 'get_source_subparams',
                 'get_global_misfit',
                 'get_misfits',
+                'get_floating_shifts',
                 'get_peak_amplitudes',
                 'get_arias_intensities',
                 'get_principal_axes',
@@ -625,7 +626,20 @@ class Seismosizer(SeismosizerBase):
         
         f.close()
         return data
-        
+
+    def make_floating_shifts(self, source):
+        self.make_misfits_for_source(source)
+        results = self.do_get_floating_shifts()
+        values = [[ float(x) for x in result.split() ] for result in results ]
+        ipos = [ 0 ] * len(results)
+        for irec, rec in enumerate(self.receivers):
+            if rec.enabled:
+                iproc = rec.proc_id
+                rec.floating_shift = values[iproc][ipos[iproc]]
+                ipos[iproc] += 1
+            else:
+                rec.floating_shift = 0.0
+
     def _gather_misfits_into_receivers(self, results):
         
         values = [[ float(x) for x in result.split() ] for result in results ]

@@ -79,6 +79,7 @@ module minimizer_wrappers
     public do_shift_ref_seismogram
     public do_autoshift_ref_seismogram
     public do_set_floating_shiftrange
+    public do_get_floating_shifts
     public do_get_cached_traces_memory
     public do_set_cached_traces_memory_limit
     public do_set_verbose
@@ -386,7 +387,7 @@ module minimizer_wrappers
 
     subroutine do_set_floating_shiftrange( line, answer, ok )
 
-     !! === {{{autoshift_ref_seismogram ireceiver min-shift max-shift}}} ===
+        !! === {{{set_floating_shiftrange ireceiver min-shift max-shift}}} ===
       !
       ! Set time shift range for floating norms.
       !
@@ -416,6 +417,32 @@ module minimizer_wrappers
         call set_floating_shiftrange( ireceiver, shiftrange, ok )
 
     end subroutine
+
+    subroutine do_get_floating_shifts( line, answer, ok )
+
+     !! === {{{get_floating_shifts}}} ===
+      !
+      ! Get current floating shift values.
+      !
+      ! Disabled stations are omitted in output list.
+
+        type(varying_string), intent(in)  :: line
+        type(varying_string), intent(out) :: answer
+        logical, intent(out)              :: ok
+        
+        real, dimension(:), allocatable :: shifts_
+        
+        ok = line /= '' ! get rid of warning, that line is not used
+        answer = ""
+        
+        call get_floating_shifts( shifts_, ok )
+        if (.not. ok) return
+     
+        call array_to_string( shifts_, answer )
+        if (allocated( shifts_)) deallocate(shifts_)
+
+    end subroutine
+
 
     subroutine do_autoshift_ref_seismogram( line, answer, ok )
 
@@ -1736,6 +1763,8 @@ program minimizer
             call do_output_cross_correlations( arguments, answer, ok )
         else if (command == 'set_floating_shiftrange') then
             call do_set_floating_shiftrange( arguments, answer, ok )
+        else if (command == 'get_floating_shifts') then
+            call do_get_floating_shifts( arguments, answer, ok )
         else if (command == 'get_cached_traces_memory') then
             call do_get_cached_traces_memory( arguments, answer, ok )
         else if (command == 'set_cached_traces_memory_limit') then

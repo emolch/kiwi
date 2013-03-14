@@ -120,6 +120,8 @@ elif command == 'syntheseis':
     seis.set_source(s)
     seis.set_synthetic_reference()
     seis.set_ignore_sigint('T')
+    seis.set_floating_shiftrange(0, -1.0,1.0)
+    seis.set_misfit_method( 'floating_l1norm')
     
     seis.output_seismograms( 'seis', 'mseed', 'synthetics', 'plain')
     
@@ -134,8 +136,9 @@ elif command == 'syntheseis':
     strikes = num.linspace(0.,360.,3610)
     for istrike, strike in enumerate(strikes):
         s['strike'] = strike
-        seis.set_source(s)
-        seis.do_get_misfits()
+        seis.make_floating_shifts(s)
+        for r in receivers:
+            print r.floating_shift
         now = time.time()
         total_mps = float(istrike+1) / (now - start)
         last_mps = 1. / (now - times[-1])
