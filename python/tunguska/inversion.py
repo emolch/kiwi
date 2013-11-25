@@ -823,11 +823,12 @@ class Shifter(Step):
 class ExtConfigurator(Step):
     
     def __init__(self, workdir, name, generate=('filter', 'constraining_planes', 
-                    'bord_radius_range', 'nukl_shift_x_range', 'nukl_shift_y_range' ), size_factor=4000., steps=5., failure_check=None):
+                    'bord_radius_range', 'nukl_shift_x_range', 'nukl_shift_y_range' ), frequency_factor=2.0, size_factor=4000., steps=5., failure_check=None):
         Step.__init__(self, workdir, name, failure_check=failure_check)
         self.required |= Step.inner_misfit_method_params | set(('depth', 'rise_time'))
         self.generate = generate
         self.size_factor = size_factor
+        self.frequency_factor = frequency_factor
         self.steps = steps
         
     def work(self, **kwargs):
@@ -840,8 +841,8 @@ class ExtConfigurator(Step):
         
         if 'filter' in self.generate:
             filter = ic['filter']
-            filter.set(2, 1./(rise_time*2./3.))
-            filter.set(3, 1./(rise_time*1./2.))
+            filter.set(2, self.frequency_factor / rise_time)
+            filter.set(3, self.frequency_factor*1.5 / rise_time)
             oc.filter = filter
 
         maxradius = self.size_factor*rise_time
