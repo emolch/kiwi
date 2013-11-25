@@ -112,7 +112,7 @@ def start_seismosizer(  gfdb_path = None, gfdb = None,
             seis.set_source_constraints( *values )
         
         if stations is not None:
-            receivers = [ station_to_receiver(station) for station in stations ]
+            receivers = [ station_to_receiver(station, kiwi_component_map='default') for station in stations ]
         
         seis.set_receivers(receivers)
      

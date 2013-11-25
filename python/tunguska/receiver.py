@@ -89,7 +89,7 @@ class Receiver:
         return s
     
     def save_traces_mseed(self, filename_tmpl='%(whichset)s_%(network)s_%(station)s_%(location)s_%(channel)s.mseed',
-                          overwrite_network=None ):
+            overwrite_network=None, component_to_channel={}, location_map={}):
         
         station, network = self.get_station(), self.get_network()
         if overwrite_network is not None:
@@ -97,7 +97,7 @@ class Receiver:
             
         fns = []
         for icomp, comp in enumerate(self.components):
-            channel = comp
+            channel = component_to_channel.get(comp, comp)
             for (whichset, sgram) in zip(('references', 'synthetics'), 
                              (self.ref_seismograms[icomp], self.syn_seismograms[icomp])):
                 if sgram and len(sgram[0]) > 1:
@@ -105,7 +105,7 @@ class Receiver:
                     endtime = sgram[0][-1]
                     deltat = (endtime-starttime)/(len(sgram[0])-1)
                     data = sgram[1]
-                    location = whichset
+                    location = location_map.get(whichset, whichset)
                     tr = trace.Trace(network, station, location, channel, 
                         tmin = starttime, tmax=endtime, deltat=deltat, ydata=data)
                         
