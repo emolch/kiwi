@@ -106,7 +106,7 @@ class Receiver:
                     deltat = (endtime-starttime)/(len(sgram[0])-1)
                     data = sgram[1]
                     location = location_map.get(whichset, whichset)
-                    tr = trace.Trace(network, station, location, channel, 
+                    tr = trace.Trace(network[:2], station[:5], location[:2], channel[:3], 
                         tmin = starttime, tmax=endtime, deltat=deltat, ydata=data)
                         
                     fn = filename_tmpl % { 'whichset': whichset,
