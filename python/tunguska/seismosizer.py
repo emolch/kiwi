@@ -415,9 +415,23 @@ class Seismosizer(SeismosizerBase):
         self._locations_changed()
     
     def blacklist_receivers(self, blacklist):
+        blacklist_s = set()
+        for x in blacklist:
+            t = x.split('/')
+            if len(t) == 2:
+                blacklist_s.add((t[0], int(t[1])))
+            else:
+                blacklist_s.add((t[0], None))
+
+        counter = {}
         for irec, r in enumerate(self.receivers):
             sid = r.get_station()
-            if sid in blacklist:
+
+            if sid not in counter:
+                counter[sid] = 0
+
+            counter[sid] += 1
+            if (sid, None) in blacklist_s or (sid, counter[sid]) in blacklist_s:
                 self.switch_receiver(irec+1, 'off')
     
     def xblacklist_receivers(self, xblacklist):
