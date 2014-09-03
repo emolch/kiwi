@@ -6,6 +6,7 @@ import sys, os, logging, shutil, time, copy
 from os.path import join as pjoin
 import numpy as numpy
 
+km = 1000.
 logger = logging.getLogger('tunguska.prepare')
 
 def get_nsl(x):
@@ -50,13 +51,13 @@ def save_rapid_station_table(stations_path, stations):
     '''Save station table in format for rapidinv'''
     util.ensuredirs(stations_path)
     f = open(stations_path, 'w')
-    for station in stations:
-        nsl = '.'.join((station.network,station.station,station.location))
-        f.write('%-10s %15.8e %15.8e\n' % (nsl, station.lat, station.lon))
+    for istation, station in enumerate(stations):
+        f.write('%4i %-10s %15.8e %15.8e\n' %
+                (istation, station.station, station.lat, station.lon))
     f.close()
-    
+
 def save_event_info_file(event_info_path, event):
-    event.dump(event_info_path)
+    event.olddump(event_info_path)
     
 def save_kiwi_dataset(acc, stations, traces, event, config):
     
@@ -166,35 +167,42 @@ def save_kiwi_dataset(acc, stations, traces, event, config):
 
         f.write('%e %e %f\n' % (event.lat, event.lon, t))
         f.close()
-            
 
-    
+
+
 def save_rapid_dataset(acc, stations, traces, event, config):
-    
+
     if config.has('data_dir'):
         data_dir = config.path('data_dir')
         if os.path.exists(data_dir):
             shutil.rmtree(data_dir)
 
-    if config.has('skeleton_dir'): 
+    if config.has('skeleton_dir'):
         copy_files(config.path('skeleton_dir'), config.path('main_dir'))
-    
+
     if config.has('raw_trace_path'):
         trace_selector = None
         if config.has('station_filter'):
             trace_selector = lambda tr: get_nsl(tr) in stations and config.station_filter(stations[get_nsl(tr)])
-        
+
         for raw_traces in acc.iter_traces(trace_selector=trace_selector):
             io.save(raw_traces, config.path('raw_trace_path'))
 
     dstations = stations.values()
     dstations.sort( lambda a,b: cmp(a.dist_m, b.dist_m) )
-    
-    save_rapid_station_table(config.path('stations_path'), dstations)
+
     save_event_info_file(config.path('event_info_path'), event)
-    
+
     used_traces = []
+    have = set()
+    used_stations = []
     for station in dstations:
+        if station.station in have:
+            continue
+
+        used_stations.append(station)
+        have.add(station.station)
+
         for tr in traces:
             if get_nsl(tr) == get_nsl(station):
                 tr = tr.copy()
@@ -203,9 +211,43 @@ def save_rapid_dataset(acc, stations, traces, event, config):
                 ydata = tr.get_ydata() 
                 ydata *= config.trace_factor
                 used_traces.append(tr)
-    
+
+    save_rapid_station_table(config.path('stations_path'), used_stations)
     io.save(used_traces, config.path('displacement_trace_path'))
-    
+
+    dss = util.time_to_str(event.time, format='%Y %m %d %H %M %S').split()
+    moment = moment_tensor.magnitude_to_moment(event.magnitude)
+
+    work_dir = pjoin(config.path('main_dir'), 'work')
+
+    rapidinp = '''
+INVERSION_DIR  %s
+DATA_DIR       %s
+DATA_FILE      %s
+
+LATITUDE_NORTH %g
+LONGITUDE_EAST %g
+YEAR             %s
+MONTH            %s
+DAY              %s
+HOUR             %s
+MIN              %s
+SEC              %s
+DEPTH_1          %g
+DEPTH_2          %g
+SCAL_MOM_1       %g
+SCAL_MOM_2       %g
+''' % ((
+        pjoin('..', 'result'),
+        pjoin('..', 'data'),
+        util.time_to_str(event.time, format='%Y-%m-%d_%H-%M-S'),
+        event.lat, event.lon) + tuple(dss) +
+        (event.depth/km, event.depth/km, moment, moment))
+
+    f = open(pjoin(work_dir, 'rapidinv.inp'), 'w')
+    f.write(rapidinp)
+    f.close()
+
 def copy_files(source_dir, dest_dir):
     if os.path.exists(dest_dir):
         shutil.rmtree(dest_dir)
