@@ -407,7 +407,6 @@ except Exception, e:
     die('error in config file: %s' % e)
 
 base_config = conf['base_config']
-prepare_config = conf['prepare_config']
 kiwi_config = conf.get('kiwi_config', None)
 rapid_config = conf.get('rapid_config', None)
 wilber_config = conf.get('wilber_config', None)
@@ -491,6 +490,7 @@ try:
     for command in commands:
 
         if command == 'prepare':
+            prepare_config = conf['prepare_config']
             prepare.prepare(prepare_config, kiwi_config, rapid_config, event_names)
     
         if command == 'process':

@@ -211,7 +211,7 @@ beachball_config = dict(
     width = wh,
     height= wh,
     margins = (mw,mw,mw,mw),
-    fillcolor = gmtpy.color((166,179,131))
+    fillcolor = gmtpy.color((0, 88, 156))
 )
 
 class Config:
