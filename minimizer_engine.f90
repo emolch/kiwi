@@ -47,6 +47,7 @@ module minimizer_engine
     public set_source_params
     public set_source_params_mask
     public set_source_subparams
+    public set_source_subparams_limits
     public set_effective_dt
     public set_receivers
     public switch_receiver
@@ -84,6 +85,9 @@ module minimizer_engine
     logical                                         :: interpolate = .false.
     integer                                         :: xundersample = 1
     integer                                         :: zundersample = 1
+
+    real, dimension(:), allocatable                 :: g_subparam_mins
+    real, dimension(:), allocatable                 :: g_subparam_maxs
     
     logical :: database_inited = .false.
     logical :: ref_probes_inited = .false.
@@ -533,7 +537,9 @@ module minimizer_engine
         end if
         
         call psm_set_mask( psm, params_mask )
-        
+
+        call reset_subparam_limits()
+
     end subroutine
     
     subroutine set_source_subparams( subparams, ok )
@@ -557,6 +563,50 @@ module minimizer_engine
         call psm_set_subparams( psm, subparams )
         call dirtyfy_source()
     
+    end subroutine
+
+    subroutine reset_subparam_limits()
+
+        if (allocated(g_subparam_mins)) then
+            deallocate(g_subparam_mins)
+        end if
+
+        if (allocated(g_subparam_maxs)) then
+            deallocate(g_subparam_maxs)
+        end if
+
+    end subroutine
+
+    subroutine set_source_subparams_limits( subparam_mins, subparam_maxs, ok )
+
+        real, dimension(:), intent(in) :: subparam_mins
+        real, dimension(:), intent(in) :: subparam_maxs
+        logical, intent(out)              :: ok
+
+        integer :: nsubparams
+
+        nsubparams = count(psm%params_mask)
+
+        if (nsubparams /= size(subparam_mins)) then
+            ok = .false.
+            call error( 'wrong number of subparam_mins' )
+            return
+        end if
+
+        if (nsubparams /= size(subparam_maxs)) then
+            ok = .false.
+            call error( 'wrong number of subparam_maxs' )
+            return
+        end if
+
+        call reset_subparam_limits()
+
+        allocate(g_subparam_mins(nsubparams))
+        allocate(g_subparam_maxs(nsubparams))
+
+        g_subparam_mins(:) = subparam_mins(:)
+        g_subparam_maxs(:) = subparam_maxs(:)
+
     end subroutine
     
     subroutine set_effective_dt( effective_dt_ )
@@ -765,6 +815,28 @@ module minimizer_engine
         integer                             :: ireceiver, icomponent, nreceivers
         logical                             :: ok
         real, dimension(:), allocatable     :: subparams_nn
+        real                                :: penalty
+        integer                             :: i
+
+        penalty = 0.0
+        if (allocated(g_subparam_mins) .and. allocated(g_subparam_maxs)) then
+            do i=1,nsubparams
+                if (subparams(i) < g_subparam_mins(i)) then
+                    penalty = penalty + abs(subparams(i) - g_subparam_mins(i)) &
+                        / abs(g_subparam_maxs(i) - g_subparam_mins(i))
+
+                    subparams(i) = g_subparam_mins(i)
+                end if
+                if (subparams(i) > g_subparam_maxs(i)) then
+                    penalty = penalty + abs(subparams(i) - g_subparam_maxs(i)) &
+                        / abs(g_subparam_maxs(i) - g_subparam_mins(i))
+
+                    subparams(i) = g_subparam_maxs(i)
+                end if
+
+            end do
+
+        end if
         
         call psm_set_subparams( psm, subparams, normalized_=.true. )
         call dirtyfy_source()
@@ -785,7 +857,9 @@ module minimizer_engine
         nreceivers = size(receivers)
         do ireceiver=1,nreceivers
             do icomponent=1,receivers(ireceiver)%ncomponents
-                misfits(imisfit) = receivers(ireceiver)%misfits(icomponent)
+                misfits(imisfit) = receivers(ireceiver)%misfits(icomponent) * &
+                    (1.0 + penalty)
+
                 imisfit = imisfit + 1
             end do
         end do

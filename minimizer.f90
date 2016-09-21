@@ -768,7 +768,47 @@ module minimizer_wrappers
         deallocate(subparams)
         
     end subroutine
+
+    subroutine do_set_source_subparams_limits( line, answer, ok )
     
+     !! === {{{set_source_subparams_limits subparam_mins ... subparam_maxs ...}}} ===
+      !
+      ! Assignes limits for minimize_lm. Handled with a penalty technique.
+      !
+      ! This command expects first all minimum values followed by all maximum
+      ! values. Number of values is as selected with 
+      ! {{{set_source_params_mask}}}. Must be called after each call to
+      ! {{{set_source_params_mask}}}. Limits are reset after every call to 
+      ! {{{set_source_params_mask}}}.
+
+        type(varying_string), intent(in)  :: line
+        type(varying_string), intent(out) :: answer
+        logical, intent(out)              :: ok
+
+        real, dimension(:), allocatable :: temp
+
+        character(len=len(line)) :: buffer
+        integer :: iostat, nsubparams
+
+        buffer = char(line)
+        nsubparams  = count_words(buffer) / 2
+
+        allocate(temp(nsubparams*2))
+        ok = .true.
+        answer = ''
+        read (unit=buffer,fmt=*,iostat=iostat) temp
+        if (iostat > 0) then
+            ok = .false.
+            call error( "failed to parse source parameter minimums" )
+            return
+        end if
+
+        call set_source_subparams_limits(temp(1:nsubparams), &
+                                         temp(nsubparams+1:nsubparams*2), ok)
+        deallocate(temp)
+
+    end subroutine
+
     subroutine do_set_effective_dt( line, answer, ok )
       
      !! === {{{set_effective_dt effective_dt}}} ===
@@ -1725,6 +1765,8 @@ program minimizer
             call do_set_source_params_mask( arguments, answer, ok )
         else if (command == 'set_source_subparams') then
             call do_set_source_subparams( arguments, answer, ok )
+        else if (command == 'set_source_subparams_limits') then
+            call do_set_source_subparams_limits( arguments, answer, ok )
         else if (command == 'set_effective_dt') then
             call do_set_effective_dt( arguments, answer, ok )
         else if (command == 'minimize_lm') then
