@@ -817,25 +817,30 @@ module minimizer_engine
         real, dimension(:), allocatable     :: subparams_nn
         real                                :: penalty
         integer                             :: i
+        real, dimension(:), allocatable     :: subparams_norm
 
         penalty = 0.0
         if (allocated(g_subparam_mins) .and. allocated(g_subparam_maxs)) then
+            call psm_get_subparams_norm( psm, subparams_norm )
+            
             do i=1,nsubparams
-                if (subparams(i) < g_subparam_mins(i)) then
-                    penalty = penalty + abs(subparams(i) - g_subparam_mins(i)) &
+                if (subparams(i)*subparams_norm(i) < g_subparam_mins(i)) then
+                    penalty = penalty + abs(subparams(i)*subparams_norm(i) &
+                        - g_subparam_mins(i)) &
                         / abs(g_subparam_maxs(i) - g_subparam_mins(i))
 
-                    subparams(i) = g_subparam_mins(i)
+                    subparams(i) = g_subparam_mins(i) / subparams_norm(i)
                 end if
-                if (subparams(i) > g_subparam_maxs(i)) then
-                    penalty = penalty + abs(subparams(i) - g_subparam_maxs(i)) &
+                if (subparams(i)*subparams_norm(i) > g_subparam_maxs(i)) then
+                    penalty = penalty + abs(subparams(i)*subparams_norm(i) &
+                        - g_subparam_maxs(i)) &
                         / abs(g_subparam_maxs(i) - g_subparam_mins(i))
 
-                    subparams(i) = g_subparam_maxs(i)
+                    subparams(i) = g_subparam_maxs(i) / subparams_norm(i)
                 end if
 
             end do
-
+            deallocate(subparams_norm)
         end if
         
         call psm_set_subparams( psm, subparams, normalized_=.true. )

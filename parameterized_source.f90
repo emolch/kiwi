@@ -39,6 +39,7 @@ module parameterized_source
     public psm_get_params
     public psm_set_mask
     public psm_get_subparams
+    public psm_get_subparams_norm
   
   ! source types
     integer, public, parameter :: psm_bilat = 1
@@ -287,6 +288,28 @@ module parameterized_source
 
     end subroutine
     
+    subroutine psm_get_subparams_norm( psm, subparams_norm )
+
+        type(t_psm), intent(in)                        :: psm
+        real, intent(inout), dimension(:), allocatable :: subparams_norm
+        
+        integer :: iparam, isub
+        
+        if (size(psm%params) /= size(psm%params_mask)) then
+            call die( "wrong sized arrays in psm_get_subparams()")
+        end if
+        
+        call resize( subparams_norm, 1, count(psm%params_mask) )
+
+        isub = 1
+        do iparam=1, size(psm%params)
+            if (psm%params_mask(iparam)) then
+                subparams_norm(isub) = psm%params_norm(iparam)
+                isub = isub+1
+            end if
+        end do
+
+    end subroutine
     
     
     
