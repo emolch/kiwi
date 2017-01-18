@@ -85,13 +85,14 @@ program ahfull
     character, dimension(3), parameter          :: xyz = (/'x','y','z'/)
     type(varying_string)                        :: fn, basefn, offormat
     integer                                     :: ibeg, iend
+    integer                                     :: split_window
     
      
     g_pn = 'ahfull'
-    g_usage = 'usage: ahfull sources receivers material source-time-function dt output-filename-base output-format'
+    g_usage = 'usage: ahfull sources receivers material source-time-function dt output-filename-base output-format split-window'
 
     ! process command line arguments and read input files
-    if (iargc() /= 7) call usage()
+    if (iargc() /= 8) call usage()
     call readtable_arg( 1, 13, 1, sources_tab )
     call readtable_arg( 2, 5, 1, receivers_tab )
     call readtable_arg( 3, 3, 1, material_tab )
@@ -99,7 +100,7 @@ program ahfull
     call readreal_arg( 5, tiny(dt), huge(dt), dt )
     call vs_getarg( 6, basefn )
     call vs_getarg( 7, offormat )
-    
+    call readint_arg( 8, 0, 1, split_window )
 
     if (offormat /= 'table' .and. offormat /= 'sac' .and. offormat /= 'mseed') &
         call die('unknown output fomat: ''' // offormat // '''; should be ''table'', ''sac'' or ''mseed''' )
@@ -171,7 +172,7 @@ program ahfull
                 snapup(d/beta + sources(isource) % tshift + tstf,dt))
         end do
         
-        if (lastarrival_p >= firstarrival_s) then   ! s and p time windows overlap
+        if ((lastarrival_p >= firstarrival_s) .or. (split_window .eq. 0)) then ! s and p time windows overlap
             nwindows = 1
             tbegin(1) = firstarrival_p
             tend(1) = lastarrival_s
@@ -186,7 +187,7 @@ program ahfull
                 
         ! iterate over time windows
         do iwindow=1,nwindows
-        
+
             nsamples = (tend(iwindow) - tbegin(iwindow)) / dt + 1
             if (allocated( seismograms )) deallocate(seismograms)
             allocate( seismograms(3,nsamples) )
@@ -308,13 +309,32 @@ program ahfull
         call vs_getarg( iarg, vs )
         val = vs
         
-        if (val < min) &
+        if ((val < min) .or. (max < val)) &
             call die( 'expected real value at argument ' // iarg  &
                  // ' in range [' // min // ',' // max // '], but got' // val // '.' )
         
     end subroutine readreal_arg
 
-    
+    subroutine readint_arg( iarg, min, max, val )
+
+        integer, intent(in) :: iarg
+        integer, intent(in) :: min, max
+        integer, intent(out) :: val
+
+    ! reads argument iarg from the argument list and converts it to integer number val
+    ! it is checked, that val is in the range [min, max]
+
+        type(varying_string) :: vs
+
+        call vs_getarg( iarg, vs )
+        val = vs
+
+        if ((val < min) .or. (max < val)) &
+            call die( 'expected integer value at argument ' // iarg  &
+                 // ' in range [' // min // ',' // max // '], but got' // val // '.' )
+
+    end subroutine readint_arg
+
     pure function dist(a,b) result(r)
     
         real, intent(in), dimension(3) :: a,b
