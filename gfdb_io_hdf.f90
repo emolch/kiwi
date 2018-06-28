@@ -36,14 +36,16 @@ module gfdb_io_hdf
     public gfdb_io_chunk_close
     public gfdb_io_chunk_read_index
 
+
     interface h5_save_scalar
+
         
         subroutine h5_save_scalar_integer( file, datasetname, value, error )
             use hdf5
             integer(hid_t), intent(in) :: file
             character(len=*), intent(in) :: datasetname
             integer,intent(in) :: value
-            integer(hid_t), intent(out) :: error
+            integer, intent(out) :: error
 
         end subroutine
         
@@ -52,7 +54,7 @@ module gfdb_io_hdf
             integer(hid_t), intent(in) :: file
             character(len=*), intent(in) :: datasetname
             real,intent(in) :: value
-            integer(hid_t), intent(out) :: error
+            integer, intent(out) :: error
 
         end subroutine
         
@@ -65,7 +67,7 @@ module gfdb_io_hdf
             integer(hid_t), intent(in) :: file
             character(len=*), intent(in) :: datasetname
             integer,intent(out) :: value
-            integer(hid_t), intent(out) :: error
+            integer, intent(out) :: error
 
         end subroutine
         
@@ -74,7 +76,7 @@ module gfdb_io_hdf
             integer(hid_t), intent(in) :: file
             character(len=*), intent(in) :: datasetname
             real,intent(out) :: value
-            integer(hid_t), intent(out) :: error
+            integer, intent(out) :: error
 
         end subroutine
         
@@ -86,7 +88,7 @@ module gfdb_io_hdf
     subroutine gfdb_io_init( ok )
    
         logical, intent(out) :: ok
-        integer(hid_t) :: e
+        integer :: e
         
         ok = .false.
      
@@ -105,7 +107,7 @@ module gfdb_io_hdf
   
     subroutine gfdb_io_deinit( )
 
-        integer(hid_t) :: egal
+        integer :: egal
 
         if (h5inited) then
             call h5close_f(egal)
@@ -122,7 +124,8 @@ module gfdb_io_hdf
         integer, intent(out) :: nchunks, nx, nxc, nz, ng
         logical, intent(out) :: ok
         
-        integer(hid_t) :: file, e(10), egal
+        integer(hid_t) :: file
+        integer :: e(10), egal
         
         ok = .false.
         
@@ -184,7 +187,8 @@ module gfdb_io_hdf
         integer, intent(in) :: nchunks, nx, nxc, nz, ng
         logical, intent(out) :: ok
             
-        integer(hid_t) :: file, e(7), egal
+        integer(hid_t) :: file
+        integer :: e(7), egal
             
         ok = .false.
         e = 0
@@ -237,7 +241,8 @@ module gfdb_io_hdf
         logical, intent(out)             :: ok        
 
         type(hobj_ref_t_f), dimension(:), allocatable :: refs
-        integer(hid_t) :: e, file, dataspace, dataset, group, egal
+        integer(hid_t) :: file, dataspace, dataset, group
+        integer :: e, egal
         integer(hsize_t), dimension(3) :: dims
         integer(hsize_t), dimension(1) :: dims1
         integer :: i, length
@@ -322,7 +327,7 @@ module gfdb_io_hdf
         type(hobj_ref_t_f), dimension(1), intent(out)   :: reference
         logical, intent(out)                            :: ok
 
-        integer(hid_t), dimension(8) :: e
+        integer, dimension(8) :: e
         integer(hid_t) :: dataset, dataspace, dataspace1, attribute, group_dist
         integer(hid_t) :: dataspace_for_ref, memspace, group
         integer(hsize_t),dimension(1) :: dims
@@ -435,8 +440,8 @@ module gfdb_io_hdf
 
         integer(hsize_t),dimension(1)   :: adims
         integer(hid_t)                  :: dataset, attribute, space
-        integer(hid_t), dimension(8)    :: e
-        integer(hid_t)                  :: egal
+        integer, dimension(8)    :: e
+        integer                  :: egal
         integer(hsize_t)                :: length
         
         e = 0
@@ -524,7 +529,7 @@ module gfdb_io_hdf
         integer(hid_t), intent(out)         :: file
         logical, intent(out)                :: ok
     
-        integer(hid_t) :: e, egal
+        integer :: e, egal
 
         ok = .false.
 
@@ -547,7 +552,7 @@ module gfdb_io_hdf
         integer(hid_t), intent(out)         :: file
         logical, intent(out)                :: ok
     
-        integer(hid_t) :: e, egal
+        integer :: e, egal
 
         ok = .false.
 
@@ -572,7 +577,7 @@ module gfdb_io_hdf
         type(hobj_ref_t_f), dimension(:,:,:), intent(out)   :: references
         logical, intent(out)                                :: ok
 
-        integer(hid_t) :: e
+        integer :: e
         integer(hsize_t), dimension(3) :: dims
 
 
@@ -604,7 +609,7 @@ module gfdb_io_hdf
         integer(hid_t), intent(in)                          :: file
         integer(hid_t), intent(in)                          :: dataset_index
         logical, intent(out)                                :: ok
-        integer(hid_t), dimension(2) :: e
+        integer, dimension(2) :: e
 
         ok = .false.
         e = 0
@@ -625,10 +630,11 @@ module gfdb_io_hdf
 
         integer(hid_t), intent(in) :: file
         character(len=*), intent(in) :: name
-        integer(hid_t), intent(out) :: group, error
+        integer(hid_t), intent(out) :: group
+        integer, intent(out) :: error
         integer(size_t), intent(in) :: sizehint
         
-        integer(hid_t) :: egal
+        integer :: egal
 
         call h5eset_auto_f(0,egal)
         call h5gopen_f( file, name, group, error )
@@ -648,7 +654,7 @@ module gfdb_io_hdf
         integer(hid_t), intent(in) :: dataset
         integer(hsize_t), dimension(3), intent(in) :: dims
         type(hobj_ref_t_f), dimension(:,:,:), intent(out) :: refs
-        integer(hid_t), intent(out) :: error
+        integer, intent(out) :: error
         
         type(hobj_ref_t_f), dimension(:), allocatable :: refs2
         integer :: i,ig,iz,ix  
@@ -675,12 +681,12 @@ module gfdb_io_hdf
 end module
 
 subroutine h5_save_scalar_integer( file, datasetname, value, error )
-        use hdf5
+    use hdf5
 
     integer(hid_t), intent(in) :: file
     character(len=*), intent(in) :: datasetname
     integer,intent(in) :: value
-    integer(hid_t), intent(out) :: error
+    integer, intent(out) :: error
     
     integer(hid_t) :: dataspace, dataset
     integer(hsize_t),dimension(1) :: dims
@@ -705,12 +711,12 @@ subroutine h5_save_scalar_integer( file, datasetname, value, error )
 end subroutine
 
 subroutine h5_save_scalar_real( file, datasetname, value, error )
-        use hdf5
+    use hdf5
 
     integer(hid_t), intent(in) :: file
     character(len=*), intent(in) :: datasetname
     real,intent(in) :: value
-    integer(hid_t), intent(out) :: error
+    integer, intent(out) :: error
     
     integer(hid_t) :: dataspace, dataset
     integer(hsize_t),dimension(1) :: dims
@@ -740,7 +746,7 @@ subroutine h5_open_scalar_integer( file, datasetname, value, error )
     integer(hid_t), intent(in) :: file
     character(len=*), intent(in) :: datasetname
     integer,intent(out) :: value
-    integer(hid_t), intent(out) :: error
+    integer, intent(out) :: error
     
     integer(hid_t) :: dataset
     integer(hsize_t),dimension(1) :: dims
@@ -763,7 +769,7 @@ subroutine h5_open_scalar_real( file, datasetname, value, error )
     integer(hid_t), intent(in) :: file
     character(len=*), intent(in) :: datasetname
     real,intent(out) :: value
-    integer(hid_t), intent(out) :: error
+    integer, intent(out) :: error
     
     integer(hid_t) :: dataset
     integer(hsize_t),dimension(1) :: dims

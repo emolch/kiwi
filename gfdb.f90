@@ -672,7 +672,7 @@ module gfdb
         
         integer :: ichunk
         integer(hid_t) :: file
-        integer(hid_t) :: egal
+        integer :: egal
         
 
         type(varying_string) :: filename
@@ -1497,8 +1497,8 @@ module gfdb
     subroutine chunk_close( db, c )
         type(t_gfdb), intent(inout) :: db
         type(t_chunk), intent(inout) :: c   
-        integer(hid_t) :: err
-        integer(hid_t), dimension(2) :: e
+        integer :: err
+        integer, dimension(2) :: e
         integer :: ixc,iz,ig
         integer :: nbytes
         logical :: ok

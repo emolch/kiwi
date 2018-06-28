@@ -36,7 +36,7 @@ module util
     integer, public, parameter :: sig_ignore = 1
     integer, public, parameter :: sig_default = 0
     integer, public, parameter :: sig_int = 2
-    
+
   ! global variables
   
   ! this flag indicates that a test has failed

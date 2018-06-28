@@ -39,8 +39,8 @@ LIBDUMMYOMP = dummy_omp_lib/omp_lib.o
 INCMSEED = 
 LIBMSEED = mseed/mseed_simple.o -lmseed
 
-INCHDF = 
-LIBHDF = -lhdf5_fortran -lhdf5 -lz
+INCHDF = $(shell pkg-config hdf5 --cflags)
+LIBHDF = $(shell pkg-config hdf5 --libs-only-L) -lhdf5_fortran -lhdf5 -lz
 
 INCSAC = 
 LIBSAC = -lsacio
