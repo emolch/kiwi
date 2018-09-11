@@ -8,7 +8,7 @@
 #### Basic settings ------------------------------------------------------------
 
 SHELL = /bin/sh
-MAKEDEPEND = ./fdepend.pl -g -d -i hdf5.mod -i omp_lib.mod
+MAKEDEPEND = ./fdepend.pl -g -d -i hdf5.mod -i omp_lib.mod -i kiwi_home.mod
 OBJDEPEND = ./objdepend.pl
 FORTRANC := gfortran
 INSTALL := /usr/bin/install
@@ -109,6 +109,11 @@ all : targets
 
 $(TARGETS) $(TESTS) : .sminpackdone .mseedsimple .dummyomplib .dummysacio
 
+kiwi_home.f90 :
+	echo -e "module kiwi_home\n\
+		character (len=*), parameter :: kiwi_home_dir = \"$(datadir)/kiwi\"\n\
+	end module\n" > kiwi_home.f90
+
 .sminpackdone :
 	$(MAKE) -C sminpack/ && touch .sminpackdone
 
@@ -140,9 +145,6 @@ install : targets
 	@echo
 	@echo '   * PATH should contain:'
 	@echo '      ' $(bindir)
-	@echo
-	@echo '   * KIWI_HOME should be set to:'
-	@echo '      ' $(datadir)/kiwi
 	@echo '-----------------------------------------------------------------------'
 
 uninstall :
@@ -177,9 +179,13 @@ progobjects.do : $(SRCS:.f90=.d)
 %.o : %.f90
 	$(FORTRANC) -c $(CFLAGS) $<
 
+kiwi_home.o kiwi_home.mod : kiwi_home.f90
+	$(FORTRANC) -c $(CFLAGS) $<
+
+minimizer.o : kiwi_home.mod
 
 clean :
-	rm -f *.o *.mod $(TESTS) $(TARGETS) .sminpackdone .mseedsimple .dummysacio .dummyomplib dummy_omp_lib/omp_lib.o dummy_omp_lib/omp_lib.mod
+	rm -f *.o *.mod $(TESTS) $(TARGETS) .sminpackdone .mseedsimple .dummysacio .dummyomplib dummy_omp_lib/omp_lib.o dummy_omp_lib/omp_lib.mod kiwi_home.f90
 	$(MAKE) -C sminpack/ clean
 	$(MAKE) -C mseed/ clean
 	$(MAKE) -C dummy_omp_lib/ clean

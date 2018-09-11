@@ -1648,6 +1648,7 @@ program minimizer
     use varying_string_getarg
     use minimizer_wrappers
     use crust2x2
+    use kiwi_home
     
     implicit none
         
@@ -1664,19 +1665,9 @@ program minimizer
               "EOF" // eol // eol // &
               "documentation:  " // &
               "http://kinherd.org/power/trac/wiki/MinimizerTool"
-    
-    call vs_getenv( 'KIWI_HOME', aux_path )
-    if (aux_path == '') then
-        call die('Environment variable KIWI_HOME not set.' //eol // eol // &
-                 'KIWI_HOME should contain the path to the directory' // eol // &
-                 'containing the "aux" directory where minimizer looks for crustal' // eol // &
-                 'models etc.' // eol // &
-                 'An initial "aux" directory resides in the directory where' // eol // &
-                 'you have built the kiwi tools, so you can set' // eol // &
-                 'KIWI_HOME to your build directory.')
-    end if
-    aux_path = aux_path // '/aux'
-    
+     
+    aux_path = kiwi_home_dir // '/aux'
+
     call crust2x2_load( char(aux_path // '/crust2x2'), ok )
     if (.not. ok) then
         call die()
