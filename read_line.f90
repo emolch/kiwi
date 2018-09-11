@@ -39,7 +39,7 @@ module read_line
     integer, parameter, private :: BUFFER_MULT        = 4
      
     public  :: readline
-    private :: readline_, det_buf_len, fill_buffer, is_comment
+    private :: readline_, fill_buffer, is_comment
     
     
   contains
@@ -86,8 +86,8 @@ module read_line
         logical, intent(out)            :: ok
         integer, intent(in), optional   :: unit
         
-        character(len=det_buf_len(len(prev_buffer))) :: buffer
-        integer                                      :: pblen, blen, n_chars_read
+        character(len=max(INITIAL_BUFFER_LEN, len(prev_buffer)*BUFFER_MULT)) :: buffer
+        integer                         :: pblen, blen, n_chars_read
                      
         ok = .false.
         pblen = len(prev_buffer)
@@ -119,23 +119,6 @@ module read_line
             call readsub( trim(buffer), ok )
         end if 
     end subroutine readline_
-    
-    
-    pure function det_buf_len( prev_buf_len ) result( buf_len )
-        
-        integer, intent(in) :: prev_buf_len
-        integer             :: buf_len
-        
-        ! used by readline_ to determine new buffer length
-        
-        if (prev_buf_len == 0) then
-            buf_len = INITIAL_BUFFER_LEN
-        else
-            buf_len = prev_buf_len*BUFFER_MULT
-        end if
-        
-    end function det_buf_len
-    
     
     subroutine fill_buffer( buffer, iostat, nfill, unit )
     
