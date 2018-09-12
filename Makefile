@@ -110,9 +110,9 @@ all : targets
 $(TARGETS) $(TESTS) : .sminpackdone .mseedsimple .dummyomplib .dummysacio
 
 kiwi_home.f90 :
-	echo -e "module kiwi_home\n\
-		character (len=*), parameter :: kiwi_home_dir = \"$(datadir)/kiwi\"\n\
-	end module\n" > kiwi_home.f90
+	echo "module kiwi_home" > kiwi_home.f90
+	echo "character (len=*), parameter :: kiwi_home_dir = \"$(datadir)/kiwi\"" >> kiwi_home.f90
+	echo "end module" >> kiwi_home.f90
 
 .sminpackdone :
 	$(MAKE) -C sminpack/ && touch .sminpackdone
