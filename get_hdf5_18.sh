@@ -17,7 +17,7 @@ tar -xzf "${hdf5}.tar.gz"
 cd "$hdf5"
 curdir=`pwd`
 ./configure --enable-fortran --prefix="$curdir/hdf5"
-make -j
+make -j 2
 make install
 
 echo "set these variables in Makefile.local:"
