@@ -26,4 +26,4 @@ python/build
 benchmark/benchdb*
 benchmark/material.table
 benchmark/stf.table
-
+kiwi_home.f90
