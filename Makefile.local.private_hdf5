@@ -1,0 +1,45 @@
+##
+##            --- Local build settings for Kiwi Core Tools ---
+##
+##   Copy this file to 'Makefile.local', so that it is included by Makefile.
+##                
+
+## Fortran 95 compiler:
+# FORTRANC = gfortran
+
+
+## Select compilation flag preset ('debug' and 'fast' are predefined for g95,
+## gfortran and ifort. 
+#
+PRESET = fast
+
+
+## The following could be used to create a custom preset:
+#  PRESET = custom
+#  CFLAGS_$(FORTRANC)_custom = ...
+#  LDFLAGS_$(FORTRANC)_custom = ...
+
+
+## Use local HDF5
+#
+HDF5DIR = hdf5-1.8.21/hdf5
+INCHDF = -I$(HDF5DIR)/include
+LIBHDF =  $(HDF5DIR)/lib/libhdf5_fortran.a $(HDF5DIR)/lib/libhdf5.a -ldl -lz
+
+
+## Adjust if FFTW is installed at a custom location
+#
+INCFFTW = -I/usr/include
+# LIBFFTW = -L/usr -lfftw3f
+
+
+## Uncomment to disable SAC IO support to not depend on libsacio
+#
+LIBSAC = -Ldummy_sacio -lsacio
+
+
+## Installation prefix
+#
+# prefix = /usr/local
+
+
