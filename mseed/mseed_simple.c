@@ -1,4 +1,5 @@
 
+#include <sys/types.h>
 #include <math.h>
 #include <stdio.h>
 #include <libmseed.h>
